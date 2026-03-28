@@ -17,6 +17,12 @@ type test_options = {
   targets : string list;
 }
 
+type clean_options = {
+  workspace_dir : string;
+  verbose : bool;
+  targets : string list;
+}
+
 type command_result =
   | Exit_code of int
   | Forward_status of Unix.process_status
@@ -28,6 +34,7 @@ let usage () =
       "  oasis build [--workspace DIR] [--verbose] [TARGET ...]";
       "  oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]";
       "  oasis test [--workspace DIR] [--verbose] [TARGET ...]";
+      "  oasis clean [--workspace DIR] [--verbose] [TARGET ...]";
       "";
       "Examples:";
       "  oasis build";
@@ -38,6 +45,8 @@ let usage () =
       "  oasis run hello -- --loud";
       "  oasis test";
       "  oasis test unit";
+      "  oasis clean";
+      "  oasis clean hello";
     ]
 
 let build_usage () =
@@ -76,6 +85,19 @@ let test_usage () =
       "  oasis test unit";
       "  oasis test unit integration";
       "  oasis test --workspace examples/hello --verbose";
+    ]
+
+let clean_usage () =
+  String.concat "\n"
+    [
+      "Usage:";
+      "  oasis clean [--workspace DIR] [--verbose] [TARGET ...]";
+      "";
+      "Examples:";
+      "  oasis clean";
+      "  oasis clean hello";
+      "  oasis clean hello greeting";
+      "  oasis clean --workspace examples/hello --verbose";
     ]
 
 let report_error message =
@@ -128,6 +150,21 @@ let parse_test_args (args : string list) : (test_options, string) result =
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (test_usage ())
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; verbose = false; targets = [] } args
+
+let parse_clean_args (args : string list) : (clean_options, string) result =
+  let rec loop (options : clean_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--help" :: _ -> Error (clean_usage ())
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
@@ -236,6 +273,30 @@ let run_tests (options : test_options) =
       | Ok status -> Exit_code status
       | Error message -> report_error message)
 
+let run_clean (options : clean_options) =
+  if not (Fs.is_directory options.workspace_dir) then
+    report_error
+      (Printf.sprintf "workspace directory does not exist: %s"
+         options.workspace_dir)
+  else if options.targets = [] then (
+    match
+      Cleaner.clean_workspace ~workspace_root:options.workspace_dir
+        ~verbose:options.verbose
+    with
+    | Ok () -> Exit_code 0
+    | Error message -> report_error message)
+  else
+    match load_workspace options.workspace_dir with
+    | Error message -> report_error message
+    | Ok workspace -> (
+        match
+          Cleaner.clean_targets ~workspace_root:options.workspace_dir
+            ~verbose:options.verbose ~requested_targets:options.targets
+            workspace
+        with
+        | Ok () -> Exit_code 0
+        | Error message -> report_error message)
+
 let run argv =
   match Array.to_list argv with
   | _program :: "build" :: args -> (
@@ -250,4 +311,8 @@ let run argv =
       match parse_test_args args with
       | Error message -> report_error message
       | Ok options -> run_tests options)
+  | _program :: "clean" :: args -> (
+      match parse_clean_args args with
+      | Error message -> report_error message
+      | Ok options -> run_clean options)
   | _ -> report_error (usage ())
