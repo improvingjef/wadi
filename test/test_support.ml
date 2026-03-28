@@ -28,6 +28,19 @@ let assert_string_contains ~needle haystack message =
       (Printf.sprintf "%s\nmissing substring: %S\nhaystack:\n%s" message needle
          haystack)
 
+let assert_string_not_contains ~needle haystack message =
+  let needle_length = String.length needle in
+  let haystack_length = String.length haystack in
+  let rec loop index =
+    if index + needle_length > haystack_length then false
+    else if String.sub haystack index needle_length = needle then true
+    else loop (index + 1)
+  in
+  if loop 0 then
+    fail
+      (Printf.sprintf "%s\nunexpected substring: %S\nhaystack:\n%s" message
+         needle haystack)
+
 let assert_file_exists path =
   assert_true (Fs.exists path) (Printf.sprintf "expected file to exist: %s" path)
 
@@ -63,6 +76,9 @@ let run_binary path args = Process.run_capture path args
 
 let manifest_path workspace =
   Filename.concat workspace Manifest.default_filename
+
+let write_workspace_file workspace relative_path contents =
+  Fs.write_file (Filename.concat workspace relative_path) contents
 
 let write_manifest workspace contents =
   Fs.write_file (manifest_path workspace) contents

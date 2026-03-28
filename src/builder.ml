@@ -9,6 +9,11 @@ type built_artifact =
       out_dir : string;
       binary : string;
     }
+  | Built_test of {
+      name : string;
+      out_dir : string;
+      binary : string;
+    }
 
 type build_result = {
   build_root : string;
@@ -56,13 +61,17 @@ let resolve_build_order workspace requested_targets =
                     Error
                       (Printf.sprintf "target '%s' depends on unknown target '%s'"
                          name dependency)
-                | Some (Manifest.Executable _) ->
-                    Error
-                      (Printf.sprintf
-                         "target '%s' depends on executable '%s'; only libraries \
-                          may be dependencies"
-                         name dependency)
-                | Some _ -> visit (path @ [ name ]) dependency)
+                | Some dependency_target -> (
+                    match dependency_target with
+                    | Manifest.Library _ -> visit (path @ [ name ]) dependency
+                    | _ ->
+                        Error
+                          (Printf.sprintf
+                             "target '%s' depends on %s '%s'; only libraries may \
+                              be dependencies"
+                             name
+                             (Manifest.target_kind_name dependency_target)
+                             dependency)))
               (Ok ()) (dependency_names target)
           in
           Hashtbl.add visited name ();
@@ -88,6 +97,9 @@ let target_out_dir workspace_root = function
   | Manifest.Executable executable ->
       Filename.concat (Filename.concat (build_root workspace_root) "exe")
         executable.name
+  | Manifest.Test test ->
+      Filename.concat (Filename.concat (build_root workspace_root) "test")
+        test.name
 
 let source_file workspace_root dir stem extension =
   Filename.concat workspace_root (Filename.concat dir (stem ^ extension))
@@ -163,9 +175,22 @@ let rec collect_dependency_closure index acc = function
             collect_dependency_closure index acc (dependency_names target @ rest)
         | None -> acc)
 
-let build_executable ~workspace_root ~verbose executable order index
+type runnable_kind =
+  | Executable_kind
+  | Test_kind
+
+let runnable_kind_name = function
+  | Executable_kind -> "executable"
+  | Test_kind -> "test"
+
+let build_runnable ~workspace_root ~verbose ~kind runnable order index
     library_outputs =
-  let out_dir = target_out_dir workspace_root (Manifest.Executable executable) in
+  let target =
+    match kind with
+    | Executable_kind -> Manifest.Executable runnable
+    | Test_kind -> Manifest.Test runnable
+  in
+  let out_dir = target_out_dir workspace_root target in
   Fs.remove_tree out_dir;
   Fs.ensure_dir out_dir;
   let dependency_include_dirs =
@@ -177,21 +202,23 @@ let build_executable ~workspace_root ~verbose executable order index
             failwith
               (Printf.sprintf "internal error: missing built dependency '%s'"
                  dependency))
-      executable.Manifest.deps
+      runnable.Manifest.deps
   in
   let include_dirs = out_dir :: dependency_include_dirs in
-  let source_modules = executable.modules @ [ executable.main ] in
+  let source_modules = runnable.modules @ [ runnable.main ] in
   let rec compile acc = function
     | [] -> Ok (List.rev acc)
     | stem :: rest ->
         let* object_file =
           compile_module ~workspace_root ~verbose ~out_dir ~include_dirs
-            ~dir:executable.dir stem
+            ~dir:runnable.dir stem
         in
         compile (object_file :: acc) rest
   in
   let* object_files = compile [] source_modules in
-  let closure = collect_dependency_closure index (Hashtbl.create 8) executable.deps in
+  let closure =
+    collect_dependency_closure index (Hashtbl.create 8) runnable.deps
+  in
   let archive_files =
     List.filter_map
       (function
@@ -203,14 +230,18 @@ let build_executable ~workspace_root ~verbose executable order index
         | _ -> None)
       order
   in
-  let binary = Filename.concat out_dir executable.name in
+  let binary = Filename.concat out_dir runnable.name in
   let* _ =
     Process.ensure_success ~verbose "ocamlopt"
       ([ "-o"; binary ] @ archive_files @ object_files)
   in
   print_endline
-    (Printf.sprintf "Built executable %s -> %s" executable.name binary);
-  Ok (Built_executable { name = executable.name; out_dir; binary })
+    (Printf.sprintf "Built %s %s -> %s" (runnable_kind_name kind) runnable.name
+       binary);
+  Ok
+    (match kind with
+    | Executable_kind -> Built_executable { name = runnable.name; out_dir; binary }
+    | Test_kind -> Built_test { name = runnable.name; out_dir; binary })
 
 let build ~workspace_root ~verbose ?(requested_targets = []) workspace =
   let workspace_root = Fs.realpath workspace_root in
@@ -232,7 +263,14 @@ let build ~workspace_root ~verbose ?(requested_targets = []) workspace =
         loop (artifact :: artifacts) rest
     | Manifest.Executable executable :: rest ->
         let* artifact =
-          build_executable ~workspace_root ~verbose executable order index
+          build_runnable ~workspace_root ~verbose ~kind:Executable_kind
+            executable order index library_outputs
+        in
+        loop (artifact :: artifacts) rest
+    | Manifest.Test test :: rest ->
+        let* artifact =
+          build_runnable ~workspace_root ~verbose ~kind:Test_kind test order
+            index
             library_outputs
         in
         loop (artifact :: artifacts) rest

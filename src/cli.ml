@@ -11,12 +11,19 @@ type run_options = {
   args : string list;
 }
 
+type test_options = {
+  workspace_dir : string;
+  verbose : bool;
+  targets : string list;
+}
+
 let usage () =
   String.concat "\n"
     [
       "Usage:";
       "  oasis build [--workspace DIR] [--verbose] [TARGET ...]";
       "  oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]";
+      "  oasis test [--workspace DIR] [--verbose] [TARGET ...]";
       "";
       "Examples:";
       "  oasis build";
@@ -25,6 +32,8 @@ let usage () =
       "  oasis run";
       "  oasis run hello";
       "  oasis run hello -- --loud";
+      "  oasis test";
+      "  oasis test unit";
     ]
 
 let build_usage () =
@@ -52,12 +61,25 @@ let run_usage () =
       "  oasis run -- --port 8080";
     ]
 
+let test_usage () =
+  String.concat "\n"
+    [
+      "Usage:";
+      "  oasis test [--workspace DIR] [--verbose] [TARGET ...]";
+      "";
+      "Examples:";
+      "  oasis test";
+      "  oasis test unit";
+      "  oasis test unit integration";
+      "  oasis test --workspace examples/hello --verbose";
+    ]
+
 let report_error message =
   prerr_endline ("oasis: " ^ message);
   1
 
-let parse_build_args args =
-  let rec loop options = function
+let parse_build_args (args : string list) : (build_options, string) result =
+  let rec loop (options : build_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
@@ -93,6 +115,21 @@ let parse_run_args args =
   in
   loop { workspace_dir = "."; verbose = false; target = None; args = [] } args
 
+let parse_test_args (args : string list) : (test_options, string) result =
+  let rec loop (options : test_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--help" :: _ -> Error (test_usage ())
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; verbose = false; targets = [] } args
+
 let load_workspace workspace_dir =
   if not (Fs.is_directory workspace_dir) then
     Error
@@ -107,7 +144,7 @@ let executable_names workspace =
   List.filter_map
     (function
       | Manifest.Executable executable -> Some executable.name
-      | Manifest.Library _ -> None)
+      | Manifest.Library _ | Manifest.Test _ -> None)
     workspace.Manifest.targets
 
 let resolve_run_target workspace requested_target =
@@ -123,6 +160,11 @@ let resolve_run_target workspace requested_target =
           Error
             (Printf.sprintf
                "target '%s' is a library; oasis run only supports executables"
+               name)
+      | Some (Manifest.Test _) ->
+          Error
+            (Printf.sprintf
+               "target '%s' is a test; oasis run only supports executables"
                name)
       | Some (Manifest.Executable executable) -> Ok executable.name)
   | None -> (
@@ -179,6 +221,17 @@ let run_executable (options : run_options) =
                   in
                   outcome.status)))
 
+let run_tests (options : test_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Tester.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
+          ~requested_targets:options.targets workspace
+      with
+      | Ok status -> status
+      | Error message -> report_error message)
+
 let run argv =
   match Array.to_list argv with
   | _program :: "build" :: args -> (
@@ -189,4 +242,8 @@ let run argv =
       match parse_run_args args with
       | Error message -> report_error message
       | Ok options -> run_executable options)
+  | _program :: "test" :: args -> (
+      match parse_test_args args with
+      | Error message -> report_error message
+      | Ok options -> run_tests options)
   | _ -> report_error (usage ())

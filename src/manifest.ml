@@ -10,7 +10,7 @@ type library = {
   deps : string list;
 }
 
-type executable = {
+type runnable = {
   name : string;
   dir : string;
   main : string;
@@ -18,9 +18,14 @@ type executable = {
   deps : string list;
 }
 
+type executable = runnable
+
+type test_target = runnable
+
 type target =
   | Library of library
   | Executable of executable
+  | Test of test_target
 
 type workspace = {
   name : string option;
@@ -50,14 +55,17 @@ let error path line message =
 let target_name = function
   | Library library -> library.name
   | Executable executable -> executable.name
+  | Test test -> test.name
 
 let target_deps = function
   | Library library -> library.deps
   | Executable executable -> executable.deps
+  | Test test -> test.deps
 
 let target_kind_name = function
   | Library _ -> "library"
   | Executable _ -> "executable"
+  | Test _ -> "test"
 
 let parse_quoted_string path line text start_index =
   let length = String.length text in
@@ -237,7 +245,7 @@ let parse_library path section name =
   in
   Ok (Library { name; dir; modules; deps })
 
-let parse_executable path section name =
+let parse_runnable path section name =
   let* () = allowed_fields path section [ "dir"; "main"; "modules"; "deps" ] in
   let* dir = required_string path section "dir" in
   let* main = required_string path section "main" in
@@ -255,19 +263,30 @@ let parse_executable path section name =
     error path section.line "main must be a file stem without path or extension"
   else if List.mem main modules then
     error path section.line "main should not be repeated in modules"
-  else Ok (Executable { name; dir; main; modules; deps })
+  else Ok { name; dir; main; modules; deps }
+
+let parse_executable path section name =
+  let* executable = parse_runnable path section name in
+  Ok (Executable executable)
+
+let parse_test path section name =
+  let* test = parse_runnable path section name in
+  Ok (Test test)
 
 let parse_target path section =
   match section.path with
   | [ "library"; name ] -> parse_library path section name
   | [ "executable"; name ] -> parse_executable path section name
+  | [ "test"; name ] -> parse_test path section name
   | [ kind; _ ] ->
       error path section.line
-        (Printf.sprintf "unknown target kind '%s'; expected library or executable"
+        (Printf.sprintf
+           "unknown target kind '%s'; expected library, executable, or test"
            kind)
   | _ ->
       error path section.line
-        "target sections must look like [library.name] or [executable.name]"
+        "target sections must look like [library.name], [executable.name], or \
+         [test.name]"
 
 let parse_top_level path bindings =
   let allowed = [ "workspace"; "version" ] in

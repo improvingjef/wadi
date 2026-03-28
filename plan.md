@@ -5,7 +5,7 @@
 5. [x] Build a fixture-driven integration test harness that compiles real sample projects.
 6. [x] Add unit tests for parsing, validation, dependency resolution, and command rendering.
 7. [ ] Design a cohesive subtool split for the Dune feature surface.
-8. [ ] Implement `oasis test` for test discovery, execution, and failure summaries.
+8. [x] Implement `oasis test` for test discovery, execution, and failure summaries.
 9. [x] Implement `oasis run` for building and launching executables with arguments.
 10. [ ] Implement `oasis clean` with selective cache and artifact removal.
 11. [ ] Add package and library resolution beyond the OCaml standard library.
@@ -22,3 +22,4 @@
 22. [ ] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
 23. [ ] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
 24. [ ] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.
+25. [ ] Eliminate the hand-maintained bootstrap `Makefile` object lists and rules by deriving bootstrap compilation from the workspace model or a tiny generator.

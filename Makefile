@@ -15,6 +15,7 @@ COMMON_OBJS := \
 
 APP_OBJS := \
 	$(COMMON_OBJS) \
+	$(OBJ_DIR)/tester.cmx \
 	$(OBJ_DIR)/cli.cmx \
 	$(OBJ_DIR)/main.cmx
 
@@ -23,6 +24,7 @@ TEST_OBJS := \
 	$(OBJ_DIR)/test_manifest.cmx \
 	$(OBJ_DIR)/test_build.cmx \
 	$(OBJ_DIR)/test_run.cmx \
+	$(OBJ_DIR)/test_test.cmx \
 	$(OBJ_DIR)/test_main.cmx
 
 .PHONY: all test clean
@@ -53,7 +55,10 @@ $(OBJ_DIR)/manifest.cmx: src/manifest.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/f
 $(OBJ_DIR)/builder.cmx: src/builder.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/fs.cmx $(OBJ_DIR)/process.cmx $(OBJ_DIR)/manifest.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
-$(OBJ_DIR)/cli.cmx: src/cli.ml $(COMMON_OBJS) | $(OBJ_DIR)
+$(OBJ_DIR)/tester.cmx: src/tester.ml $(COMMON_OBJS) | $(OBJ_DIR)
+	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
+
+$(OBJ_DIR)/cli.cmx: src/cli.ml $(COMMON_OBJS) $(OBJ_DIR)/tester.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
 $(OBJ_DIR)/main.cmx: src/main.ml $(OBJ_DIR)/cli.cmx | $(OBJ_DIR)
@@ -71,7 +76,10 @@ $(OBJ_DIR)/test_build.cmx: test/test_build.ml $(COMMON_OBJS) $(OBJ_DIR)/test_sup
 $(OBJ_DIR)/test_run.cmx: test/test_run.ml $(COMMON_OBJS) $(OBJ_DIR)/test_support.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
-$(OBJ_DIR)/test_main.cmx: test/test_main.ml $(OBJ_DIR)/test_support.cmx $(OBJ_DIR)/test_manifest.cmx $(OBJ_DIR)/test_build.cmx $(OBJ_DIR)/test_run.cmx | $(OBJ_DIR)
+$(OBJ_DIR)/test_test.cmx: test/test_test.ml $(COMMON_OBJS) $(OBJ_DIR)/test_support.cmx | $(OBJ_DIR)
+	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
+
+$(OBJ_DIR)/test_main.cmx: test/test_main.ml $(OBJ_DIR)/test_support.cmx $(OBJ_DIR)/test_manifest.cmx $(OBJ_DIR)/test_build.cmx $(OBJ_DIR)/test_run.cmx $(OBJ_DIR)/test_test.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
 $(BIN_DIR)/oasis: $(APP_OBJS) | $(BIN_DIR)

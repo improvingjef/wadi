@@ -1,4 +1,5 @@
-let cases = Test_manifest.cases @ Test_build.cases @ Test_run.cases
+let cases =
+  Test_manifest.cases @ Test_build.cases @ Test_run.cases @ Test_test.cases
 
 let () =
   let failures = ref [] in

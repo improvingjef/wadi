@@ -88,4 +88,49 @@ deps = ["tool"]
         let error = expect_error (Builder.resolve_build_order workspace []) in
         assert_string_contains ~needle:"depends on executable" error
           "libraries should not be allowed to depend on executables")) ;
+    ( "rejects test dependencies",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[test.alpha]
+dir = "alpha"
+main = "main"
+deps = ["beta"]
+
+[test.beta]
+dir = "beta"
+main = "main"
+|})
+        in
+        let error = expect_error (Builder.resolve_build_order workspace []) in
+        assert_string_contains ~needle:"depends on test 'beta'" error
+          "tests should not be allowed to depend on other tests")) ;
+    ( "parses test targets",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+
+[test.unit]
+dir = "test"
+main = "main"
+modules = ["helpers"]
+deps = ["core"]
+|})
+        in
+        assert_int_equal 2 (List.length workspace.Manifest.targets)
+          "expected one library and one test";
+        match workspace.Manifest.targets with
+        | [ Manifest.Library library; Manifest.Test test ] ->
+            assert_string_equal "core" library.name
+              "library name should come from the section path";
+            assert_string_equal "unit" test.name
+              "test name should come from the section path"
+        | _ -> fail "unexpected target layout in parsed workspace")) ;
   ]
