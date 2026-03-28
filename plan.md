@@ -6,7 +6,7 @@
 6. [x] Add unit tests for parsing, validation, dependency resolution, and command rendering.
 7. [ ] Design a cohesive subtool split for the Dune feature surface.
 8. [ ] Implement `oasis test` for test discovery, execution, and failure summaries.
-9. [ ] Implement `oasis run` for building and launching executables with arguments.
+9. [x] Implement `oasis run` for building and launching executables with arguments.
 10. [ ] Implement `oasis clean` with selective cache and artifact removal.
 11. [ ] Add package and library resolution beyond the OCaml standard library.
 12. [ ] Implement incremental rebuilds based on source and config changes.
@@ -21,3 +21,4 @@
 21. [ ] Infer intra-target module compilation order from OCaml interface dependencies so manifests stay declarative.
 22. [ ] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
 23. [ ] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
+24. [ ] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.

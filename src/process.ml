@@ -4,6 +4,11 @@ type outcome = {
   output : string;
 }
 
+type exit_status = {
+  command : string;
+  status : int;
+}
+
 let render ?cwd prog args =
   let base =
     String.concat " " (List.map String_util.shell_quote (prog :: args))
@@ -23,6 +28,12 @@ let run_capture ?cwd ?(verbose = false) prog args =
   let output = Fs.read_file output_path in
   Unix.unlink output_path;
   { command; status; output }
+
+let run_status ?cwd ?(verbose = false) prog args =
+  let command = render ?cwd prog args in
+  if verbose then prerr_endline command;
+  let status = Sys.command command in
+  { command; status }
 
 let ensure_success ?cwd ?verbose prog args =
   let outcome = run_capture ?cwd ?verbose prog args in

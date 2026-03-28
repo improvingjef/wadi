@@ -22,6 +22,7 @@ TEST_OBJS := \
 	$(OBJ_DIR)/test_support.cmx \
 	$(OBJ_DIR)/test_manifest.cmx \
 	$(OBJ_DIR)/test_build.cmx \
+	$(OBJ_DIR)/test_run.cmx \
 	$(OBJ_DIR)/test_main.cmx
 
 .PHONY: all test clean
@@ -67,7 +68,10 @@ $(OBJ_DIR)/test_manifest.cmx: test/test_manifest.ml $(COMMON_OBJS) $(OBJ_DIR)/te
 $(OBJ_DIR)/test_build.cmx: test/test_build.ml $(COMMON_OBJS) $(OBJ_DIR)/test_support.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
-$(OBJ_DIR)/test_main.cmx: test/test_main.ml $(OBJ_DIR)/test_support.cmx $(OBJ_DIR)/test_manifest.cmx $(OBJ_DIR)/test_build.cmx | $(OBJ_DIR)
+$(OBJ_DIR)/test_run.cmx: test/test_run.ml $(COMMON_OBJS) $(OBJ_DIR)/test_support.cmx | $(OBJ_DIR)
+	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
+
+$(OBJ_DIR)/test_main.cmx: test/test_main.ml $(OBJ_DIR)/test_support.cmx $(OBJ_DIR)/test_manifest.cmx $(OBJ_DIR)/test_build.cmx $(OBJ_DIR)/test_run.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
 $(BIN_DIR)/oasis: $(APP_OBJS) | $(BIN_DIR)
