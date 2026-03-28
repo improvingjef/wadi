@@ -21,5 +21,6 @@
 21. [ ] Infer intra-target module compilation order from OCaml interface dependencies so manifests stay declarative.
 22. [ ] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
 23. [ ] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
-24. [ ] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.
+24. [x] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.
 25. [ ] Eliminate the hand-maintained bootstrap `Makefile` object lists and rules by deriving bootstrap compilation from the workspace model or a tiny generator.
+26. [ ] Extend the direct process driver with explicit environment and stdin plumbing so future action/codegen subtools never need shell fallbacks.

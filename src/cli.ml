@@ -17,6 +17,10 @@ type test_options = {
   targets : string list;
 }
 
+type command_result =
+  | Exit_code of int
+  | Forward_status of Unix.process_status
+
 let usage () =
   String.concat "\n"
     [
@@ -76,7 +80,7 @@ let test_usage () =
 
 let report_error message =
   prerr_endline ("oasis: " ^ message);
-  1
+  Exit_code 1
 
 let parse_build_args (args : string list) : (build_options, string) result =
   let rec loop (options : build_options) = function
@@ -192,7 +196,7 @@ let run_build (options : build_options) =
         Builder.build ~workspace_root:options.workspace_dir
           ~verbose:options.verbose ~requested_targets:options.targets workspace
       with
-      | Ok _ -> 0
+      | Ok _ -> Exit_code 0
       | Error message -> report_error message)
 
 let run_executable (options : run_options) =
@@ -219,7 +223,7 @@ let run_executable (options : run_options) =
                   let outcome =
                     Process.run_status ~verbose:options.verbose binary options.args
                   in
-                  outcome.status)))
+                  Forward_status outcome.Process.unix_status)))
 
 let run_tests (options : test_options) =
   match load_workspace options.workspace_dir with
@@ -229,7 +233,7 @@ let run_tests (options : test_options) =
         Tester.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
           ~requested_targets:options.targets workspace
       with
-      | Ok status -> status
+      | Ok status -> Exit_code status
       | Error message -> report_error message)
 
 let run argv =

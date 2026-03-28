@@ -44,6 +44,27 @@ let assert_string_not_contains ~needle haystack message =
 let assert_file_exists path =
   assert_true (Fs.exists path) (Printf.sprintf "expected file to exist: %s" path)
 
+let string_of_wait_status = function
+  | Unix.WEXITED code -> Printf.sprintf "exited %d" code
+  | Unix.WSIGNALED signal -> Printf.sprintf "signaled %d" signal
+  | Unix.WSTOPPED signal -> Printf.sprintf "stopped %d" signal
+
+let assert_wait_status_exited expected status message =
+  match status with
+  | Unix.WEXITED actual -> assert_int_equal expected actual message
+  | _ ->
+      fail
+        (Printf.sprintf "%s\nexpected: exited %d\nactual: %s" message expected
+           (string_of_wait_status status))
+
+let assert_wait_status_signaled expected status message =
+  match status with
+  | Unix.WSIGNALED actual -> assert_int_equal expected actual message
+  | _ ->
+      fail
+        (Printf.sprintf "%s\nexpected: signaled %d\nactual: %s" message expected
+           (string_of_wait_status status))
+
 let expect_ok = function
   | Ok value -> value
   | Error message -> fail ("expected Ok but got Error: " ^ message)

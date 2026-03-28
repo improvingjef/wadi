@@ -76,4 +76,23 @@ main = "main"
               ~needle:"target 'greeting' is a library; oasis run only supports executables"
               run.output
               "run should report invalid target kinds clearly")) );
+    ( "forwards signaled executable exits",
+      (fun () ->
+        with_temp_dir "oasis-run-signal" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.sigterm]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = ignore (Sys.command "kill -TERM $PPID")|};
+            let run = run_oasis ~cwd:workspace [ "run" ] in
+            assert_int_equal (128 + Sys.sigterm) run.status
+              "run should surface shell-compatible status codes for signals";
+            assert_wait_status_signaled Sys.sigterm run.unix_status
+              "run should terminate with the same signal as the executable";
+            assert_string_contains ~needle:"Built executable sigterm"
+              run.output
+              "run should still surface the build phase before the executable exits")) );
   ]
