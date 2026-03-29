@@ -2,6 +2,7 @@ type subtool =
   | Build
   | Run
   | Test
+  | Bench
   | Install
 
 type context = {
@@ -25,6 +26,7 @@ let subtool_name = function
   | Build -> "build"
   | Run -> "run"
   | Test -> "test"
+  | Bench -> "bench"
   | Install -> "install"
 
 let parse_subtool value =
@@ -32,11 +34,12 @@ let parse_subtool value =
   | "build" -> Ok Build
   | "run" -> Ok Run
   | "test" -> Ok Test
+  | "bench" -> Ok Bench
   | "install" -> Ok Install
   | value ->
       Error
         (Printf.sprintf
-           "unknown env subtool '%s'; expected build, run, test, or install"
+           "unknown env subtool '%s'; expected build, run, test, bench, or install"
            value)
 
 let resolve_profile workspace = function
@@ -138,6 +141,33 @@ let resolve_test_targets workspace requested_targets =
                    name
                    (Manifest.target_kind_name target)
                    (Manifest.target_name target))
+          | None -> Error (Printf.sprintf "unknown target '%s'" name))
+    in
+    loop [] requested_targets
+
+let resolve_bench_targets workspace requested_targets =
+  let requested_targets = String_util.dedup_preserve requested_targets in
+  if requested_targets = [] then
+    match executable_targets workspace with
+    | [] -> Error "workspace does not define any executables to benchmark"
+    | executables -> Ok executables
+  else
+    let index = target_index workspace in
+    let rec loop acc = function
+      | [] -> Ok (List.rev acc)
+      | name :: rest -> (
+          match Hashtbl.find_opt index name with
+          | Some (Manifest.Executable executable) -> loop (executable :: acc) rest
+          | Some (Manifest.Library _) ->
+              Error
+                (Printf.sprintf
+                   "target '%s' is a library; oasis env bench only supports executables"
+                   name)
+          | Some (Manifest.Test _) ->
+              Error
+                (Printf.sprintf
+                   "target '%s' is a test; oasis env bench only supports executables"
+                   name)
           | None -> Error (Printf.sprintf "unknown target '%s'" name))
     in
     loop [] requested_targets
@@ -267,6 +297,17 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
                      (Manifest.target_display_name (Manifest.Test test)))
                   "runtime" [])
               tests )
+    | Bench ->
+        let* executables = resolve_bench_targets workspace requested_targets in
+        Ok
+          ( List.map (fun (executable : Manifest.executable) -> executable.name) executables,
+            List.map
+              (fun (executable : Manifest.executable) ->
+                context ~changed_only ~host_env
+                  (Printf.sprintf "executable %s"
+                     (Manifest.target_display_name (Manifest.Executable executable)))
+                  "runtime" [])
+              executables )
     | Install ->
         let* targets = resolve_install_targets workspace requested_targets in
         Ok (List.map Manifest.target_name targets, [])

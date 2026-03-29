@@ -874,6 +874,42 @@ modules = ["version"]
               "action stdout builds should produce a runnable executable";
             assert_string_equal "stdout\n" run.output
               "action stdout redirection should materialize compiler-readable generated modules")) );
+    ( "runs multi-step actions without shell fallbacks",
+      (fun () ->
+        with_temp_dir "oasis-action-steps" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+steps = [["./scripts/copy.sh", "../fixtures/version.txt", "version.txt"], ["./scripts/render.sh", "version.txt", "version.ml"]]
+deps = ["fixtures/version.txt"]
+outputs = ["version.ml"]
+sandbox = "target"
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/copy.sh"
+                 "#!/bin/sh\nset -eu\ncp \"$1\" \"$2\"\n");
+            ignore
+              (write_executable workspace "scripts/render.sh"
+                 "#!/bin/sh\nset -eu\nprintf 'let message = \"%s\"\\n' \"$(cat \"$1\")\" > \"$2\"\n");
+            write_source workspace "fixtures/version.txt" "steps\n";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "multi-step actions should build successfully";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "multi-step action builds should produce runnable executables";
+            assert_string_equal "steps\n" run.output
+              "later action steps should be able to consume files produced by earlier steps in the sandbox")) );
     ( "feeds preprocessors from declared stdin_path inputs",
       (fun () ->
         with_temp_dir "oasis-preprocess-stdin-path" (fun workspace ->

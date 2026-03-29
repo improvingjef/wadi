@@ -289,9 +289,9 @@ version = 1
               migrate.output
               "migrate should translate with-stdin-from preprocess actions and infer their file deps";
             assert_string_contains
-              ~needle:"[action.dune_action_2]\nargv = [\"sh\", \"-c\", \"'cp' 'fixtures/expected.txt' 'copied.txt' && 'diff' '-u' 'fixtures/expected.txt' 'copied.txt'\"]\noutputs = [\"copied.txt\"]\ndeps = [\"fixtures/expected.txt\"]\ncwd = \".\"\n"
+              ~needle:"[action.dune_action_2]\nsteps = [[\"cp\", \"fixtures/expected.txt\", \"copied.txt\"], [\"diff\", \"-u\", \"fixtures/expected.txt\", \"copied.txt\"]]\noutputs = [\"copied.txt\"]\ndeps = [\"fixtures/expected.txt\"]\ncwd = \".\"\n"
               migrate.output
-              "migrate should translate progn/diff rules into a runnable oasis action with concrete deps";
+              "migrate should translate progn/diff rules into a first-class multi-step oasis action";
             assert_string_contains
               ~needle:"# - generated action 'dune_action_2' from dune rule in"
               migrate.output

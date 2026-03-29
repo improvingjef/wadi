@@ -79,15 +79,28 @@ stdout = "version.ml"
 sandbox = "target"
 ```
 
+Multi-step variant:
+
+```toml
+[action.generate_version]
+steps = [["./scripts/copy.sh", "templates/version.txt", "version.txt"], ["./scripts/render.sh", "version.txt", "version.ml"]]
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+```
+
 Rules:
 
+- set exactly one of `argv` or `steps`
 - `argv[0]` may be a relative program path.
+- `steps` is an array of argv arrays that runs in order inside one sandbox.
 - `cwd` and `deps` are workspace-relative in the root manifest.
 - `outputs` are relative to the target directory.
 - `stdin` feeds literal text to the action process.
 - `stdin_path` feeds a workspace-relative file to stdin and is tracked as an
   input.
 - `stdin` and `stdin_path` are mutually exclusive.
+- for multi-step actions, `stdin` / `stdin_path` feed the first step and
+  `stdout` redirects the final step
 - `stdout` redirects process stdout into one declared output path without
   forcing a shell wrapper.
 - If an output is `.ml` or `.mli`, it may not collide with checked-in source in

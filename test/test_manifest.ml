@@ -294,6 +294,36 @@ main = "main"
         | Some Manifest.Workspace ->
             fail "target override sandbox should replace the default sandbox"
         | None -> fail "resolved options should keep the target sandbox override")) ;
+    ( "parses first-class multi-step actions",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[action.generate]
+steps = [["./scripts/render.sh", "templates/input.txt"], ["./scripts/finalize.sh", "version.ml"]]
+cwd = "."
+deps = ["templates/input.txt"]
+outputs = ["version.ml"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+actions = ["generate"]
+modules = ["version"]
+|})
+        in
+        match workspace.Manifest.actions with
+        | [ action ] ->
+            assert_int_equal 2 (List.length action.Manifest.steps)
+              "multi-step actions should preserve every declared command";
+            assert_string_equal "./scripts/render.sh"
+              (List.hd (List.hd action.Manifest.steps))
+              "the first action step should keep its argv";
+            assert_string_equal "./scripts/finalize.sh"
+              (List.hd (List.nth action.Manifest.steps 1))
+              "the second action step should keep its argv"
+        | _ -> fail "expected a single parsed action")) ;
     ( "parses multi-package workspace members",
       (fun () ->
         with_temp_dir "oasis-members" (fun workspace_root ->
@@ -416,7 +446,7 @@ ppx = ["rewrite"]
               | None -> fail "expected to resolve the member-local ppx tool"
             in
             assert_string_equal "packages/core/scripts/generate.sh"
-              (List.hd action.Manifest.argv)
+              (List.hd (List.hd action.Manifest.steps))
               "member action programs should be rebased under the member path";
             assert_string_equal "packages/core" (Option.get action.Manifest.cwd)
               "member action cwd '.' should rebase to the member root";

@@ -24,7 +24,7 @@ type raw_target = {
 type raw_action = {
   name : string;
   dir : string;
-  argv : string list;
+  steps : string list list;
   cwd : string option;
   deps : string list;
   outputs : string list;
@@ -376,80 +376,103 @@ let shell_fragment_of_command (command : parsed_command) =
   | Some path -> " > " ^ String_util.shell_quote path
   | None -> ""
 
+let shell_command_of_commands commands =
+  {
+    argv =
+      [
+        "sh";
+        "-c";
+        String.concat " && "
+          (List.map shell_fragment_of_command commands);
+      ];
+    cwd = None;
+    stdin_path = None;
+    stdout = None;
+  }
+
+let with_first_command f = function
+  | [] -> Error "dune action is empty"
+  | command :: rest -> Ok (f command :: rest)
+
 let rec parse_command_form ~dir = function
-  | List (Atom "run" :: args) -> parse_run_like ~dir args
+  | List (Atom "run" :: args) -> Result.map (fun command -> [ command ]) (parse_run_like ~dir args)
   | List [ Atom "bash"; Atom script ] ->
       Ok
-        { argv = [ "sh"; "-c"; script ]; cwd = None; stdin_path = None; stdout = None }
+        [
+          {
+            argv = [ "sh"; "-c"; script ];
+            cwd = None;
+            stdin_path = None;
+            stdout = None;
+          };
+        ]
   | List [ Atom "system"; Atom command ] ->
       Ok
-        {
-          argv = [ "sh"; "-c"; command ];
-          cwd = None;
-          stdin_path = None;
-          stdout = None;
-        }
+        [
+          {
+            argv = [ "sh"; "-c"; command ];
+            cwd = None;
+            stdin_path = None;
+            stdout = None;
+          };
+        ]
   | List [ Atom "copy"; Atom src; Atom dst ]
   | List [ Atom "copy#"; Atom src; Atom dst ] ->
       Ok
-        {
-          argv =
-            [
-              "cp";
-              rebase_dune_relative_path dir src;
-              rebase_dune_relative_path dir dst;
-            ];
-          cwd = None;
-          stdin_path = None;
-          stdout = None;
-        }
+        [
+          {
+            argv =
+              [
+                "cp";
+                rebase_dune_relative_path dir src;
+                rebase_dune_relative_path dir dst;
+              ];
+            cwd = None;
+            stdin_path = None;
+            stdout = None;
+          };
+        ]
   | List [ Atom "diff"; Atom left; Atom right ] ->
       Ok
-        {
-          argv =
-            [
-              "diff";
-              "-u";
-              rebase_dune_relative_path dir left;
-              rebase_dune_relative_path dir right;
-            ];
-          cwd = None;
-          stdin_path = None;
-          stdout = None;
-        }
+        [
+          {
+            argv =
+              [
+                "diff";
+                "-u";
+                rebase_dune_relative_path dir left;
+                rebase_dune_relative_path dir right;
+              ];
+            cwd = None;
+            stdin_path = None;
+            stdout = None;
+          };
+        ]
   | List [ Atom "with-stdin-from"; Atom path; nested ] ->
-      let* command = parse_command_form ~dir nested in
-      Ok { command with stdin_path = Some (rebase_dune_relative_path dir path) }
+      let* commands = parse_command_form ~dir nested in
+      with_first_command (fun command ->
+          { command with stdin_path = Some (rebase_dune_relative_path dir path) })
+        commands
   | List [ Atom "chdir"; Atom cwd; nested ] ->
-      let* command = parse_command_form ~dir nested in
+      let* commands = parse_command_form ~dir nested in
       Ok
-        {
-          command with
-          cwd = Some (rebase_dune_relative_path dir cwd);
-        }
+        (List.map
+           (fun command ->
+             {
+               command with
+               cwd = Some (rebase_dune_relative_path dir cwd);
+             })
+           commands)
   | List (Atom "progn" :: forms) ->
       if forms = [] then Error "dune progn action is empty"
       else if List.length forms = 1 then parse_command_form ~dir (List.hd forms)
       else
         let* commands = collect_results forms (parse_command_form ~dir) in
-        Ok
-          {
-            argv =
-              [
-                "sh";
-                "-c";
-                String.concat " && "
-                  (List.map shell_fragment_of_command commands);
-              ];
-            cwd = None;
-            stdin_path = None;
-            stdout = None;
-          }
+        Ok (List.concat commands)
   | _ -> Error "unsupported dune action form"
 
 let parse_rule_command ~dir ~outputs = function
   | List [ Atom "with-stdout-to"; Atom output; nested ] ->
-      let* command = parse_command_form ~dir nested in
       let* output =
         if output = "%{target}" || output = "%{targets}" then
           match outputs with
@@ -459,16 +482,118 @@ let parse_rule_command ~dir ~outputs = function
                 "dune with-stdout-to %{target(s)} form requires exactly one output"
         else Ok output
       in
+      let* commands = parse_command_form ~dir nested in
+      (match List.rev commands with
+      | [] -> Error "dune rule action is empty"
+      | [ command ] ->
+          Ok
+            [
+              {
+                command with
+                cwd =
+                  (match command.cwd with
+                  | Some _ as cwd -> cwd
+                  | None -> Some dir);
+                stdout = Some output;
+              };
+            ]
+      | commands_rev ->
+          let command = shell_command_of_commands (List.rev commands_rev) in
+          Ok
+            [
+              {
+                command with
+                cwd = Some dir;
+                stdout = Some output;
+              };
+            ])
+  | form -> parse_command_form ~dir form
+
+type normalized_action = {
+  steps : string list list;
+  cwd : string option;
+  stdin_path : string option;
+  stdout : string option;
+}
+
+let normalize_action_commands commands =
+  let all_same_cwd =
+    match commands with
+    | [] -> Some None
+    | (command : parsed_command) :: rest ->
+        let expected = command.cwd in
+        if List.for_all (fun (command : parsed_command) -> command.cwd = expected) rest then
+          Some expected
+        else None
+  in
+  match commands with
+  | [] -> Error "dune action is empty"
+  | [ (command : parsed_command) ] ->
       Ok
         {
-          command with
-          cwd =
-            (match command.cwd with
-            | Some _ as cwd -> cwd
-            | None -> Some dir);
-          stdout = Some output;
+          steps = [ command.argv ];
+          cwd = command.cwd;
+          stdin_path = command.stdin_path;
+          stdout = command.stdout;
         }
-  | form -> parse_command_form ~dir form
+  | commands -> (
+      match all_same_cwd with
+      | None ->
+          let command : parsed_command = shell_command_of_commands commands in
+          Ok
+            {
+              steps = [ command.argv ];
+              cwd = command.cwd;
+              stdin_path = command.stdin_path;
+              stdout = command.stdout;
+            }
+      | Some cwd ->
+          let first : parsed_command = List.hd commands in
+          let last : parsed_command = List.hd (List.rev commands) in
+          let middle =
+            match commands with
+            | [] | [ _ ] -> []
+            | _ ->
+                let rec take_middle acc = function
+                  | [] | [ _ ] -> List.rev acc
+                  | item :: rest -> take_middle (item :: acc) rest
+                in
+                take_middle [] (List.tl commands)
+          in
+          let requires_shell =
+            List.exists
+              (fun (command : parsed_command) -> command.stdin_path <> None)
+              (List.tl commands)
+            || List.exists
+                 (fun (command : parsed_command) -> command.stdout <> None)
+                 middle
+            ||
+            match first.stdout with
+            | Some _ -> true
+            | None -> false
+          in
+          if requires_shell then
+            let command : parsed_command = shell_command_of_commands commands in
+            Ok
+              {
+                steps = [ command.argv ];
+                cwd = command.cwd;
+                stdin_path = command.stdin_path;
+                stdout = command.stdout;
+              }
+          else
+            Ok
+              {
+                steps = List.map (fun (command : parsed_command) -> command.argv) commands;
+                cwd;
+                stdin_path = first.stdin_path;
+                stdout = last.stdout;
+              })
+
+let single_command_for_commands commands =
+  match commands with
+  | [ command ] -> command
+  | commands -> shell_command_of_commands commands
 
 let inferred_none : inferred_deps = { deps = []; opaque = false }
 
@@ -773,7 +898,8 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
         in
         Ok (acc, [], ppx)
     | Ok (Some (List (Atom "action" :: [ form ]))) ->
-        let* command = parse_command_form ~dir form in
+        let* commands = parse_command_form ~dir form in
+        let command = single_command_for_commands commands in
         let name, acc = generated_name acc "dune_preprocess" in
         let cwd =
           match command.cwd with
@@ -867,7 +993,8 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                  (Printf.sprintf
                     "ignored unsupported dune rule action in %s; migrate it manually"
                     dune_path))
-        | Ok command ->
+        | Ok commands ->
+            let* command = normalize_action_commands commands in
             let name, acc = generated_name acc "dune_action" in
             let inferred =
               infer_action_deps ~workspace_root ~dir
@@ -899,7 +1026,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
               {
                 name;
                 dir;
-                argv = command.argv;
+                steps = command.steps;
                 cwd =
                   (match command.cwd with
                   | Some _ as cwd -> cwd
@@ -1134,6 +1261,9 @@ let toml_string value = "\"" ^ String_util.json_escape value ^ "\""
 let toml_array values =
   "[" ^ String.concat ", " (List.map toml_string values) ^ "]"
 
+let toml_array_array values =
+  "[" ^ String.concat ", " (List.map toml_array values) ^ "]"
+
 let render_target alias_index (target : raw_target) =
   let deps, packages =
     List.fold_left
@@ -1213,7 +1343,9 @@ let render_target alias_index (target : raw_target) =
 let render_action (action : raw_action) =
   [
     Printf.sprintf "[action.%s]" action.name;
-    "argv = " ^ toml_array action.argv;
+    (match action.steps with
+    | [ argv ] -> "argv = " ^ toml_array argv
+    | steps -> "steps = " ^ toml_array_array steps);
     "outputs = " ^ toml_array action.outputs;
   ]
   @

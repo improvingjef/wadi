@@ -82,9 +82,10 @@ type library_section = {
   name : string;
   dir : string option;
   modules : string list option;
+  packages : string list option;
 }
 
-let empty_library name = { name; dir = None; modules = None }
+let empty_library name = { name; dir = None; modules = None; packages = None }
 
 type section_kind =
   | Library_section of string
@@ -175,6 +176,9 @@ let parse_libraries path =
               match current, array_key with
               | Some library, Some "modules" ->
                   Some { library with modules = Some (parse_string_array buffer) }
+              | Some library, Some "packages" ->
+                  Some
+                    { library with packages = Some (parse_string_array buffer) }
               | _ -> current
             in
             loop current None None libraries rest
@@ -208,6 +212,16 @@ let parse_libraries path =
                            })
                         None None libraries rest
                     else loop current (Some "modules") (Some value) libraries rest
+                  else if key = "packages" then
+                    if String.contains value ']' then
+                      loop
+                        (Some
+                           {
+                             library with
+                             packages = Some (parse_string_array value);
+                           })
+                        None None libraries rest
+                    else loop current (Some "packages") (Some value) libraries rest
                   else loop current None None libraries rest
               | _ -> loop current None None libraries rest)
   in
@@ -279,7 +293,7 @@ let library_files root_dir library =
       else files)
     modules
 
-let ordered_module_files files =
+let ordered_module_files ?(keep_interfaces = false) files =
   let dep_output_path = Filename.temp_file "oasis-bootstrap-modules" ".txt" in
   let ocamldep =
     match Sys.getenv_opt "OCAMLDEP" with
@@ -302,8 +316,39 @@ let ordered_module_files files =
          output)
   else
     output |> split_whitespace
-    |> List.filter (fun path -> Filename.check_suffix path ".ml")
+    |> List.filter (fun path ->
+           if keep_interfaces then
+             Filename.check_suffix path ".ml" || Filename.check_suffix path ".mli"
+           else Filename.check_suffix path ".ml")
     |> dedup_preserve
+
+type output_format =
+  | Mod_use
+  | Ml_paths
+  | Compile_paths
+  | Packages
+
+let output_format () =
+  let rec loop index =
+    if index >= Array.length Sys.argv then Mod_use
+    else
+      match Sys.argv.(index) with
+      | "--format" ->
+          if index + 1 >= Array.length Sys.argv then
+            failwith "--format requires mod_use, ml-paths, compile-paths, or packages"
+          else (
+            match String.lowercase_ascii (String.trim Sys.argv.(index + 1)) with
+            | "mod_use" | "mod-use" -> Mod_use
+            | "ml_paths" | "ml-paths" -> Ml_paths
+            | "compile_paths" | "compile-paths" -> Compile_paths
+            | "packages" -> Packages
+            | value ->
+                failwith
+                  ("unknown --format value '" ^ value
+                 ^ "'; expected mod_use, ml-paths, compile-paths, or packages"))
+      | _ -> loop (index + 1)
+  in
+  loop 1
 
 let () =
   try
@@ -312,12 +357,29 @@ let () =
     let library =
       module_manifest_path |> parse_libraries |> choose_library
     in
-    let module_files =
-      library_files root_dir library |> ordered_module_files
-    in
-    List.iter
-      (fun path -> Printf.printf "#mod_use %S;;\n" path)
-      module_files
+    match output_format () with
+    | Mod_use ->
+        let module_files =
+          library_files root_dir library |> ordered_module_files
+        in
+        List.iter
+          (fun path -> Printf.printf "#mod_use %S;;\n" path)
+          module_files
+    | Ml_paths ->
+        let module_files =
+          library_files root_dir library |> ordered_module_files
+        in
+        List.iter print_endline module_files
+    | Compile_paths ->
+        let module_files =
+          library_files root_dir library |> ordered_module_files ~keep_interfaces:true
+        in
+        List.iter print_endline module_files
+    | Packages ->
+        List.iter print_endline
+          (match library.packages with
+          | Some packages -> packages
+          | None -> [])
   with
   | Failure message ->
       prerr_endline ("oasis bootstrap loader: " ^ message);

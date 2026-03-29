@@ -130,6 +130,9 @@ Important rules:
 - dune `with-stdin-from` and `with-stdout-to` wrappers now migrate to
   first-class `stdin_path` / `stdout` manifest fields when possible instead of
   always collapsing into shell-quoted `sh -c` fallbacks.
+- dune `progn` rules now migrate to first-class `steps = [[...], [...]]`
+  action sequences for straightforward multi-command flows, so copied-file and
+  diff-style rules stay structured instead of turning into one shell string.
 - common dune `rule` stanzas become `action.*` sections when oasis can map the
   targets, deps, and command form directly
 - Generated `.ml` or `.mli` files may not collide with checked-in source files

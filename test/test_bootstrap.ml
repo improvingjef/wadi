@@ -286,6 +286,20 @@ deps = ["core"]
               "the hidden compiled bootstrap command should render successfully";
             assert_string_equal expected compiled.output
               "the compiled bootstrap planner should match Bootstrap.render_makefile")) );
+    ( "uses a compiled seed binary for app-only bootstrap generation",
+      (fun () ->
+        let makefile = Fs.read_file (Filename.concat (Sys.getcwd ()) "Makefile") in
+        assert_string_contains ~needle:"BOOTSTRAP_SEED_BIN := $(BIN_DIR)/oasis-seed"
+          makefile
+          "the top-level Makefile should define a compiled bootstrap seed binary";
+        assert_string_contains
+          ~needle:"$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope app"
+          makefile
+          "app-only bootstrap generation should run through the compiled seed binary";
+        assert_string_not_contains
+          ~needle:"ocaml scripts/generate_bootstrap_makefile.ml"
+          makefile
+          "cold-start bootstrap should no longer evaluate the planner through the OCaml toplevel")) ;
     ( "emits interface-aware and package-aware bootstrap rules",
       (fun () ->
         with_temp_dir "oasis-bootstrap-packages" (fun workspace ->

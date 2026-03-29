@@ -3,6 +3,11 @@ type value =
   | Int of int
   | Bool of bool
   | Strings of string list
+  | String_arrays of string list list
+
+type array_item =
+  | Item_string of string
+  | Item_strings of string list
 
 type env_binding = string * string
 
@@ -68,7 +73,7 @@ type ppx_tool = {
 type action = {
   name : string;
   package_path : string option;
-  argv : string list;
+  steps : string list list;
   cwd : string option;
   deps : string list;
   outputs : string list;
@@ -195,6 +200,11 @@ let target_display_name target =
 let action_display_name (action : action) =
   action.name ^ package_suffix action.package_path
 
+let action_commands (action : action) = action.steps
+
+let action_is_multistep (action : action) =
+  List.length action.steps > 1
+
 let command_tool_display_name (tool : command_tool) =
   tool.name ^ package_suffix tool.package_path
 
@@ -262,38 +272,85 @@ let parse_string_value path line text =
 
 let parse_string_array path line text =
   let length = String.length text in
-  if length < 2 || text.[0] <> '[' || text.[length - 1] <> ']' then
-    error path line "malformed array literal"
-  else
-    let inner = String.sub text 1 (length - 2) in
-    let inner_length = String.length inner in
-    let rec skip_whitespace index =
-      if index < inner_length then
-        match inner.[index] with
-        | ' ' | '\t' -> skip_whitespace (index + 1)
-        | _ -> index
-      else index
-    in
-    let rec parse_items index acc =
-      let index = skip_whitespace index in
-      if index >= inner_length then Ok (List.rev acc)
-      else
-        let* item, next_index = parse_quoted_string path line inner index in
-        let next_index = skip_whitespace next_index in
-        if next_index >= inner_length then Ok (List.rev (item :: acc))
-        else if inner.[next_index] = ',' then
-          parse_items (next_index + 1) (item :: acc)
-        else error path line "expected a comma between array elements"
-    in
-    parse_items 0 []
+  let rec skip_whitespace index =
+    if index < length then
+      match text.[index] with
+      | ' ' | '\t' -> skip_whitespace (index + 1)
+      | _ -> index
+    else index
+  in
+  let rec parse_array index =
+    if index >= length || text.[index] <> '[' then
+      error path line "malformed array literal"
+    else
+      let rec parse_items index acc =
+        let index = skip_whitespace index in
+        if index >= length then error path line "unterminated array literal"
+        else if text.[index] = ']' then
+          let value =
+            match List.rev acc with
+            | [] -> Ok (Strings [])
+            | Item_string _ :: _ ->
+                let rec collect_strings acc = function
+                  | [] -> Ok (Strings (List.rev acc))
+                  | Item_string value :: rest -> collect_strings (value :: acc) rest
+                  | Item_strings _ :: _ ->
+                      error path line
+                        "arrays cannot mix strings and nested arrays"
+                in
+                collect_strings [] (List.rev acc)
+            | Item_strings _ :: _ ->
+                let rec collect_arrays acc = function
+                  | [] -> Ok (String_arrays (List.rev acc))
+                  | Item_strings values :: rest ->
+                      collect_arrays (values :: acc) rest
+                  | Item_string _ :: _ ->
+                      error path line
+                        "arrays cannot mix strings and nested arrays"
+                in
+                collect_arrays [] (List.rev acc)
+          in
+          let* value = value in
+          Ok (value, index + 1)
+        else
+          let* item, next_index = parse_array_item index in
+          let next_index = skip_whitespace next_index in
+          if next_index >= length then error path line "unterminated array literal"
+          else if text.[next_index] = ',' then
+            parse_items (next_index + 1) (item :: acc)
+          else if text.[next_index] = ']' then
+            parse_items next_index (item :: acc)
+          else error path line "expected a comma between array elements"
+      and parse_array_item index =
+        match text.[index] with
+        | '"' ->
+            let* item, next_index = parse_quoted_string path line text index in
+            Ok (Item_string item, next_index)
+        | '[' ->
+            let* nested, next_index = parse_array index in
+            (match nested with
+            | Strings values -> Ok (Item_strings values, next_index)
+            | String_arrays _ ->
+                error path line "nested arrays may be only one level deep"
+            | String _ | Int _ | Bool _ ->
+                error path line "array items must be strings or string arrays")
+        | _ -> error path line "array items must be strings or string arrays"
+      in
+      parse_items (index + 1) []
+  in
+  let* value, next_index = parse_array 0 in
+  let trailing =
+    String.sub text next_index (String.length text - next_index) |> String.trim
+  in
+  if trailing <> "" then error path line "unexpected content after array literal"
+  else Ok value
 
 let parse_value path line text =
   if String_util.starts_with ~prefix:"\"" text then
     let* value = parse_string_value path line text in
     Ok (String value)
   else if String_util.starts_with ~prefix:"[" text then
-    let* values = parse_string_array path line text in
-    Ok (Strings values)
+    parse_string_array path line text
   else if text = "true" then Ok (Bool true)
   else if text = "false" then Ok (Bool false)
   else
@@ -358,6 +415,15 @@ let required_strings path section field =
   | Some binding ->
       error path binding.line
         (Printf.sprintf "field '%s' must be an array of strings" field)
+
+let optional_string_arrays path section field =
+  match find_binding field section.bindings with
+  | None -> Ok []
+  | Some { value = String_arrays values; _ } -> Ok values
+  | Some { value = Strings []; _ } -> Ok []
+  | Some binding ->
+      error path binding.line
+        (Printf.sprintf "field '%s' must be an array of string arrays" field)
 
 let optional_bool path section field =
   match find_binding field section.bindings with
@@ -436,6 +502,23 @@ let validate_string_list path line label items =
         else loop rest
   in
   loop items
+
+let validate_step_list path line label steps =
+  if steps = [] then error path line (Printf.sprintf "%s cannot be empty" label)
+  else
+    let rec loop index = function
+      | [] -> Ok ()
+      | step :: rest ->
+          let step_label =
+            Printf.sprintf "%s entry %d" label (index + 1)
+          in
+          if step = [] then
+            error path line (Printf.sprintf "%s cannot be empty" step_label)
+          else
+            let* () = validate_string_list path line step_label step in
+            loop (index + 1) rest
+    in
+    loop 0 steps
 
 let validate_package_list path line packages =
   let seen = Hashtbl.create (List.length packages) in
@@ -677,6 +760,7 @@ let parse_action path section name =
     allowed_fields path section
       [
         "argv";
+        "steps";
         "cwd";
         "deps";
         "outputs";
@@ -687,7 +771,22 @@ let parse_action path section name =
         "sandbox";
       ]
   in
-  let* argv = required_strings path section "argv" in
+  let* argv =
+    match find_binding "argv" section.bindings with
+    | None -> Ok None
+    | Some { value = Strings values; _ } -> Ok (Some values)
+    | Some binding ->
+        error path binding.line "field 'argv' must be an array of strings"
+  in
+  let* steps =
+    match find_binding "steps" section.bindings with
+    | None -> Ok None
+    | Some { value = String_arrays values; _ } -> Ok (Some values)
+    | Some { value = Strings []; _ } -> Ok (Some [])
+    | Some binding ->
+        error path binding.line
+          "field 'steps' must be an array of string arrays"
+  in
   let* cwd = optional_string path section "cwd" in
   let* deps = optional_strings path section "deps" in
   let* outputs = required_strings path section "outputs" in
@@ -696,7 +795,20 @@ let parse_action path section name =
   let* stdin_path = optional_string path section "stdin_path" in
   let* stdout = optional_string path section "stdout" in
   let* sandbox = optional_sandbox path section "sandbox" in
-  let* () = validate_string_list path section.line "argv" argv in
+  let* steps =
+    match (argv, steps) with
+    | Some _, Some _ ->
+        error path section.line
+          "action must set exactly one of argv or steps, not both"
+    | None, None ->
+        error path section.line "action must set argv or steps"
+    | Some argv, None ->
+        let* () = validate_step_list path section.line "argv" [ argv ] in
+        Ok [ argv ]
+    | None, Some steps ->
+        let* () = validate_step_list path section.line "steps" steps in
+        Ok steps
+  in
   let* () = validate_relative_paths path section.line "deps" deps in
   let* () = validate_relative_paths path section.line "outputs" outputs in
   let* () =
@@ -739,7 +851,7 @@ let parse_action path section name =
     {
       name;
       package_path = None;
-      argv;
+      steps;
       cwd;
       deps;
       outputs;
@@ -1113,7 +1225,7 @@ let rebase_action member_path (action : action) =
   {
     action with
     package_path = Some member_path;
-    argv = rebase_command_argv member_path action.argv;
+    steps = List.map (rebase_command_argv member_path) action.steps;
     cwd =
       Option.map (rebase_relative_path ~allow_dot:true member_path) action.cwd;
     stdin_path =

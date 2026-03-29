@@ -204,6 +204,8 @@ let resolve_command_prog ~workspace_root prog =
     Filename.concat workspace_root prog
   else prog
 
+let action_commands (action : Manifest.action) = Manifest.action_commands action
+
 let command_prog_and_args argv =
   match argv with
   | [] -> failwith "internal error: empty command argv"
@@ -635,10 +637,14 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
         | Some _ | None -> Ok ()
       in
       let* () =
-        let prog, _ = command_prog_and_args action.Manifest.argv in
-        if Filename.is_relative prog && String.contains prog '/' then
-          copy_once "action program" prog
-        else Ok ()
+        List.fold_left
+          (fun result argv ->
+            let* () = result in
+            let prog, _ = command_prog_and_args argv in
+            if Filename.is_relative prog && String.contains prog '/' then
+              copy_once "action program" prog
+            else Ok ())
+          (Ok ()) (action_commands action)
       in
       let* () =
         match action.Manifest.stdin_path with
@@ -694,8 +700,14 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
   (match action.stdout with
   | Some path -> append_line buffer ("stdout " ^ path)
   | None -> ());
-  List.iter (append_line buffer)
-    (command_fingerprint_lines ~workspace_root action.argv);
+  List.iteri
+    (fun index argv ->
+      List.iter
+        (fun line ->
+          append_line buffer
+            (Printf.sprintf "step-%d %s" (index + 1) line))
+        (command_fingerprint_lines ~workspace_root argv))
+    (action_commands action);
   List.iter
     (fun (name, value) -> append_line buffer ("env " ^ name ^ "=" ^ value))
     env;
@@ -751,8 +763,6 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
   else
     let sandbox = effective_sandbox options action in
     let env = Manifest.merge_env_bindings target_env action.env in
-    let prog, args = command_prog_and_args action.argv in
-    let prog = resolve_command_prog ~workspace_root prog in
     with_temp_dir "oasis-action" (fun sandbox_root ->
         let* () =
           prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root
@@ -788,9 +798,25 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
         let stdout_path =
           Option.map (Filename.concat sandbox_target_dir) action.stdout
         in
-        let* _ =
-          Process.ensure_success ~cwd ~env ?stdin ?stdout_path prog args
+        let rec run_steps step_index = function
+          | [] -> Ok ()
+          | argv :: rest ->
+              let prog, args = command_prog_and_args argv in
+              let prog = resolve_command_prog ~workspace_root prog in
+              let stdin =
+                if step_index = 0 then stdin else None
+              in
+              let stdout_path =
+                match rest with
+                | [] -> stdout_path
+                | _ -> None
+              in
+              let* _ =
+                Process.ensure_success ~cwd ~env ?stdin ?stdout_path prog args
+              in
+              run_steps (step_index + 1) rest
         in
+        let* () = run_steps 0 (action_commands action) in
         Fs.ensure_dir generated_dir;
         let* () =
           List.fold_left
@@ -1328,6 +1354,12 @@ let render_action_resolution_lines (action : Manifest.action) =
     "action " ^ name ^ " outputs: " ^ joined_names action.outputs;
     "action " ^ name ^ " deps: " ^ joined_names (action_declared_inputs action);
   ]
+  @ List.mapi
+      (fun index argv ->
+        "action " ^ name ^ " step "
+        ^ string_of_int (index + 1)
+        ^ ": " ^ String.concat " " (List.map String_util.shell_quote argv))
+      (action_commands action)
   @
   (match action.cwd with
   | Some cwd -> [ "action " ^ name ^ " cwd: " ^ cwd ]

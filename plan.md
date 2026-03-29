@@ -89,7 +89,7 @@
 71. [ ] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
 72. [ ] Add a `flake.nix` so Nix users can run oasis directly or add it to their development shells.
 79. [x] Add `oasis bench` with stable benchmark target execution and machine-readable summaries so the execution subtool split covers Dune’s benchmarking workflows as well as builds and tests.
-80. [ ] Eliminate the remaining app-only interpreter seed from bootstrap generation so cold-start builds no longer depend on `scripts/generate_bootstrap_makefile.ml` loading source through the toplevel at all.
+80. [x] Eliminate the remaining app-only interpreter seed from bootstrap generation so cold-start builds no longer depend on `scripts/generate_bootstrap_makefile.ml` loading source through the toplevel at all.
 84. [x] Add an `oasis env repl` mode or equivalent machine-readable REPL plan output so editors can request include paths, linked units, and runtime env without launching the toplevel.
 85. [x] Extend dune-action dependency inference beyond simple `run`/`copy` forms to `progn`, `with-stdin-from`, `diff`, and alias-driven workflows so fewer migrations fall back to review comments.
 86. [x] Add an explicit `oasis repl --script` or generated-loader mode so noninteractive use does not depend on OCaml toplevel argument quirks like `-init` versus script-file execution.
@@ -98,7 +98,9 @@
 89. [x] Extend the completion protocol with a file-path mode so file-valued flags like `oasis repl --script` do not fall back to directory-only completion.
 90. [x] Lower the shell-quoted noise in migrated composite dune actions by mapping `with-stdin-from`, `with-stdout-to`, and `progn` to more structured oasis action/preprocess fields when possible instead of emitting `sh -c` fallbacks.
 91. [ ] Feed the generated `package/share/...` completion tree into future opam/Homebrew/Nix packaging definitions so downstream installers reuse one canonical install layout instead of re-encoding shell-specific paths.
-92. [ ] Introduce first-class multi-step action sequences so migrated multi-command dune `progn` rules no longer need a shell fallback once command chaining deserves manifest-level structure.
+92. [x] Introduce first-class multi-step action sequences so migrated multi-command dune `progn` rules no longer need a shell fallback once command chaining deserves manifest-level structure.
 93. [ ] Teach `oasis migrate` to recognize explicit wrapped-library module lists that intentionally keep a checked-in `Foo.ml` wrapper, not just the source-inferred wrapper case.
-94. [ ] Extend `oasis env` with a `bench` mode so benchmark subprocess environments are inspectable with the same ergonomics as build, run, test, and install.
+94. [x] Extend `oasis env` with a `bench` mode so benchmark subprocess environments are inspectable with the same ergonomics as build, run, test, and install.
 95. [ ] Add dedicated `[bench.*]` target declarations if executable-only benchmarking becomes too limiting for real-world suites that need per-benchmark metadata or non-default argv.
+96. [ ] Replace the remaining `$(shell $(OCAML) scripts/render_bootstrap_mod_use.ml ...)` cold-start metadata probe with a compiled or cached helper so bootstrap source discovery no longer needs the OCaml interpreter even after the planner itself is compiled.
+97. [ ] Collapse duplicate cold-start compilation between `oasis-seed` and the subsequent app bootstrap build so removing the toplevel planner path does not replace one bootstrap tax with two full compiles of the core modules.

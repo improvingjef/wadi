@@ -103,6 +103,41 @@ main = "main"
               "env run should include the launched runtime context";
             assert_string_contains ~needle:"RUNTIME_ONLY=yes\n" report.output
               "runtime contexts should include inherited host variables")) );
+    ( "prints runtime contexts for benchmark planning",
+      (fun () ->
+        with_temp_dir "oasis-env-bench" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.alpha]
+dir = "app"
+main = "alpha"
+
+[executable.beta]
+dir = "app"
+main = "beta"
+|};
+            write_source workspace "app/alpha.ml" {|let () = ()|};
+            write_source workspace "app/beta.ml" {|let () = ()|};
+            let report =
+              run_oasis_with_env ~cwd:workspace
+                ~env:[ ("BENCH_ONLY", "yes") ]
+                [ "env"; "bench"; "alpha"; "beta" ]
+            in
+            assert_int_equal 0 report.status
+              "env bench should render successfully";
+            assert_string_contains ~needle:"Subtool: bench\n" report.output
+              "env bench should report the selected subtool";
+            assert_string_contains ~needle:"Requested-targets: alpha, beta\n"
+              report.output
+              "env bench should report the selected executable targets";
+            assert_string_contains ~needle:"Target: executable alpha\n" report.output
+              "env bench should include the first executable build context";
+            assert_string_contains ~needle:"Target: executable beta\n" report.output
+              "env bench should include the second executable build context";
+            assert_string_contains ~needle:"Context: runtime\n" report.output
+              "env bench should include benchmark runtime contexts";
+            assert_string_contains ~needle:"BENCH_ONLY=yes\n" report.output
+              "benchmark runtime contexts should include inherited host variables")) );
     ( "prints machine-readable JSON env reports",
       (fun () ->
         with_temp_dir "oasis-env-json" (fun workspace ->

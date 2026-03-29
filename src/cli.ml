@@ -439,7 +439,7 @@ let env_doc =
   {
     name = "env";
     summary =
-      "Print the exact subprocess environment a build, run, test, or install step would inherit.";
+      "Print the exact subprocess environment a build, run, test, bench, or install step would inherit.";
     signature =
       "oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]";
     examples =
@@ -450,6 +450,7 @@ let env_doc =
         "oasis env --changed-only build demo";
         "oasis env run demo";
         "oasis env test unit";
+        "oasis env bench demo";
       ];
     options =
       [
@@ -459,7 +460,7 @@ let env_doc =
         changed_only_option;
         help_option;
       ];
-    completion_words = [ "build"; "run"; "test"; "install" ];
+    completion_words = [ "build"; "run"; "test"; "bench"; "install" ];
   }
 
 let repl_doc =

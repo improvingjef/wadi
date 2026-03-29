@@ -146,7 +146,7 @@ Examples:
 
 ## env
 
-Print the exact subprocess environment a build, run, test, or install step would inherit.
+Print the exact subprocess environment a build, run, test, bench, or install step would inherit.
 
 Usage:
 
@@ -166,6 +166,7 @@ Examples:
 - `oasis env --changed-only build demo`
 - `oasis env run demo`
 - `oasis env test unit`
+- `oasis env bench demo`
 
 ## repl
 
