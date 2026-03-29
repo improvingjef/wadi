@@ -21,6 +21,12 @@ type install_layout = {
   destdir : string option;
 }
 
+type prefix_request = {
+  logical_prefix : string;
+  resolved_prefix : string;
+  destdir_suffix : string;
+}
+
 let ( let* ) = Result.bind
 
 let report_detail ~verbose message =
@@ -33,9 +39,23 @@ let workspace_label (workspace : Manifest.workspace) =
 
 let resolve_prefix ~workspace_root ~profile = function
   | Some prefix when Filename.is_relative prefix ->
-      Filename.concat workspace_root prefix
-  | Some prefix -> prefix
-  | None -> Layout.install_root_for_profile workspace_root profile
+      {
+        logical_prefix = prefix;
+        resolved_prefix = Filename.concat workspace_root prefix |> Fs.realpath;
+        destdir_suffix = prefix;
+      }
+  | Some prefix ->
+      let resolved_prefix = Fs.realpath prefix in
+      { logical_prefix = prefix; resolved_prefix; destdir_suffix = resolved_prefix }
+  | None ->
+      let resolved_prefix =
+        Layout.install_root_for_profile workspace_root profile |> Fs.realpath
+      in
+      {
+        logical_prefix = resolved_prefix;
+        resolved_prefix;
+        destdir_suffix = resolved_prefix;
+      }
 
 let resolve_destdir ~workspace_root = function
   | Some destdir when Filename.is_relative destdir ->
@@ -58,15 +78,16 @@ let path_under_destdir ~destdir path =
   if relative_path = "" then destdir else Filename.concat destdir relative_path
 
 let install_layout ~workspace_root ~profile ~prefix ~destdir workspace_name =
-  let prefix = resolve_prefix ~workspace_root ~profile prefix |> Fs.realpath in
+  let prefix_request = resolve_prefix ~workspace_root ~profile prefix in
   let destdir = resolve_destdir ~workspace_root destdir in
   let stage_root =
     match destdir with
-    | None -> prefix
-    | Some destdir -> path_under_destdir ~destdir prefix
+    | None -> prefix_request.resolved_prefix
+    | Some destdir ->
+        path_under_destdir ~destdir prefix_request.destdir_suffix
   in
   {
-    prefix;
+    prefix = prefix_request.logical_prefix;
     stage_root;
     bin_dir = Layout.relative_install_bin_dir;
     lib_dir = Layout.relative_install_lib_dir;

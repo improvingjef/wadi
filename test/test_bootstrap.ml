@@ -136,4 +136,39 @@ main = "main"
             let error = expect_error (render_bootstrap workspace) in
             assert_string_contains ~needle:"exactly one test target" error
               "bootstrap generation should fail clearly when a test target is missing")) );
+    ( "rejects duplicate module stems across bootstrap groups before generating rules",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-collisions" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["shared"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["shared"]
+deps = ["core"]
+
+[test.suite]
+dir = "test"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/shared.ml" {|let value = "library"|};
+            write_source workspace "app/shared.ml" {|let value = "app"|};
+            write_source workspace "app/main.ml" {|let () = print_endline Shared.value|};
+            write_source workspace "test/main.ml" {|let () = print_endline Shared.value|};
+            let error = expect_error (render_bootstrap workspace) in
+            assert_string_contains
+              ~needle:"bootstrap manifest reuses module stems in the shared _bootstrap/obj directory"
+              error
+              "bootstrap generation should reject colliding object names early";
+            assert_string_contains ~needle:"shared ->" error
+              "bootstrap generation should identify the colliding module stem";
+            assert_string_contains ~needle:"library 'core' (lib/shared.ml)" error
+              "bootstrap generation should identify the first colliding owner";
+            assert_string_contains ~needle:"executable 'demo' (app/shared.ml)" error
+              "bootstrap generation should identify the second colliding owner")) );
   ]

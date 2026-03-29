@@ -36,3 +36,6 @@
 - `DESTDIR` is a two-path problem: package managers care about the logical prefix, while the filesystem cares about the realized stage root. Install metadata has to record both or the staging story stays ambiguous.
 - `oasis explain --json` is most trustworthy when it prints the persisted payload directly. Automation should consume the exact sibling file the builder wrote, not a second renderer that might drift.
 - macOS temp paths quietly canonicalize through `/private`; staging tests that care about installed roots need to compare normalized paths, not raw temp-directory strings.
+- A useful dry-run diagnostic is just the build planner with the compiler and linker switched off. `oasis explain --current` only became credible once it reused the same fingerprint, dependency, and command-planning path as a real build.
+- Relative `--prefix` plus `--destdir` needs two truths at once: preserve the logical prefix the user asked for, and stage under the physical root the filesystem needs. Rewriting `_stage` into an absolute workspace path is exactly the kind of packaging surprise that makes build tools feel hostile.
+- Bootstrap generation has to reject duplicate module stems before it writes rules. A shared `_bootstrap/obj` directory turns same-stem library/app/test modules into silent overwrites unless the planner names the collision up front.

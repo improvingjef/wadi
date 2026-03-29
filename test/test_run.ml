@@ -123,7 +123,7 @@ main = "main"
             assert_string_contains ~needle:"oasis toolchain" run.output
               "top-level usage should include the toolchain command";
             assert_string_contains
-              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--json] [TARGET ...]"
+              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--current] [--json] [TARGET ...]"
               run.output "top-level usage should include the explain command")) );
     ( "prints command-specific help for explain from the command table",
       (fun () ->
@@ -132,7 +132,7 @@ main = "main"
             assert_true (help.status <> 0)
               "explain --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--json] [TARGET ...]"
+              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--current] [--json] [TARGET ...]"
               help.output "explain help should include the explain signature";
             assert_string_not_contains
               ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
@@ -174,7 +174,11 @@ main = "main"
             assert_string_contains
               ~needle:"- `--json`: Print machine-readable JSON output instead of the text report."
               docs.output
-              "docs output should include the explain JSON description")) );
+              "docs output should include the explain JSON description";
+            assert_string_contains
+              ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling or linking."
+              docs.output
+              "docs output should include the current explain description")) );
     ( "renders bash completions from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-bash-completion" (fun workspace ->
@@ -193,6 +197,8 @@ main = "main"
               "bash completion should include the install destdir flag";
             assert_string_contains ~needle:"--json" completion.output
               "bash completion should include the explain json flag";
+            assert_string_contains ~needle:"--current" completion.output
+              "bash completion should include the explain current flag";
             assert_string_contains ~needle:"bash zsh fish" completion.output
               "bash completion should include static shell names for the completion command")) );
     ( "renders zsh completions from the command table",
@@ -211,6 +217,8 @@ main = "main"
               "zsh completion should include the install destdir flag";
             assert_string_contains ~needle:"--json" completion.output
               "zsh completion should include the explain json flag";
+            assert_string_contains ~needle:"--current" completion.output
+              "zsh completion should include the explain current flag";
             assert_string_contains ~needle:"bash zsh fish" completion.output
               "zsh completion should include static shell names for the completion command")) );
     ( "renders fish completions from the command table",
@@ -231,6 +239,8 @@ main = "main"
               "fish completion should include the install destdir flag";
             assert_string_contains ~needle:"-l json" completion.output
               "fish completion should include the explain json flag";
+            assert_string_contains ~needle:"-l current" completion.output
+              "fish completion should include the explain current flag";
             assert_string_contains
               ~needle:"__fish_seen_subcommand_from completion"
               completion.output

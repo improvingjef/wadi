@@ -107,6 +107,34 @@ let cases =
               ~needle:(Printf.sprintf "\"destdir\": %S" (Fs.realpath destdir))
               metadata
               "install metadata should record the resolved destdir")) );
+    ( "keeps relative prefixes relative when combined with --destdir",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let destdir = Filename.concat workspace "_pkg" in
+            let stage_root = Filename.concat destdir "_stage" in
+            let install =
+              run_oasis ~cwd:workspace
+                [ "install"; "--prefix"; "_stage"; "--destdir"; "_pkg" ]
+            in
+            assert_int_equal 0 install.status
+              "install should support relative prefixes inside a destdir stage";
+            assert_file_exists (Filename.concat stage_root "bin/hello");
+            assert_file_exists (Filename.concat stage_root "lib/greeting/META");
+            let metadata =
+              Fs.read_file
+                (Filename.concat stage_root "share/oasis/hello/install.json")
+            in
+            assert_string_contains ~needle:"\"prefix\": \"_stage\"" metadata
+              "install metadata should preserve a relative logical prefix";
+            assert_string_not_contains
+              ~needle:(Printf.sprintf "\"prefix\": %S"
+                         (Fs.realpath (Filename.concat workspace "_stage")))
+              metadata
+              "install metadata should not rewrite a relative prefix to the workspace absolute path";
+            assert_string_contains
+              ~needle:(Printf.sprintf "\"stage_root\": %S" (Fs.realpath stage_root))
+              metadata
+              "install metadata should record the realized relative stage root")) );
     ( "records findlib requires in staged META files",
       (fun () ->
         with_temp_dir "oasis-install-meta" (fun workspace ->

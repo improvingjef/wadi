@@ -54,6 +54,42 @@ type action_result = {
   fingerprint : string;
 }
 
+type explain_report = {
+  target_name : string;
+  report : string;
+  json_report : string;
+}
+
+type library_description = {
+  out_dir : string;
+  archive : string;
+  fingerprint : string;
+  effective_packages : string list;
+  status : Explain.target_status;
+  report : string;
+  json_report : string;
+  prepared_sources : prepared_source list;
+  ordered_modules : string list;
+  package_resolution : Toolchain.package_resolution;
+  include_dirs : string list;
+  pipeline : resolved_pipeline;
+}
+
+type runnable_description = {
+  out_dir : string;
+  binary : string;
+  fingerprint : string;
+  status : Explain.target_status;
+  report : string;
+  json_report : string;
+  prepared_sources : prepared_source list;
+  source_order : string list;
+  package_resolution : Toolchain.package_resolution;
+  include_dirs : string list;
+  archive_files : string list;
+  pipeline : resolved_pipeline;
+}
+
 let ( let* ) = Result.bind
 
 let target_name = Manifest.target_name
@@ -869,6 +905,22 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     ]
     @ package_lines
 
+let target_command_lines ~workspace_root pipeline action_results
+    ~module_order_command ~compile_commands ~link_command =
+  List.map
+    (fun (action_result : action_result) ->
+      "action " ^ action_result.name ^ ": cached")
+    action_results
+  @ List.map
+      (fun (tool : Manifest.command_tool) ->
+        "preprocess " ^ tool.name ^ ": "
+        ^ render_preprocessor_command ~workspace_root
+            ~target_env:(pipeline.options.env) tool)
+      pipeline.preprocessors
+  @ ("module-order: " ^ module_order_command)
+    :: compile_commands
+  @ [ "link: " ^ link_command ]
+
 let render_link_command ~session ~env ~backend ~package_resolution args =
   let* invocation =
     Toolchain.compiler_invocation ~session backend package_resolution args
@@ -881,7 +933,7 @@ let write_target_report out_dir report json_report =
 
 let static_archive_path archive = Filename.remove_extension archive ^ ".a"
 
-let build_library ~session ~workspace_root ~verbose ~manifest_path
+let describe_library ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile workspace library
     library_outputs =
   let target = Manifest.Library library in
@@ -900,7 +952,9 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
   let effective_packages =
     String_util.dedup_preserve
       (library.packages
-      @ List.concat_map (fun output -> output.packages) dependency_outputs)
+      @ List.concat_map
+          (fun (output : built_library_output) -> output.packages)
+          dependency_outputs)
   in
   let* package_resolution =
     Toolchain.resolve_packages ~session effective_packages
@@ -948,9 +1002,10 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
     Layout.library_archive_for_backend ~profile workspace_root backend
       library.name
   in
-  let source_table = ordered_source_table prepared_sources in
   let dependency_include_dirs =
-    List.map (fun output -> output.out_dir) dependency_outputs
+    List.map
+      (fun (output : built_library_output) -> output.out_dir)
+      dependency_outputs
   in
   let include_dirs = out_dir :: dependency_include_dirs in
   let module_order_sources = List.concat_map prepared_source_files prepared_sources in
@@ -958,6 +1013,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
     render_module_order_command ~session ~env:(pipeline.options.env)
       ~package_resolution module_order_sources
   in
+  let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
     render_compile_commands ~session ~workspace_root ~backend ~out_dir
       ~include_dirs ~package_resolution
@@ -985,76 +1041,101 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
     Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
       ~expected_outputs ~fingerprint
   in
+  let resolution_lines =
+    target_resolution_lines ~session ~backend_request ~backend
+      ~compiler_version ~package_resolution pipeline
+  in
+  let command_lines =
+    target_command_lines ~workspace_root pipeline action_results
+      ~module_order_command ~compile_commands ~link_command
+  in
   let report =
     Explain.render_report ~kind_name:"library" ~target_name:library.name
       ~profile ~status ~out_dir ~artifact:archive
-      ~resolution_lines:
-        (target_resolution_lines ~session ~backend_request ~backend
-           ~compiler_version ~package_resolution pipeline)
-      ~include_dirs ~module_order:ordered_modules
-      ~command_lines:
-        (List.map
-           (fun (action_result : action_result) ->
-             "action " ^ action_result.name ^ ": cached")
-           action_results
-        @ List.map
-            (fun (tool : Manifest.command_tool) ->
-              "preprocess " ^ tool.name ^ ": "
-              ^ render_preprocessor_command ~workspace_root
-                  ~target_env:(pipeline.options.env) tool)
-            pipeline.preprocessors
-        @ ("module-order: " ^ module_order_command)
-          :: compile_commands
-        @ [ "link: " ^ link_command ])
+      ~resolution_lines ~include_dirs ~module_order:ordered_modules
+      ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:"library" ~target_name:library.name
       ~profile ~status ~out_dir ~artifact:archive
-      ~resolution_lines:
-        (target_resolution_lines ~session ~backend_request ~backend
-           ~compiler_version ~package_resolution pipeline)
-      ~include_dirs ~module_order:ordered_modules
-      ~command_lines:
-        (List.map
-           (fun (action_result : action_result) ->
-             "action " ^ action_result.name ^ ": cached")
-           action_results
-        @ List.map
-            (fun (tool : Manifest.command_tool) ->
-              "preprocess " ^ tool.name ^ ": "
-              ^ render_preprocessor_command ~workspace_root
-                  ~target_env:(pipeline.options.env) tool)
-            pipeline.preprocessors
-        @ ("module-order: " ^ module_order_command)
-          :: compile_commands
-        @ [ "link: " ^ link_command ])
+      ~resolution_lines ~include_dirs ~module_order:ordered_modules
+      ~command_lines
   in
-  if status.Explain.build_status = Explain.Reused then (
-    write_target_report out_dir report json_report;
+  Ok
+    {
+      out_dir;
+      archive;
+      fingerprint;
+      effective_packages;
+      status;
+      report;
+      json_report;
+      prepared_sources;
+      ordered_modules;
+      package_resolution;
+      include_dirs;
+      pipeline;
+    }
+
+let build_library ~session ~workspace_root ~verbose ~manifest_path
+    ~backend_request ~backend ~compiler_version ~profile workspace library
+    library_outputs =
+  let* description =
+    describe_library ~session ~workspace_root ~verbose ~manifest_path
+      ~backend_request ~backend ~compiler_version ~profile workspace library
+      library_outputs
+  in
+  let source_table = ordered_source_table description.prepared_sources in
+  if description.status.Explain.build_status = Explain.Reused then (
+    write_target_report description.out_dir description.report
+      description.json_report;
     Hashtbl.replace library_outputs library.name
-      { archive; out_dir; fingerprint; packages = effective_packages };
-    print_endline (Printf.sprintf "Up to date library %s -> %s" library.name archive);
-    Ok (Built_library { name = library.name; out_dir; archive }))
+      {
+        archive = description.archive;
+        out_dir = description.out_dir;
+        fingerprint = description.fingerprint;
+        packages = description.effective_packages;
+      };
+    print_endline
+      (Printf.sprintf "Up to date library %s -> %s" library.name
+         description.archive);
+    Ok
+      (Built_library
+         { name = library.name; out_dir = description.out_dir; archive = description.archive }))
   else (
-    let () = Fs.ensure_dir out_dir in
+    let () = Fs.ensure_dir description.out_dir in
     let* object_files =
       compile_ordered_sources ~session ~workspace_root ~verbose ~backend
-        ~out_dir ~include_dirs ~package_resolution
-        ~compile_flags:(pipeline.options.compile_flags)
-        ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
-        ordered_modules
+        ~out_dir:description.out_dir ~include_dirs:description.include_dirs
+        ~package_resolution:description.package_resolution
+        ~compile_flags:(description.pipeline.options.compile_flags)
+        ~ppx_tools:description.pipeline.ppx_tools
+        ~env:(description.pipeline.options.env) source_table
+        description.ordered_modules
     in
     let* _ =
-      Toolchain.ensure_success_compiler ~session ~env:(pipeline.options.env)
-        ~verbose backend package_resolution
-        (pipeline.options.link_flags @ [ "-a"; "-o"; archive ] @ object_files)
+      Toolchain.ensure_success_compiler ~session
+        ~env:(description.pipeline.options.env)
+        ~verbose backend description.package_resolution
+        (description.pipeline.options.link_flags
+        @ [ "-a"; "-o"; description.archive ]
+        @ object_files)
     in
-    Fs.write_file (Layout.stamp_path out_dir) fingerprint;
-    write_target_report out_dir report json_report;
+    Fs.write_file (Layout.stamp_path description.out_dir) description.fingerprint;
+    write_target_report description.out_dir description.report
+      description.json_report;
     Hashtbl.replace library_outputs library.name
-      { archive; out_dir; fingerprint; packages = effective_packages };
-    print_endline (Printf.sprintf "Built library %s -> %s" library.name archive);
-    Ok (Built_library { name = library.name; out_dir; archive }))
+      {
+        archive = description.archive;
+        out_dir = description.out_dir;
+        fingerprint = description.fingerprint;
+        packages = description.effective_packages;
+      };
+    print_endline
+      (Printf.sprintf "Built library %s -> %s" library.name description.archive);
+    Ok
+      (Built_library
+         { name = library.name; out_dir = description.out_dir; archive = description.archive }))
 
 type runnable_kind =
   | Executable_kind
@@ -1064,7 +1145,7 @@ let runnable_kind_name = function
   | Executable_kind -> "executable"
   | Test_kind -> "test"
 
-let build_runnable ~session ~workspace_root ~verbose ~manifest_path
+let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile ~kind workspace
     runnable order index library_outputs =
   let target =
@@ -1087,7 +1168,9 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
   let effective_packages =
     String_util.dedup_preserve
       (runnable.packages
-      @ List.concat_map (fun output -> output.packages) dependency_outputs)
+      @ List.concat_map
+          (fun (output : built_library_output) -> output.packages)
+          dependency_outputs)
   in
   let* package_resolution =
     Toolchain.resolve_packages ~session effective_packages
@@ -1159,9 +1242,10 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
     | Executable_kind -> Layout.executable_binary ~profile workspace_root runnable.name
     | Test_kind -> Layout.test_binary ~profile workspace_root runnable.name
   in
-  let source_table = ordered_source_table prepared_sources in
   let dependency_include_dirs =
-    List.map (fun output -> output.out_dir) dependency_outputs
+    List.map
+      (fun (output : built_library_output) -> output.out_dir)
+      dependency_outputs
   in
   let include_dirs = out_dir :: dependency_include_dirs in
   let module_order_sources =
@@ -1171,6 +1255,7 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
     render_module_order_command ~session ~env:(pipeline.options.env)
       ~package_resolution module_order_sources
   in
+  let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
     render_compile_commands ~session ~workspace_root ~backend ~out_dir
       ~include_dirs ~package_resolution
@@ -1197,87 +1282,115 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
     Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
       ~expected_outputs ~fingerprint
   in
+  let resolution_lines =
+    target_resolution_lines ~session ~backend_request ~backend
+      ~compiler_version ~package_resolution pipeline
+  in
+  let command_lines =
+    target_command_lines ~workspace_root pipeline action_results
+      ~module_order_command ~compile_commands ~link_command
+  in
   let report =
     Explain.render_report ~kind_name:(runnable_kind_name kind)
       ~target_name:runnable.name ~profile ~status ~out_dir ~artifact:binary
-      ~resolution_lines:
-        (target_resolution_lines ~session ~backend_request ~backend
-           ~compiler_version ~package_resolution pipeline)
-      ~include_dirs ~module_order:source_order
-      ~command_lines:
-        (List.map
-           (fun (action_result : action_result) ->
-             "action " ^ action_result.name ^ ": cached")
-           action_results
-        @ List.map
-            (fun (tool : Manifest.command_tool) ->
-              "preprocess " ^ tool.name ^ ": "
-              ^ render_preprocessor_command ~workspace_root
-                  ~target_env:(pipeline.options.env) tool)
-            pipeline.preprocessors
-        @ ("module-order: " ^ module_order_command)
-          :: compile_commands
-        @ [ "link: " ^ link_command ])
+      ~resolution_lines ~include_dirs ~module_order:source_order
+      ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:(runnable_kind_name kind)
       ~target_name:runnable.name ~profile ~status ~out_dir ~artifact:binary
-      ~resolution_lines:
-        (target_resolution_lines ~session ~backend_request ~backend
-           ~compiler_version ~package_resolution pipeline)
-      ~include_dirs ~module_order:source_order
-      ~command_lines:
-        (List.map
-           (fun (action_result : action_result) ->
-             "action " ^ action_result.name ^ ": cached")
-           action_results
-        @ List.map
-            (fun (tool : Manifest.command_tool) ->
-              "preprocess " ^ tool.name ^ ": "
-              ^ render_preprocessor_command ~workspace_root
-                  ~target_env:(pipeline.options.env) tool)
-            pipeline.preprocessors
-        @ ("module-order: " ^ module_order_command)
-          :: compile_commands
-        @ [ "link: " ^ link_command ])
+      ~resolution_lines ~include_dirs ~module_order:source_order
+      ~command_lines
   in
-  if status.Explain.build_status = Explain.Reused then (
-    write_target_report out_dir report json_report;
+  Ok
+    {
+      out_dir;
+      binary;
+      fingerprint;
+      status;
+      report;
+      json_report;
+      prepared_sources;
+      source_order;
+      package_resolution;
+      include_dirs;
+      archive_files;
+      pipeline;
+    }
+
+let build_runnable ~session ~workspace_root ~verbose ~manifest_path
+    ~backend_request ~backend ~compiler_version ~profile ~kind workspace
+    runnable order index library_outputs =
+  let* description =
+    describe_runnable ~session ~workspace_root ~verbose ~manifest_path
+      ~backend_request ~backend ~compiler_version ~profile ~kind workspace
+      runnable order index library_outputs
+  in
+  let source_table = ordered_source_table description.prepared_sources in
+  if description.status.Explain.build_status = Explain.Reused then (
+    write_target_report description.out_dir description.report
+      description.json_report;
     print_endline
       (Printf.sprintf "Up to date %s %s -> %s" (runnable_kind_name kind)
-         runnable.name binary);
+         runnable.name description.binary);
     Ok
       (match kind with
       | Executable_kind ->
-          Built_executable { name = runnable.name; out_dir; binary }
-      | Test_kind -> Built_test { name = runnable.name; out_dir; binary }))
+          Built_executable
+            {
+              name = runnable.name;
+              out_dir = description.out_dir;
+              binary = description.binary;
+            }
+      | Test_kind ->
+          Built_test
+            {
+              name = runnable.name;
+              out_dir = description.out_dir;
+              binary = description.binary;
+            }))
   else (
-    let () = Fs.ensure_dir out_dir in
+    let () = Fs.ensure_dir description.out_dir in
     let* object_files =
       compile_ordered_sources ~session ~workspace_root ~verbose ~backend
-        ~out_dir ~include_dirs ~package_resolution
-        ~compile_flags:(pipeline.options.compile_flags)
-        ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
-        source_order
+        ~out_dir:description.out_dir ~include_dirs:description.include_dirs
+        ~package_resolution:description.package_resolution
+        ~compile_flags:(description.pipeline.options.compile_flags)
+        ~ppx_tools:description.pipeline.ppx_tools
+        ~env:(description.pipeline.options.env) source_table
+        description.source_order
     in
     let* _ =
-      Toolchain.ensure_success_compiler ~session ~env:(pipeline.options.env)
-        ~verbose backend package_resolution
-        (pipeline.options.link_flags
-        @ Toolchain.link_args package_resolution
-        @ [ "-o"; binary ]
-        @ archive_files @ object_files)
+      Toolchain.ensure_success_compiler ~session
+        ~env:(description.pipeline.options.env)
+        ~verbose backend description.package_resolution
+        (description.pipeline.options.link_flags
+        @ Toolchain.link_args description.package_resolution
+        @ [ "-o"; description.binary ]
+        @ description.archive_files @ object_files)
     in
-    Fs.write_file (Layout.stamp_path out_dir) fingerprint;
-    write_target_report out_dir report json_report;
+    Fs.write_file (Layout.stamp_path description.out_dir) description.fingerprint;
+    write_target_report description.out_dir description.report
+      description.json_report;
     print_endline
       (Printf.sprintf "Built %s %s -> %s" (runnable_kind_name kind)
-         runnable.name binary);
+         runnable.name description.binary);
     Ok
       (match kind with
       | Executable_kind ->
-          Built_executable { name = runnable.name; out_dir; binary }
-      | Test_kind -> Built_test { name = runnable.name; out_dir; binary }))
+          Built_executable
+            {
+              name = runnable.name;
+              out_dir = description.out_dir;
+              binary = description.binary;
+            }
+      | Test_kind ->
+          Built_test
+            {
+              name = runnable.name;
+              out_dir = description.out_dir;
+              binary = description.binary;
+            }))
 
 let build ~workspace_root ~verbose ?(requested_targets = [])
     ?(backend_request = Toolchain.Auto) ?profile workspace =
@@ -1326,3 +1439,100 @@ let build ~workspace_root ~verbose ?(requested_targets = [])
         loop (artifact :: artifacts) rest
   in
   loop [] order
+
+let explain_current ~workspace_root ?(requested_targets = [])
+    ?(backend_request = Toolchain.Auto) ?profile workspace =
+  let workspace_root = Fs.realpath workspace_root in
+  let manifest_path = Filename.concat workspace_root Manifest.default_filename in
+  let session = Toolchain.create_session () in
+  let profile =
+    match profile with
+    | Some profile when String.trim profile <> "" -> profile
+    | Some _ | None -> Manifest.default_profile workspace
+  in
+  let display_targets =
+    if requested_targets = [] then workspace.Manifest.targets
+    else
+      let index = index_targets workspace in
+      String_util.dedup_preserve requested_targets
+      |> List.map (fun name ->
+             match Hashtbl.find_opt index name with
+             | Some target -> target
+             | None ->
+                 failwith
+                   (Printf.sprintf
+                      "internal error: explain target '%s' disappeared during \
+                       resolution"
+                      name))
+  in
+  let requested_names = List.map Manifest.target_name display_targets in
+  let* backend = Toolchain.resolve_backend ~session backend_request in
+  let* compiler_version = Toolchain.compiler_version ~session backend in
+  let* order = resolve_build_order workspace requested_names in
+  let index = index_targets workspace in
+  let library_outputs = Hashtbl.create 8 in
+  let reports : (string, explain_report) Hashtbl.t = Hashtbl.create 16 in
+  let rec loop = function
+    | [] -> Ok ()
+    | Manifest.Library library :: rest ->
+        let* description =
+          describe_library ~session ~workspace_root ~verbose:false
+            ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile workspace library library_outputs
+        in
+        Hashtbl.replace library_outputs library.name
+          {
+            archive = description.archive;
+            out_dir = description.out_dir;
+            fingerprint = description.fingerprint;
+            packages = description.effective_packages;
+          };
+        Hashtbl.replace reports library.name
+          {
+            target_name = library.name;
+            report = description.report;
+            json_report = description.json_report;
+          };
+        loop rest
+    | Manifest.Executable executable :: rest ->
+        let* description =
+          describe_runnable ~session ~workspace_root ~verbose:false
+            ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile ~kind:Executable_kind workspace executable order index
+            library_outputs
+        in
+        Hashtbl.replace reports executable.name
+          {
+            target_name = executable.name;
+            report = description.report;
+            json_report = description.json_report;
+          };
+        loop rest
+    | Manifest.Test test :: rest ->
+        let* description =
+          describe_runnable ~session ~workspace_root ~verbose:false
+            ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile ~kind:Test_kind workspace test order index library_outputs
+        in
+        Hashtbl.replace reports test.name
+          {
+            target_name = test.name;
+            report = description.report;
+            json_report = description.json_report;
+          };
+        loop rest
+  in
+  let* () = loop order in
+  let rec collect acc = function
+    | [] -> Ok (List.rev acc)
+    | target :: rest -> (
+        match Hashtbl.find_opt reports (Manifest.target_name target) with
+        | Some report -> collect (report :: acc) rest
+        | None ->
+            Error
+              (Printf.sprintf
+                 "internal error: missing current explain report for %s '%s'"
+                 (Manifest.target_kind_name target)
+                 (Manifest.target_name target)))
+  in
+  collect [] display_targets

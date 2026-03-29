@@ -36,6 +36,26 @@ let cases =
               ~needle:"no explain data for library 'greeting' in profile 'default'; build it first"
               explain.output
               "explain should direct users to build the target first")) );
+    ( "computes current explain data before the first build without compiling",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let out_dir = Layout.library_out_dir workspace "greeting" in
+            let explain =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "greeting" ]
+            in
+            assert_int_equal 0 explain.status
+              "explain --current should work before any target has been built";
+            assert_string_contains ~needle:"Target: greeting" explain.output
+              "current explain should identify the requested target";
+            assert_string_contains ~needle:"State: rebuilt" explain.output
+              "fresh current explain should report a rebuild";
+            assert_string_contains ~needle:"previous build stamp missing"
+              explain.output
+              "current explain should report the missing prior stamp";
+            assert_string_contains ~needle:"missing output:" explain.output
+              "current explain should report missing artifacts before the first build";
+            assert_true (not (Fs.exists (Layout.stamp_path out_dir)))
+              "current explain should not write a target stamp when it only plans work")) );
     ( "records rebuilt and reused target state in explain reports",
       (fun () ->
         with_fixture "hello" (fun workspace ->
@@ -122,6 +142,52 @@ let cases =
               "the JSON array should include the first requested target";
             assert_string_contains ~needle:"\"target\": \"hello\"" explain.output
               "the JSON array should include the second requested target")) );
+    ( "recomputes current explain from edited inputs instead of loading stale reports",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 first_build.status
+              "initial build should succeed before stale explain behavior is checked";
+            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 second_build.status
+              "second build should persist a reused explain report";
+            write_source workspace "lib/greeting.ml"
+              {|let message name = "Hello again, " ^ name ^ "!"|};
+            let persisted = run_oasis ~cwd:workspace [ "explain"; "hello" ] in
+            assert_int_equal 0 persisted.status
+              "persisted explain should still load after the source changes";
+            assert_string_contains ~needle:"State: reused" persisted.output
+              "persisted explain should remain stale until another build runs";
+            let current =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "hello" ]
+            in
+            assert_int_equal 0 current.status
+              "current explain should succeed after a source edit";
+            assert_string_contains ~needle:"State: rebuilt" current.output
+              "current explain should recompute rebuild status from live inputs";
+            assert_string_contains ~needle:"dependency changed: greeting"
+              current.output
+              "current explain should propagate dependency-triggered rebuild reasons";
+            assert_string_not_contains ~needle:"Up to date executable"
+              current.output
+              "current explain should not run the build itself")) );
+    ( "renders current explain JSON without requiring persisted report files",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let explain =
+              run_oasis ~cwd:workspace
+                [ "explain"; "--current"; "--json"; "greeting"; "hello" ]
+            in
+            assert_int_equal 0 explain.status
+              "current explain JSON should work before a build";
+            assert_string_contains ~needle:"[\n{" explain.output
+              "multiple current explain reports should render as a JSON array";
+            assert_string_contains ~needle:"\"target\": \"greeting\"" explain.output
+              "current explain JSON should include the library target";
+            assert_string_contains ~needle:"\"target\": \"hello\"" explain.output
+              "current explain JSON should include the executable target";
+            assert_string_contains ~needle:"\"state\": \"rebuilt\"" explain.output
+              "current explain JSON should report the planned rebuild state")) );
     ( "surfaces rebuild reasons and planned compiler commands",
       (fun () ->
         with_fixture "hello" (fun workspace ->

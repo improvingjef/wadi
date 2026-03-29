@@ -16,6 +16,12 @@ type workspace_plan = {
   test : target_plan;
 }
 
+type module_owner = {
+  kind : string;
+  target_name : string;
+  source_path : string;
+}
+
 let ( let* ) = Result.bind
 
 let collect_results items f =
@@ -136,6 +142,54 @@ let append_main_module ~workspace_root (runnable : Manifest.runnable)
       };
     ])
 
+let ensure_unique_module_stems groups =
+  let stems : (string, module_owner list) Hashtbl.t = Hashtbl.create 16 in
+  let add_module kind target_name module_plan =
+    let owner =
+      {
+        kind;
+        target_name;
+        source_path = Filename.concat module_plan.dir (module_plan.stem ^ ".ml");
+      }
+    in
+    let previous =
+      match Hashtbl.find_opt stems module_plan.stem with
+      | Some owners -> owners
+      | None -> []
+    in
+    Hashtbl.replace stems module_plan.stem (owner :: previous)
+  in
+  List.iter
+    (fun (kind, target_name, modules) ->
+      List.iter (add_module kind target_name) modules)
+    groups;
+  let duplicates =
+    Hashtbl.fold
+      (fun stem owners acc ->
+        if List.length owners > 1 then (stem, List.rev owners) :: acc else acc)
+      stems []
+    |> List.sort (fun (left, _) (right, _) -> String.compare left right)
+  in
+  match duplicates with
+  | [] -> Ok ()
+  | duplicates ->
+      let render_owner owner =
+        Printf.sprintf "%s '%s' (%s)" owner.kind owner.target_name
+          owner.source_path
+      in
+      let details =
+        List.map
+          (fun (stem, owners) ->
+            Printf.sprintf "%s -> %s" stem
+              (String.concat ", " (List.map render_owner owners)))
+          duplicates
+      in
+      Error
+        (Printf.sprintf
+           "bootstrap manifest reuses module stems in the shared _bootstrap/obj \
+            directory: %s"
+           (String.concat "; " details))
+
 let plan ~workspace_root workspace =
   let* _ = Builder.resolve_build_order workspace [] in
   let index = index_targets workspace in
@@ -186,6 +240,14 @@ let plan ~workspace_root workspace =
         ~packages:test_packages
     in
     append_main_module ~workspace_root test ordered
+  in
+  let* () =
+    ensure_unique_module_stems
+      [
+        ("library", library.name, common_modules);
+        ("executable", executable.name, executable_modules);
+        ("test", test.name, test_modules);
+      ]
   in
   Ok
     {

@@ -45,6 +45,7 @@ type explain_options = {
   targets : string list;
   profile : string option;
   json : bool;
+  current : bool;
 }
 
 type completion_options = { shell : string }
@@ -137,6 +138,14 @@ let json_option =
     usage = "--json";
     flags = [ "--json" ];
     description = "Print machine-readable JSON output instead of the text report.";
+  }
+
+let current_option =
+  {
+    usage = "--current";
+    flags = [ "--current" ];
+    description =
+      "Compute a fresh rebuild explanation from current inputs without compiling or linking.";
   }
 
 let build_doc =
@@ -266,15 +275,17 @@ let explain_doc =
     name = "explain";
     summary = "Show why a target rebuilt or reused artifacts and which commands were planned.";
     signature =
-      "oasis explain [--workspace DIR] [--profile NAME] [--json] [TARGET ...]";
+      "oasis explain [--workspace DIR] [--profile NAME] [--current] [--json] [TARGET ...]";
     examples =
       [
         "oasis explain";
         "oasis explain hello";
+        "oasis explain --current hello";
         "oasis explain --json hello";
         "oasis explain --profile release greeting hello";
       ];
-    options = [ workspace_option; profile_option; json_option; help_option ];
+    options =
+      [ workspace_option; profile_option; current_option; json_option; help_option ];
     completion_words = [];
   }
 
@@ -687,13 +698,22 @@ let parse_explain_args (args : string list) : (explain_options, string) result =
     | "--profile" :: profile :: rest ->
         loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
+    | "--current" :: rest -> loop { options with current = true } rest
     | "--json" :: rest -> loop { options with json = true } rest
     | "--help" :: _ -> Error (command_usage explain_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
-  loop { workspace_dir = "."; targets = []; profile = None; json = false } args
+  loop
+    {
+      workspace_dir = ".";
+      targets = [];
+      profile = None;
+      json = false;
+      current = false;
+    }
+    args
 
 let load_workspace workspace_dir =
   if not (Fs.is_directory workspace_dir) then
@@ -895,29 +915,46 @@ let run_explain (options : explain_options) =
                   "[\n" ^ String.concat ",\n" (List.map String.trim reports) ^ "\n]"
             else String.concat "\n\n" (List.rev reports)
           in
-          let rec loop reports = function
-            | [] ->
-                print_endline (render_reports reports);
+          if options.current then
+            match
+              Builder.explain_current ~workspace_root
+                ~requested_targets:(List.map Manifest.target_name targets)
+                ?profile:options.profile workspace
+            with
+            | Error message -> report_error message
+            | Ok reports ->
+                let payloads =
+                  List.rev_map
+                    (fun (report : Builder.explain_report) ->
+                      if options.json then report.json_report else report.report)
+                    reports
+                in
+                print_endline (render_reports payloads);
                 Exit_code 0
-            | target :: rest ->
-                let out_dir =
-                  Layout.target_out_dir ~profile workspace_root target
-                in
-                let report_path =
-                  if options.json then Layout.explain_json_path out_dir
-                  else Layout.explain_path out_dir
-                in
-                if Fs.exists report_path then
-                  loop (Explain.load_report report_path :: reports) rest
-                else
-                  report_error
-                    (Printf.sprintf
-                       "no explain data for %s '%s' in profile '%s'; build it \
-                        first"
-                       (Manifest.target_kind_name target)
-                       (Manifest.target_name target) profile)
-          in
-          loop [] targets)
+          else
+            let rec loop reports = function
+              | [] ->
+                  print_endline (render_reports reports);
+                  Exit_code 0
+              | target :: rest ->
+                  let out_dir =
+                    Layout.target_out_dir ~profile workspace_root target
+                  in
+                  let report_path =
+                    if options.json then Layout.explain_json_path out_dir
+                    else Layout.explain_path out_dir
+                  in
+                  if Fs.exists report_path then
+                    loop (Explain.load_report report_path :: reports) rest
+                  else
+                    report_error
+                      (Printf.sprintf
+                         "no explain data for %s '%s' in profile '%s'; build it \
+                          first"
+                         (Manifest.target_kind_name target)
+                         (Manifest.target_name target) profile)
+            in
+            loop [] targets)
 
 let commands =
   [
