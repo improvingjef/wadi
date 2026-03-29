@@ -133,6 +133,55 @@ let resolve_requested_targets workspace requested_targets =
 
 let selected_names targets = List.map Manifest.target_name targets
 
+let target_index (workspace : Manifest.workspace) =
+  let index = Hashtbl.create (List.length workspace.targets) in
+  List.iter
+    (fun target -> Hashtbl.replace index (Manifest.target_name target) target)
+    workspace.targets;
+  index
+
+let expand_install_names workspace targets =
+  let index = target_index workspace in
+  let seen = Hashtbl.create (List.length workspace.targets) in
+  let rec visit acc name =
+    if Hashtbl.mem seen name then Ok acc
+    else (
+      Hashtbl.add seen name ();
+      match Hashtbl.find_opt index name with
+      | None -> Error (Printf.sprintf "unknown target '%s'" name)
+      | Some target ->
+          let* acc =
+            List.fold_left
+              (fun result dependency ->
+                let* acc = result in
+                match Hashtbl.find_opt index dependency with
+                | Some (Manifest.Library _) -> visit acc dependency
+                | Some dependency_target ->
+                    Error
+                      (Printf.sprintf
+                         "target '%s' depends on %s '%s'; oasis install only \
+                          closes over library dependencies"
+                         name
+                         (Manifest.target_kind_name dependency_target)
+                         dependency)
+                | None ->
+                    Error
+                      (Printf.sprintf
+                         "target '%s' depends on unknown target '%s'" name
+                         dependency))
+              (Ok acc) (Manifest.target_deps target)
+          in
+          Ok (name :: acc))
+  in
+  let* names =
+    List.fold_left
+      (fun result target ->
+        let* acc = result in
+        visit acc (Manifest.target_name target))
+      (Ok []) targets
+  in
+  Ok (List.rev names)
+
 let library_install_filenames out_dir =
   Sys.readdir out_dir
   |> Array.to_list
@@ -320,6 +369,7 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
   in
   let* targets = resolve_requested_targets workspace requested_targets in
   let requested_names = selected_names targets in
+  let* selected_names = expand_install_names workspace targets in
   let* build_result =
     Builder.build ~workspace_root ~verbose ~requested_targets:requested_names
       ~backend_request ~profile workspace
@@ -329,8 +379,8 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
     install_layout ~workspace_root ~profile ~prefix ~destdir workspace_name
   in
   Fs.ensure_dir layout.stage_root;
-  let selected_index = Hashtbl.create (List.length requested_names) in
-  List.iter (fun name -> Hashtbl.replace selected_index name ()) requested_names;
+  let selected_index = Hashtbl.create (List.length selected_names) in
+  List.iter (fun name -> Hashtbl.replace selected_index name ()) selected_names;
   let library_index = Hashtbl.create (List.length workspace.targets) in
   List.iter
     (function

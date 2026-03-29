@@ -252,6 +252,77 @@ main = "main"
         | Some Manifest.Workspace ->
             fail "target override sandbox should replace the default sandbox"
         | None -> fail "resolved options should keep the target sandbox override")) ;
+    ( "parses multi-package workspace members",
+      (fun () ->
+        with_temp_dir "oasis-members" (fun workspace_root ->
+            write_manifest workspace_root
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+
+[defaults]
+profile = "release"
+
+[library.shared]
+dir = "shared"
+modules = ["shared"]
+|};
+            write_workspace_file workspace_root "packages/core/oasis.toml"
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+deps = ["shared"]
+|};
+            write_workspace_file workspace_root "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            let workspace = expect_ok (Manifest.load (manifest_path workspace_root)) in
+            assert_string_equal "release" workspace.Manifest.defaults.default_profile
+              "root defaults should remain the workspace-wide defaults";
+            match workspace.Manifest.targets with
+            | [
+             Manifest.Library shared;
+             Manifest.Library core;
+             Manifest.Executable demo;
+            ] ->
+                assert_string_equal "shared" shared.dir
+                  "root targets should keep root-relative directories";
+                assert_string_equal "packages/core/lib" core.dir
+                  "member libraries should be rebased under the member path";
+                assert_string_equal "packages/app/app" demo.dir
+                  "member executables should be rebased under the member path"
+            | _ -> fail "expected merged root and member targets")) );
+    ( "rejects workspace-wide sections in member manifests",
+      (fun () ->
+        with_temp_dir "oasis-member-defaults" (fun workspace_root ->
+            write_manifest workspace_root
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core"]
+|};
+            write_workspace_file workspace_root "packages/core/oasis.toml"
+              {|
+[defaults]
+profile = "release"
+
+[library.core]
+dir = "lib"
+modules = ["core"]
+|};
+            let error =
+              expect_error (Manifest.load (manifest_path workspace_root))
+            in
+            assert_string_contains
+              ~needle:"member manifests may not define defaults sections"
+              error
+              "member manifests should keep workspace defaults in the root manifest")) );
     ( "rejects invalid environment bindings",
       (fun () ->
         let error =

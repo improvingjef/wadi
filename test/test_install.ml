@@ -60,25 +60,66 @@ let cases =
               "installed executables should remain runnable from the staged prefix";
             assert_string_equal "Hello, world!\n" run.output
               "the staged executable should preserve program behavior")) );
-    ( "installs only the requested installable targets",
+    ( "installs only the requested top-level targets",
       (fun () ->
         with_fixture "hello" (fun workspace ->
             let prefix = Filename.concat workspace "_exe-only" in
             let install =
               run_oasis ~cwd:workspace
-                [ "install"; "--prefix"; prefix; "hello" ]
+                [ "install"; "--prefix"; prefix; "greeting" ]
             in
             assert_int_equal 0 install.status
               "install should allow targeted staging";
-            assert_file_exists (Filename.concat prefix "bin/hello");
+            assert_file_exists (Filename.concat prefix "lib/greeting/META");
             assert_true
-              (not (Fs.exists (Filename.concat prefix "lib/greeting")))
-              "installing only an executable should not stage unrelated libraries";
+              (not (Fs.exists (Filename.concat prefix "bin/hello")))
+              "installing only a library should not stage unrelated executables";
             let metadata =
               Fs.read_file (Filename.concat prefix "share/oasis/hello/install.json")
             in
-            assert_string_not_contains ~needle:"\"name\": \"greeting\"" metadata
-              "install metadata should not list unrequested libraries")) );
+            assert_string_not_contains ~needle:"\"path\": \"bin/hello\"" metadata
+              "install metadata should not list unrequested executables")) );
+    ( "stages internal library dependencies needed by requested targets",
+      (fun () ->
+        with_temp_dir "oasis-install-closure" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.greeting]
+dir = "lib"
+modules = ["greeting"]
+
+[library.unused]
+dir = "unused"
+modules = ["unused"]
+
+[executable.hello]
+dir = "app"
+main = "main"
+deps = ["greeting"]
+|};
+            write_source workspace "lib/greeting.ml"
+              {|let message name = "Hello, " ^ name ^ "!"|};
+            write_source workspace "unused/unused.ml" {|let value = 7|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline (Greeting.message "world")|};
+            let prefix = Filename.concat workspace "_stage" in
+            let install =
+              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix; "hello" ]
+            in
+            assert_int_equal 0 install.status
+              "install should stage the requested executable";
+            assert_file_exists (Filename.concat prefix "bin/hello");
+            assert_file_exists (Filename.concat prefix "lib/greeting/META");
+            assert_true
+              (not (Fs.exists (Filename.concat prefix "lib/unused")))
+              "install closure should not stage unrelated libraries";
+            let metadata =
+              Fs.read_file (Filename.concat prefix "share/oasis/workspace/install.json")
+            in
+            assert_string_contains ~needle:"\"name\": \"greeting\"" metadata
+              "install metadata should record required internal libraries";
+            assert_string_not_contains ~needle:"\"name\": \"unused\"" metadata
+              "install metadata should omit unrelated internal libraries")) );
     ( "supports packaging-style staging with --destdir",
       (fun () ->
         with_fixture "hello" (fun workspace ->

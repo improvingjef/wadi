@@ -30,7 +30,7 @@
 35. [x] Add a bootstrap smoke target or CI step that removes `_bootstrap`, regenerates the make fragment, and rebuilds from scratch to catch self-hosting regressions immediately.
 
 17. [x] Implement installable binaries, libraries, and metadata export.
-18. [ ] Add multi-package workspace support with shared dependency analysis.
+18. [x] Add multi-package workspace support with shared dependency analysis.
 19. [ ] Write migration guidance for existing Dune projects.
 20. [ ] Benchmark build latency and tighten startup and execution overhead.
 32. [x] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.
@@ -48,7 +48,10 @@
 47. [ ] Teach `oasis completion` to suggest workspace-local target names and profile names instead of only static flags and shell names.
 48. [x] Add `oasis explain --json` so automation can print the persisted `.oasis-explain.json` payload directly instead of opening files by path.
 49. [ ] Generate release docs and packaged shell-completion artifacts from `oasis docs` and `oasis completion` in CI so shipped assets cannot drift from the command table.
-50. [ ] Close over transitive workspace-library dependencies during `oasis install` or warn when generated `META` files reference unstaged internal packages.
+50. [x] Close over transitive workspace-library dependencies during `oasis install` or warn when generated `META` files reference unstaged internal packages.
 51. [x] Clarify and test relative `--prefix` plus `--destdir` semantics so local staging does not inherit surprising absolute workspace paths.
-52. [ ] Add an explicit `--backend` flag to `oasis explain --current` so dry-run answers can mirror non-default build requests instead of relying only on ambient backend selection.
+52. [x] Add an explicit `--backend` flag to `oasis explain --current` so dry-run answers can mirror non-default build requests instead of relying only on ambient backend selection.
 53. [ ] Separate pure explain planning from action/preprocess materialization so `oasis explain --current` stays side-effect-light even for generated-source targets.
+54. [ ] Allow member manifests to declare package-local actions, preprocessors, and PPX tools with automatic path rebasing so multi-package repos do not centralize every helper in the root manifest.
+55. [ ] Record which `oasis install` artifacts were explicitly requested versus added by dependency closure so packaging automation can explain why extra libraries were staged.
+56. [ ] Surface member package paths in diagnostics and future dynamic completions so globally unique target names stay navigable in larger workspaces.

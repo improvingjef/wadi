@@ -89,6 +89,46 @@ let cases =
               "transitive executable should run successfully";
             assert_string_equal "Hello, transitive world!\n" run.output
               "transitive libraries should be linked in executable output")) );
+    ( "builds a multi-package workspace with shared dependency analysis",
+      (fun () ->
+        with_temp_dir "oasis-multi-package" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+
+[library.shared]
+dir = "shared"
+modules = ["shared"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+deps = ["shared"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "shared/shared.ml" {|let prefix = "multi"|};
+            write_source workspace "packages/core/lib/core.ml"
+              {|let message () = Shared.prefix ^ "-package"|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline (Core.message ())|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "multi-package workspaces should build from the root manifest";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables spanning member packages should run successfully";
+            assert_string_equal "multi-package\n" run.output
+              "cross-member dependency analysis should produce a working executable")) );
     ( "builds a requested library without unrelated executables",
       (fun () ->
         with_fixture "hello" (fun workspace ->

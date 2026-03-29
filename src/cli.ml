@@ -46,6 +46,8 @@ type explain_options = {
   profile : string option;
   json : bool;
   current : bool;
+  backend_request : Toolchain.backend_request;
+  backend_specified : bool;
 }
 
 type completion_options = { shell : string }
@@ -275,17 +277,25 @@ let explain_doc =
     name = "explain";
     summary = "Show why a target rebuilt or reused artifacts and which commands were planned.";
     signature =
-      "oasis explain [--workspace DIR] [--profile NAME] [--current] [--json] [TARGET ...]";
+      "oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]";
     examples =
       [
         "oasis explain";
         "oasis explain hello";
         "oasis explain --current hello";
+        "oasis explain --current --backend bytecode hello";
         "oasis explain --json hello";
         "oasis explain --profile release greeting hello";
       ];
     options =
-      [ workspace_option; profile_option; current_option; json_option; help_option ];
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        current_option;
+        json_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -690,14 +700,23 @@ let parse_install_args (args : string list) : (install_options, string) result =
     args
 
 let parse_explain_args (args : string list) : (explain_options, string) result =
+  let* default_backend_request = default_backend_request () in
   let rec loop (options : explain_options) = function
-    | [] -> Ok { options with targets = List.rev options.targets }
+    | [] ->
+        if options.backend_specified && not options.current then
+          Error "--backend is only supported with --current"
+        else Ok { options with targets = List.rev options.targets }
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | "--profile" :: profile :: rest ->
         loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request; backend_specified = true } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
     | "--current" :: rest -> loop { options with current = true } rest
     | "--json" :: rest -> loop { options with json = true } rest
     | "--help" :: _ -> Error (command_usage explain_doc)
@@ -712,6 +731,8 @@ let parse_explain_args (args : string list) : (explain_options, string) result =
       profile = None;
       json = false;
       current = false;
+      backend_request = default_backend_request;
+      backend_specified = false;
     }
     args
 
@@ -919,6 +940,7 @@ let run_explain (options : explain_options) =
             match
               Builder.explain_current ~workspace_root
                 ~requested_targets:(List.map Manifest.target_name targets)
+                ~backend_request:options.backend_request
                 ?profile:options.profile workspace
             with
             | Error message -> report_error message

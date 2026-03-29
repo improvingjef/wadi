@@ -92,6 +92,11 @@ type workspace = {
   profiles : profile list;
 }
 
+type loaded_manifest = {
+  workspace : workspace;
+  members : string list;
+}
+
 type binding = {
   key : string;
   value : value;
@@ -407,6 +412,20 @@ let validate_relative_paths path line label values =
   in
   loop values
 
+let validate_member_paths path line members =
+  let* () = validate_relative_paths path line "members" members in
+  let seen = Hashtbl.create (List.length members) in
+  let rec loop = function
+    | [] -> Ok ()
+    | member :: rest ->
+        if Hashtbl.mem seen member then
+          error path line (Printf.sprintf "duplicate members entry '%s'" member)
+        else (
+          Hashtbl.add seen member ();
+          loop rest)
+  in
+  loop members
+
 let parse_env_binding path line value =
   match String_util.split_once ~on:'=' value with
   | Some (raw_name, raw_value) ->
@@ -666,7 +685,7 @@ let parse_profile_override path section profile_name target_kind target_name =
   Ok { profile_name; target_kind; target_name; options; line = section.line }
 
 let parse_top_level path bindings =
-  let allowed = [ "workspace"; "version" ] in
+  let allowed = [ "workspace"; "version"; "members" ] in
   let* () =
     match List.find_opt (fun binding -> not (List.mem binding.key allowed)) bindings with
     | None -> Ok ()
@@ -688,9 +707,18 @@ let parse_top_level path bindings =
         else error path 1 (Printf.sprintf "unsupported manifest version %d" value)
     | Some binding -> error path binding.line "version must be an integer"
   in
+  let members =
+    match find_binding "members" bindings with
+    | None -> Ok []
+    | Some { value = Strings members; line; _ } ->
+        let* () = validate_member_paths path line members in
+        Ok members
+    | Some binding -> error path binding.line "members must be an array of strings"
+  in
   let* name = name in
   let* version = version in
-  Ok (name, version)
+  let* members = members in
+  Ok (name, version, members)
 
 let validate_unique_target_names path targets =
   let seen = Hashtbl.create (List.length targets) in
@@ -854,7 +882,27 @@ let find_preprocessor (workspace : workspace) (name : string) =
 let find_ppx_tool (workspace : workspace) (name : string) =
   List.find_opt (fun (tool : ppx_tool) -> tool.name = name) workspace.ppx_tools
 
-let load path =
+let rebase_target_dir member_path dir =
+  Filename.concat member_path dir
+
+let rebase_target member_path = function
+  | Library library ->
+      Library { library with dir = rebase_target_dir member_path library.dir }
+  | Executable executable ->
+      Executable
+        { executable with dir = rebase_target_dir member_path executable.dir }
+  | Test test -> Test { test with dir = rebase_target_dir member_path test.dir }
+
+let member_error member_manifest_path message =
+  Error (Printf.sprintf "%s: %s" member_manifest_path message)
+
+let member_workspace_feature_error member_manifest_path feature =
+  member_error member_manifest_path
+    (Printf.sprintf "member manifests may not define %s; keep workspace-wide \
+                     configuration in the root manifest"
+       feature)
+
+let load_local path =
   let lines = Fs.read_lines path in
   let rec parse_lines line_number current_section top_level sections = function
     | [] ->
@@ -865,7 +913,7 @@ let load path =
         in
         let sections = List.rev sections in
         let top_level = List.rev top_level in
-        let* name, version = parse_top_level path top_level in
+        let* name, version, members = parse_top_level path top_level in
         let rec collect_sections defaults_opt targets actions preprocessors ppx_tools
             profiles overrides = function
           | [] ->
@@ -890,17 +938,21 @@ let load path =
               in
               Ok
                 {
-                  name;
-                  version;
-                  defaults =
-                    (match defaults_opt with
-                    | Some defaults -> defaults
-                    | None -> default_defaults);
-                  targets;
-                  actions = List.rev actions;
-                  preprocessors = List.rev preprocessors;
-                  ppx_tools = List.rev ppx_tools;
-                  profiles;
+                  workspace =
+                    {
+                      name;
+                      version;
+                      defaults =
+                        (match defaults_opt with
+                        | Some defaults -> defaults
+                        | None -> default_defaults);
+                      targets;
+                      actions = List.rev actions;
+                      preprocessors = List.rev preprocessors;
+                      ppx_tools = List.rev ppx_tools;
+                      profiles;
+                    };
+                  members;
                 }
           | section :: rest -> (
               match section.path with
@@ -993,3 +1045,72 @@ let load path =
                     sections rest)
   in
   parse_lines 1 None [] [] lines
+
+let rec load path =
+  let* loaded = load_local path in
+  if loaded.members = [] then Ok loaded.workspace
+  else
+    let root_workspace = loaded.workspace in
+    let root_dir = Filename.dirname path in
+    let rec load_members merged_targets = function
+      | [] ->
+          let merged_workspace =
+            { root_workspace with targets = List.rev merged_targets }
+          in
+          let* () = validate_unique_target_names path merged_workspace.targets in
+          Ok merged_workspace
+      | member_path :: rest ->
+          let member_dir = Filename.concat root_dir member_path in
+          let member_manifest_path =
+            Filename.concat member_dir default_filename
+          in
+          let* () =
+            if not (Fs.is_directory member_dir) then
+              member_error member_manifest_path
+                (Printf.sprintf "member directory does not exist: %s" member_dir)
+            else if not (Fs.exists member_manifest_path) then
+              member_error member_manifest_path
+                "member manifest not found"
+            else Ok ()
+          in
+          let* member_workspace = load member_manifest_path in
+          let* () =
+            match member_workspace.name with
+            | None -> Ok ()
+            | Some _ ->
+                member_workspace_feature_error member_manifest_path
+                  "a top-level workspace name"
+          in
+          let* () =
+            if member_workspace.defaults <> default_defaults then
+              member_workspace_feature_error member_manifest_path
+                "defaults sections"
+            else Ok ()
+          in
+          let* () =
+            if member_workspace.actions <> [] then
+              member_workspace_feature_error member_manifest_path "action sections"
+            else Ok ()
+          in
+          let* () =
+            if member_workspace.preprocessors <> [] then
+              member_workspace_feature_error member_manifest_path
+                "preprocess tool sections"
+            else Ok ()
+          in
+          let* () =
+            if member_workspace.ppx_tools <> [] then
+              member_workspace_feature_error member_manifest_path "ppx sections"
+            else Ok ()
+          in
+          let* () =
+            if member_workspace.profiles <> [] then
+              member_workspace_feature_error member_manifest_path "profile sections"
+            else Ok ()
+          in
+          let rebased_targets =
+            List.map (rebase_target member_path) member_workspace.targets
+          in
+          load_members (List.rev_append rebased_targets merged_targets) rest
+    in
+    load_members (List.rev root_workspace.targets) loaded.members

@@ -123,7 +123,7 @@ main = "main"
             assert_string_contains ~needle:"oasis toolchain" run.output
               "top-level usage should include the toolchain command";
             assert_string_contains
-              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--current] [--json] [TARGET ...]"
+              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
               run.output "top-level usage should include the explain command")) );
     ( "prints command-specific help for explain from the command table",
       (fun () ->
@@ -132,7 +132,7 @@ main = "main"
             assert_true (help.status <> 0)
               "explain --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--current] [--json] [TARGET ...]"
+              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
               help.output "explain help should include the explain signature";
             assert_string_not_contains
               ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"

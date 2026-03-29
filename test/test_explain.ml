@@ -56,6 +56,32 @@ let cases =
               "current explain should report missing artifacts before the first build";
             assert_true (not (Fs.exists (Layout.stamp_path out_dir)))
               "current explain should not write a target stamp when it only plans work")) );
+    ( "accepts explicit backend selection for current explain",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let explain =
+              run_oasis ~cwd:workspace
+                [ "explain"; "--current"; "--backend"; "bytecode"; "hello" ]
+            in
+            assert_int_equal 0 explain.status
+              "current explain should accept an explicit backend selection";
+            assert_string_contains ~needle:"backend-request: bytecode"
+              explain.output
+              "current explain should report the explicit backend request";
+            assert_string_contains ~needle:"selected-backend: bytecode"
+              explain.output
+              "current explain should plan commands for the requested backend")) );
+    ( "rejects explicit backend selection without current explain",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let explain =
+              run_oasis ~cwd:workspace [ "explain"; "--backend"; "bytecode"; "hello" ]
+            in
+            assert_true (explain.status <> 0)
+              "persisted explain should reject backend selection";
+            assert_string_contains ~needle:"--backend is only supported with --current"
+              explain.output
+              "explain should explain that backend selection only applies to dry-run planning")) );
     ( "records rebuilt and reused target state in explain reports",
       (fun () ->
         with_fixture "hello" (fun workspace ->
