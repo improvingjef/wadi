@@ -20,3 +20,7 @@
 - Profiles need to change artifact roots, not just flags. Reusing one build directory across `release` and `dev` would turn “profile” into a cache-corruption feature.
 - Text preprocessors fit naturally as stdin/stdout transforms, while PPX support is cleaner when the builder treats rewriters as named tools and lets the compiler own the AST pipeline.
 - Growing the manifest model triggered a wave of OCaml record-label ambiguity; explicit type annotations are a small price to pay for keeping a richer configuration format readable and type-safe.
+- `ocamlfind printconf path`, `ocamlfind query ...`, and `ocamlc -where` were quietly happening far more often than the user-visible work justified; a per-build toolchain session buys real speed by collapsing those probes to one hit.
+- Human-facing rebuild explanations only stay trustworthy if downstream fingerprints summarize dependencies at the dependency edge. Embedding raw dependency fingerprint text made `oasis explain` blame leaf source files in the wrong target.
+- A cached target still needs first-class diagnostics. Persisting `.oasis-explain` next to `.oasis-stamp` turns “why did this rebuild?” from guesswork into a cheap read instead of another compile.
+- The bootstrap path still has one embarrassing duplication seam: the generated makefile is manifest-driven, but `scripts/generate_bootstrap_makefile.ml` still carries a hand-maintained `#mod_use` list for core modules.

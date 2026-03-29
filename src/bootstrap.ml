@@ -81,7 +81,8 @@ let effective_packages index target =
 
 let ordered_module_plans ~workspace_root ~target_kind ~target_name ~dir ~modules
     ~packages =
-  let* package_resolution = Toolchain.resolve_packages packages in
+  let session = Toolchain.create_session () in
+  let* package_resolution = Toolchain.resolve_packages ~session packages in
   let* sources =
     Builder.source_descriptors ~workspace_root
       ~generated_root:(Filename.concat workspace_root "_oasis-bootstrap-generated")
@@ -93,8 +94,8 @@ let ordered_module_plans ~workspace_root ~target_kind ~target_name ~dir ~modules
       ~target_env:[] [] sources
   in
   let* ordered =
-    Builder.infer_module_order ~verbose:false ~env:[] ~target_kind ~target_name
-      package_resolution prepared_sources
+    Builder.infer_module_order ~session ~verbose:false ~env:[] ~target_kind
+      ~target_name package_resolution prepared_sources
   in
   let source_table : (string, Builder.source_descriptor) Hashtbl.t =
     Hashtbl.create (List.length sources)

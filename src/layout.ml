@@ -53,3 +53,5 @@ let test_binary ?(profile = default_profile) workspace_root name =
   Filename.concat (test_out_dir_for_profile workspace_root profile name) name
 
 let stamp_path out_dir = Filename.concat out_dir ".oasis-stamp"
+
+let explain_path out_dir = Explain.report_path out_dir

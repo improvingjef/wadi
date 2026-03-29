@@ -5,6 +5,7 @@
 #mod_use "src/process.ml";;
 #mod_use "src/toolchain.ml";;
 #mod_use "src/manifest.ml";;
+#mod_use "src/explain.ml";;
 #mod_use "src/layout.ml";;
 #mod_use "src/builder.ml";;
 #mod_use "src/bootstrap.ml";;

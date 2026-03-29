@@ -28,5 +28,9 @@ let cases =
           "tests should use the test target root";
         assert_string_equal "/tmp/oasis-layout/_oasis/build/default/exe/app/.oasis-stamp"
           (Layout.stamp_path (Layout.executable_out_dir workspace "app"))
-          "target stamps should live next to the target artifacts")) ;
+          "target stamps should live next to the target artifacts";
+        assert_string_equal
+          "/tmp/oasis-layout/_oasis/build/default/exe/app/.oasis-explain"
+          (Layout.explain_path (Layout.executable_out_dir workspace "app"))
+          "target explain reports should live next to the target artifacts")) ;
   ]

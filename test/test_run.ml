@@ -114,7 +114,23 @@ main = "main"
               ~needle:"oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the clean command";
             assert_string_contains ~needle:"oasis toolchain" run.output
-              "top-level usage should include the toolchain command")) );
+              "top-level usage should include the toolchain command";
+            assert_string_contains
+              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [TARGET ...]"
+              run.output "top-level usage should include the explain command")) );
+    ( "prints command-specific help for explain from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-explain-help" (fun workspace ->
+            let help = run_oasis ~cwd:workspace [ "explain"; "--help" ] in
+            assert_true (help.status <> 0)
+              "explain --help should short-circuit with usage text";
+            assert_string_contains
+              ~needle:"oasis explain [--workspace DIR] [--profile NAME] [TARGET ...]"
+              help.output "explain help should include the explain signature";
+            assert_string_not_contains
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              help.output
+              "command-specific help should not include unrelated commands")) );
     ( "prints command-specific help from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-help" (fun workspace ->

@@ -30,6 +30,12 @@ type clean_options = {
   profile : string option;
 }
 
+type explain_options = {
+  workspace_dir : string;
+  targets : string list;
+  profile : string option;
+}
+
 type toolchain_options = { verbose : bool }
 
 type command_result =
@@ -113,6 +119,18 @@ let toolchain_doc =
     examples = [ "oasis toolchain" ];
   }
 
+let explain_doc =
+  {
+    name = "explain";
+    signature = "oasis explain [--workspace DIR] [--profile NAME] [TARGET ...]";
+    examples =
+      [
+        "oasis explain";
+        "oasis explain hello";
+        "oasis explain --profile release greeting hello";
+      ];
+  }
+
 let render_usage docs =
   String.concat "\n"
     ([
@@ -127,7 +145,8 @@ let render_usage docs =
         (fun doc -> List.map (fun example -> "  " ^ example) doc.examples)
         docs)
 
-let command_docs = [ build_doc; run_doc; test_doc; clean_doc; toolchain_doc ]
+let command_docs =
+  [ build_doc; run_doc; test_doc; clean_doc; toolchain_doc; explain_doc ]
 
 let usage () = render_usage command_docs
 
@@ -269,6 +288,22 @@ let parse_toolchain_args args =
       Error (Printf.sprintf "unknown option '%s'" option)
   | _ -> Error "toolchain does not accept positional arguments"
 
+let parse_explain_args (args : string list) : (explain_options, string) result =
+  let rec loop (options : explain_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--help" :: _ -> Error (command_usage explain_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; targets = []; profile = None } args
+
 let load_workspace workspace_dir =
   if not (Fs.is_directory workspace_dir) then
     Error
@@ -322,6 +357,29 @@ let find_built_executable name artifacts =
           Some executable.binary
       | _ -> None)
     artifacts
+
+let resolve_profile workspace profile =
+  match profile with
+  | Some profile when String.trim profile <> "" -> profile
+  | Some _ | None -> Manifest.default_profile workspace
+
+let resolve_explain_targets workspace requested_targets =
+  let requested_targets = String_util.dedup_preserve requested_targets in
+  if requested_targets = [] then Ok workspace.Manifest.targets
+  else
+    let index = Hashtbl.create (List.length workspace.Manifest.targets) in
+    List.iter
+      (fun target ->
+        Hashtbl.replace index (Manifest.target_name target) target)
+      workspace.Manifest.targets;
+    let rec loop acc = function
+      | [] -> Ok (List.rev acc)
+      | name :: rest -> (
+          match Hashtbl.find_opt index name with
+          | Some target -> loop (target :: acc) rest
+          | None -> Error (Printf.sprintf "unknown target '%s'" name))
+    in
+    loop [] requested_targets
 
 let run_build (options : build_options) =
   match load_workspace options.workspace_dir with
@@ -404,6 +462,36 @@ let run_toolchain (_options : toolchain_options) =
   Toolchain.inspect () |> Toolchain.render_report |> print_endline;
   Exit_code 0
 
+let run_explain (options : explain_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match resolve_explain_targets workspace options.targets with
+      | Error message -> report_error message
+      | Ok targets ->
+          let workspace_root = Fs.realpath options.workspace_dir in
+          let profile = resolve_profile workspace options.profile in
+          let rec loop reports = function
+            | [] ->
+                print_endline (String.concat "\n\n" (List.rev reports));
+                Exit_code 0
+            | target :: rest ->
+                let out_dir =
+                  Layout.target_out_dir ~profile workspace_root target
+                in
+                let report_path = Layout.explain_path out_dir in
+                if Fs.exists report_path then
+                  loop (Explain.load_report report_path :: reports) rest
+                else
+                  report_error
+                    (Printf.sprintf
+                       "no explain data for %s '%s' in profile '%s'; build it \
+                        first"
+                       (Manifest.target_kind_name target)
+                       (Manifest.target_name target) profile)
+          in
+          loop [] targets)
+
 let commands =
   [
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
@@ -412,6 +500,7 @@ let commands =
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
     Command
       { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
+    Command { doc = explain_doc; parse = parse_explain_args; run = run_explain };
   ]
 
 let dispatch_command command args =
