@@ -3,7 +3,7 @@ version = 1
 
 [library.oasis_core]
 dir = "src"
-modules = ["string_util", "fs", "process", "toolchain", "manifest", "explain", "layout", "builder", "actioner", "cleaner", "promoter", "installer", "deps", "env_report", "graph", "migrate", "repl", "bootstrap", "bench"]
+modules = ["string_util", "fs", "process", "toolchain", "manifest", "explain", "layout", "builder", "actioner", "cleaner", "promoter", "installer", "deps", "env_report", "graph", "init", "locker", "migrate", "repl", "vendor", "bootstrap", "bench"]
 packages = ["unix"]
 
 [executable.oasis]
@@ -15,5 +15,5 @@ deps = ["oasis_core"]
 [test.test_runner]
 dir = "test"
 main = "test_main"
-modules = ["test_support", "test_manifest", "test_layout", "test_build", "test_clean", "test_process", "test_run", "test_bench", "test_graph", "test_deps", "test_env", "test_migrate", "test_repl", "test_test", "test_install", "test_packaging", "test_toolchain", "test_explain", "test_bootstrap"]
+modules = ["test_support", "test_manifest", "test_layout", "test_build", "test_clean", "test_process", "test_run", "test_bench", "test_graph", "test_deps", "test_init", "test_lock", "test_vendor", "test_env", "test_migrate", "test_repl", "test_test", "test_install", "test_packaging", "test_toolchain", "test_explain", "test_bootstrap"]
 deps = ["oasis_core"]

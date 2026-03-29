@@ -123,3 +123,10 @@
 114. [x] Clear declared action outputs from the action sandbox before execution so stale checked-in snapshots or prior generated files cannot masquerade as freshly regenerated outputs.
 115. [x] Exclude generated-source snapshots from bootstrap workspace-input tracking when the build actually compiles the generated copy, keeping self-hosting fingerprints aligned with real compile inputs.
 116. [x] Teach `oasis migrate` to translate dune `rule (mode promote)` source targets into explicit `checked_in_sources` declarations instead of leaving them as manual follow-up.
+117. [x] Implement `oasis init` so new workspaces stop starting with a blank `oasis.toml` and immediately scaffold into something that builds.
+118. [x] Implement `oasis lock` so resolved toolchain facts plus external package paths can be snapshotted into a reviewable machine-readable file.
+119. [x] Implement `oasis vendor` for local source dependencies so package-only manifests can be copied under `vendor/` and registered as workspace members without hand-editing the root manifest.
+120. [ ] Teach `oasis build` and `oasis install` to optionally consume `oasis.lock` and fail or warn when resolved package paths drift from the committed snapshot.
+121. [ ] Extend `oasis vendor` beyond local directories to git/url sources plus checksum pinning so vendoring does not depend on a manual checkout step.
+122. [ ] Add `oasis init --member` plus multi-package templates so package scaffolding does not fall back to hand-edited `members = [...]`.
+123. [ ] Implement `oasis ppx` as an explicit inspect/apply subtool so preprocess and PPX debugging is as decomposed as build/action/promote.

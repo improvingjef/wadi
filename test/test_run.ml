@@ -335,6 +335,9 @@ actions = ["generate"]
             assert_true (run.status <> 0)
               "invoking oasis without a command should print usage";
             assert_string_contains
+              ~needle:"oasis init [--dir DIR] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]"
+              run.output "top-level usage should include the init command";
+            assert_string_contains
               ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
@@ -358,6 +361,12 @@ actions = ["generate"]
             assert_string_contains
               ~needle:"oasis deps [--workspace DIR] [TARGET ...]"
               run.output "top-level usage should include the deps command";
+            assert_string_contains
+              ~needle:"oasis lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]"
+              run.output "top-level usage should include the lock command";
+            assert_string_contains
+              ~needle:"oasis vendor [--workspace DIR] --source DIR [--name NAME] [--force]"
+              run.output "top-level usage should include the vendor command";
             assert_string_contains
               ~needle:"oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]"
               run.output "top-level usage should include the env command";
@@ -415,12 +424,18 @@ actions = ["generate"]
               "docs should render markdown successfully";
             assert_string_contains ~needle:"# Oasis CLI" docs.output
               "docs output should start with the markdown title";
+            assert_string_contains ~needle:"## init" docs.output
+              "docs output should include the init command";
             assert_string_contains ~needle:"## graph" docs.output
               "docs output should include the graph command";
             assert_string_contains ~needle:"## action" docs.output
               "docs output should include the action command";
             assert_string_contains ~needle:"## deps" docs.output
               "docs output should include the deps command";
+            assert_string_contains ~needle:"## lock" docs.output
+              "docs output should include the lock command";
+            assert_string_contains ~needle:"## vendor" docs.output
+              "docs output should include the vendor command";
             assert_string_contains ~needle:"## env" docs.output
               "docs output should include the env command";
             assert_string_contains ~needle:"## install" docs.output
@@ -452,7 +467,7 @@ actions = ["generate"]
               docs.output
               "docs output should include the migrate output-path description";
             assert_string_contains
-              ~needle:"- `--stdout`: Print the generated manifest instead of writing a file."
+              ~needle:"- `--stdout`: Print the generated output instead of writing a file."
               docs.output
               "docs output should include the migrate stdout description";
             assert_string_contains

@@ -134,3 +134,7 @@
 - A generated source can safely coexist with a checked-in snapshot only if the manifest makes that intent explicit. A dedicated `checked_in_sources` field keeps the normal collision guard strict while still supporting promote-style workflows.
 - Action sandboxes should start from a world where declared outputs do not exist. Otherwise a copied checked-in snapshot can trick the build into “regenerating” a file the action never actually wrote.
 - Once generated snapshots are a first-class mode, bootstrap input tracking has to follow the real compile path rather than the logical module path. Tracking the checked-in file as an input while compiling the generated copy would make self-hosting fingerprints lie.
+- `oasis init` only feels honest if the generated tree runs immediately. A scaffolder that still needs hand edits is just moving boilerplate around.
+- A useful first lock file does not need a dependency solver. Capturing manifest digests, resolved toolchain paths, backend choice, and `ocamlfind` package roots already makes dependency state reviewable.
+- Vendoring is mostly a manifest-edit problem, not a copy problem. The sharp edge is keeping vendored packages member-safe and updating `members = [...]` without forcing manual surgery in the root manifest.
+- Packaging metadata is part of the normal edit loop. Any tracked-file change that affects the source archive means the generated Homebrew checksum becomes stale immediately.

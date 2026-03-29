@@ -4,6 +4,11 @@
 subtool owns one job, prints direct facts, and composes through stable files and
 exit codes rather than hidden global state.
 
+### Bootstrap
+
+- `oasis init`: scaffold a minimal workspace or package so the first buildable
+  manifest is generated instead of hand-written.
+
 ### Build lifecycle
 
 - `oasis build`: compile libraries, executables, and tests into predictable
@@ -27,8 +32,10 @@ exit codes rather than hidden global state.
 
 - `oasis deps`: resolve external libraries, surface missing packages, and print
   the exact toolchain assumptions.
-- `oasis vendor`: copy or sync external source dependencies into the workspace.
-- `oasis lock`: capture reproducible dependency selections.
+- `oasis vendor`: copy a local package into `vendor/` and register it as a
+  workspace member.
+- `oasis lock`: snapshot resolved toolchain facts and external package paths
+  into a machine-readable lock file.
 - `oasis install`: stage installable binaries, libraries, and metadata.
 
 ### Discoverability
@@ -56,6 +63,7 @@ exit codes rather than hidden global state.
 
 ## Dune feature mapping
 
+- `dune init` maps to `oasis init`.
 - `dune build` maps to `oasis build`.
 - `dune exec` maps to `oasis run`.
 - `dune runtest` maps to `oasis test`.

@@ -2,6 +2,29 @@
 
 Generated from the live command table.
 
+## init
+
+Scaffold a minimal oasis workspace without hand-writing the first manifest.
+
+Usage:
+
+`oasis init [--dir DIR] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]`
+
+Options:
+- `--dir DIR`: Create or update the scaffold in DIR instead of the current directory.
+- `--name NAME`: Set the generated workspace or vendor name explicitly.
+- `--library NAME`: Scaffold a library target named NAME.
+- `--executable NAME`: Scaffold an executable target named NAME.
+- `--bare`: Write only a root manifest without any targets or source files.
+- `--force`: Overwrite existing generated files or output paths.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis init`
+- `oasis init --name demo`
+- `oasis init --dir examples/demo --library core --executable demo`
+- `oasis init --dir scratch --bare`
+
 ## build
 
 Compile libraries, executables, and tests into predictable artifact roots.
@@ -183,6 +206,46 @@ Examples:
 - `oasis deps hello`
 - `oasis deps --workspace examples/hello greeting hello`
 
+## lock
+
+Snapshot resolved toolchain facts and external package paths into a machine-readable lock file.
+
+Usage:
+
+`oasis lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--output PATH`: Write the generated manifest to PATH instead of oasis.toml.
+- `--stdout`: Print the generated output instead of writing a file.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis lock`
+- `oasis lock demo`
+- `oasis lock --stdout`
+- `oasis lock --output oasis.lock.json demo`
+
+## vendor
+
+Copy a local source dependency into vendor/ and register it as a workspace member.
+
+Usage:
+
+`oasis vendor [--workspace DIR] --source DIR [--name NAME] [--force]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--source DIR`: Copy the vendored package from DIR into vendor/NAME.
+- `--name NAME`: Set the generated workspace or vendor name explicitly.
+- `--force`: Overwrite existing generated files or output paths.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis vendor --source ../dep`
+- `oasis vendor --source ../dep --name dep`
+- `oasis vendor --workspace examples/app --source ../core --force`
+
 ## env
 
 Print the exact subprocess environment a build, action, run, test, bench, or install step would inherit.
@@ -335,8 +398,8 @@ Usage:
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--output PATH`: Write the generated manifest to PATH instead of oasis.toml.
-- `--stdout`: Print the generated manifest instead of writing a file.
-- `--force`: Overwrite an existing output path.
+- `--stdout`: Print the generated output instead of writing a file.
+- `--force`: Overwrite existing generated files or output paths.
 - `--help`: Print command-specific usage text.
 
 Examples:

@@ -6,6 +6,15 @@ type build_options = {
   profile : string option;
 }
 
+type init_options = {
+  dir : string;
+  name : string option;
+  library : string option;
+  executable : string option;
+  bare : bool;
+  force : bool;
+}
+
 type action_options = {
   workspace_dir : string;
   verbose : bool;
@@ -65,6 +74,20 @@ type graph_options = {
 type deps_options = {
   workspace_dir : string;
   targets : string list;
+}
+
+type lock_options = {
+  workspace_dir : string;
+  targets : string list;
+  output_path : string option;
+  stdout : bool;
+}
+
+type vendor_options = {
+  workspace_dir : string;
+  source_dir : string option;
+  name : string option;
+  force : bool;
 }
 
 type env_options = {
@@ -231,14 +254,14 @@ let stdout_option =
   {
     usage = "--stdout";
     flags = [ "--stdout" ];
-    description = "Print the generated manifest instead of writing a file.";
+    description = "Print the generated output instead of writing a file.";
   }
 
 let force_option =
   {
     usage = "--force";
     flags = [ "--force" ];
-    description = "Overwrite an existing output path.";
+    description = "Overwrite existing generated files or output paths.";
   }
 
 let json_option =
@@ -294,6 +317,49 @@ let iterations_option =
     description = "Run each benchmark target COUNT measured times.";
   }
 
+let dir_option =
+  {
+    usage = "--dir DIR";
+    flags = [ "--dir" ];
+    description =
+      "Create or update the scaffold in DIR instead of the current directory.";
+  }
+
+let name_option =
+  {
+    usage = "--name NAME";
+    flags = [ "--name" ];
+    description = "Set the generated workspace or vendor name explicitly.";
+  }
+
+let library_name_option =
+  {
+    usage = "--library NAME";
+    flags = [ "--library" ];
+    description = "Scaffold a library target named NAME.";
+  }
+
+let executable_name_option =
+  {
+    usage = "--executable NAME";
+    flags = [ "--executable" ];
+    description = "Scaffold an executable target named NAME.";
+  }
+
+let bare_option =
+  {
+    usage = "--bare";
+    flags = [ "--bare" ];
+    description = "Write only a root manifest without any targets or source files.";
+  }
+
+let source_option =
+  {
+    usage = "--source DIR";
+    flags = [ "--source" ];
+    description = "Copy the vendored package from DIR into vendor/NAME.";
+  }
+
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
 
 let completion_protocol_name = "__oasis_completion"
@@ -337,6 +403,32 @@ let build_doc =
         "oasis build --workspace examples/hello --profile release --verbose";
       ];
     options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    completion_words = [];
+  }
+
+let init_doc =
+  {
+    name = "init";
+    summary = "Scaffold a minimal oasis workspace without hand-writing the first manifest.";
+    signature =
+      "oasis init [--dir DIR] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]";
+    examples =
+      [
+        "oasis init";
+        "oasis init --name demo";
+        "oasis init --dir examples/demo --library core --executable demo";
+        "oasis init --dir scratch --bare";
+      ];
+    options =
+      [
+        dir_option;
+        name_option;
+        library_name_option;
+        executable_name_option;
+        bare_option;
+        force_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -481,6 +573,41 @@ let deps_doc =
         "oasis deps --workspace examples/hello greeting hello";
       ];
     options = [ workspace_option; help_option ];
+    completion_words = [];
+  }
+
+let lock_doc =
+  {
+    name = "lock";
+    summary =
+      "Snapshot resolved toolchain facts and external package paths into a machine-readable lock file.";
+    signature =
+      "oasis lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]";
+    examples =
+      [
+        "oasis lock";
+        "oasis lock demo";
+        "oasis lock --stdout";
+        "oasis lock --output oasis.lock.json demo";
+      ];
+    options = [ workspace_option; output_option; stdout_option; help_option ];
+    completion_words = [];
+  }
+
+let vendor_doc =
+  {
+    name = "vendor";
+    summary =
+      "Copy a local source dependency into vendor/ and register it as a workspace member.";
+    signature =
+      "oasis vendor [--workspace DIR] --source DIR [--name NAME] [--force]";
+    examples =
+      [
+        "oasis vendor --source ../dep";
+        "oasis vendor --source ../dep --name dep";
+        "oasis vendor --workspace examples/app --source ../core --force";
+      ];
+    options = [ workspace_option; source_option; name_option; force_option; help_option ];
     completion_words = [];
   }
 
@@ -658,6 +785,7 @@ let render_usage docs =
 
 let command_docs =
   [
+    init_doc;
     build_doc;
     action_doc;
     graph_doc;
@@ -667,6 +795,8 @@ let command_docs =
     clean_doc;
     promote_doc;
     deps_doc;
+    lock_doc;
+    vendor_doc;
     env_doc;
     repl_doc;
     install_doc;
@@ -972,6 +1102,37 @@ let parse_build_args (args : string list) : (build_options, string) result =
     }
     args
 
+let parse_init_args (args : string list) : (init_options, string) result =
+  let rec loop (options : init_options) = function
+    | [] -> Ok options
+    | "--dir" :: dir :: rest -> loop { options with dir } rest
+    | "--dir" :: [] -> Error "--dir requires a directory"
+    | "--name" :: name :: rest -> loop { options with name = Some name } rest
+    | "--name" :: [] -> Error "--name requires a value"
+    | "--library" :: name :: rest ->
+        loop { options with library = Some name } rest
+    | "--library" :: [] -> Error "--library requires a value"
+    | "--executable" :: name :: rest ->
+        loop { options with executable = Some name } rest
+    | "--executable" :: [] -> Error "--executable requires a value"
+    | "--bare" :: rest -> loop { options with bare = true } rest
+    | "--force" :: rest -> loop { options with force = true } rest
+    | "--help" :: _ -> Error (command_usage init_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ -> Error "init does not accept positional arguments"
+  in
+  loop
+    {
+      dir = ".";
+      name = None;
+      library = None;
+      executable = None;
+      bare = false;
+      force = false;
+    }
+    args
+
 let parse_action_args (args : string list) : (action_options, string) result =
   let rec loop (options : action_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
@@ -1196,6 +1357,50 @@ let parse_deps_args (args : string list) : (deps_options, string) result =
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
   loop { workspace_dir = "."; targets = [] } args
+
+let parse_lock_args (args : string list) : (lock_options, string) result =
+  let rec loop (options : lock_options) = function
+    | [] ->
+        if options.stdout && Option.is_some options.output_path then
+          Error "--stdout cannot be combined with --output"
+        else Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--output" :: path :: rest ->
+        loop { options with output_path = Some path } rest
+    | "--output" :: [] -> Error "--output requires a path"
+    | "--stdout" :: rest -> loop { options with stdout = true } rest
+    | "--help" :: _ -> Error (command_usage lock_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; targets = []; output_path = None; stdout = false } args
+
+let parse_vendor_args (args : string list) : (vendor_options, string) result =
+  let rec loop (options : vendor_options) = function
+    | [] -> Ok options
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--source" :: dir :: rest ->
+        loop { options with source_dir = Some dir } rest
+    | "--source" :: [] -> Error "--source requires a directory"
+    | "--name" :: name :: rest -> loop { options with name = Some name } rest
+    | "--name" :: [] -> Error "--name requires a value"
+    | "--force" :: rest -> loop { options with force = true } rest
+    | "--help" :: _ -> Error (command_usage vendor_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ -> Error "vendor does not accept positional arguments; use --source DIR"
+  in
+  let* options =
+    loop { workspace_dir = "."; source_dir = None; name = None; force = false } args
+  in
+  match options.source_dir with
+  | Some _ -> Ok options
+  | None -> Error "vendor requires --source DIR"
 
 let parse_env_args (args : string list) : (env_options, string) result =
   let rec loop workspace_dir profile json changed_only subtool targets = function
@@ -1541,7 +1746,8 @@ let find_command_doc name =
 
 let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
-  | "--output" | "--script" | "--warmup" | "--iterations" ->
+  | "--output" | "--script" | "--warmup" | "--iterations" | "--dir"
+  | "--name" | "--library" | "--executable" | "--source" ->
       true
   | _ -> false
 
@@ -1574,8 +1780,8 @@ let positional_completion_candidates ?workspace command_name rest =
       | _ -> [] )
   | Some workspace -> (
       match command_name with
-      | "build" | "action" | "clean" | "promote" | "graph" | "deps" | "explain"
-        ->
+      | "build" | "action" | "clean" | "promote" | "graph" | "deps" | "lock"
+      | "explain" ->
           List.map target_candidate workspace.Manifest.targets
       | "run" ->
           if positional_argument_count rest = 0 then
@@ -1600,7 +1806,7 @@ let positional_completion_candidates ?workspace command_name rest =
       | "install" -> installable_target_candidates workspace
       | "completion" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) completion_doc.completion_words
-      | "docs" | "toolchain" | "migrate" -> []
+      | "docs" | "init" | "toolchain" | "migrate" | "vendor" -> []
       | _ -> [])
 
 let value_completion_candidates ?workspace = function
@@ -1610,11 +1816,14 @@ let value_completion_candidates ?workspace = function
           List.map (fun word -> candidate word) (profile_names workspace)
       | None -> [])
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
-  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script" -> []
+  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script"
+  | "--dir" | "--name" | "--library" | "--executable" | "--source" ->
+      []
   | _ -> []
 
 let value_completion_response ?workspace = function
-  | "--workspace" | "--prefix" | "--destdir" -> Complete_directories
+  | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source" ->
+      Complete_directories
   | "--output" | "--script" -> Complete_files
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
@@ -1754,6 +1963,16 @@ let run_build (options : build_options) =
       | Ok _ -> Exit_code 0
       | Error message -> report_error message)
 
+let run_init (options : init_options) =
+  match
+    Init.init ~root_dir:options.dir ?name:options.name ?library:options.library
+      ?executable:options.executable ~bare:options.bare ~force:options.force ()
+  with
+  | Ok report ->
+      print_string (Init.render_report report);
+      Exit_code 0
+  | Error message -> report_error message
+
 let run_action_command (options : action_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
@@ -1891,6 +2110,45 @@ let run_deps (options : deps_options) =
       match Deps.report_for_targets ~session workspace options.targets with
       | Ok report ->
           print_endline (Deps.render_report report);
+          Exit_code 0
+      | Error message -> report_error message)
+
+let run_lock (options : lock_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Locker.create ~workspace_root:options.workspace_dir workspace options.targets
+      with
+      | Error message -> report_error message
+      | Ok report ->
+          let json = Locker.render_json report in
+          if options.stdout then (
+            print_string json;
+            Exit_code 0)
+          else
+            let output_path =
+              match options.output_path with
+              | Some path -> path
+              | None -> Filename.concat options.workspace_dir "oasis.lock"
+            in
+            if Fs.is_directory output_path then
+              report_error (Printf.sprintf "output path is a directory: %s" output_path)
+            else (
+              Fs.write_file output_path json;
+              print_endline ("Wrote lock file " ^ output_path);
+              Exit_code 0))
+
+let run_vendor (options : vendor_options) =
+  match options.source_dir with
+  | None -> report_error "vendor requires --source DIR"
+  | Some source_dir -> (
+      match
+        Vendor.vendor ~workspace_root:options.workspace_dir ~source_dir
+          ?name:options.name ~force:options.force ()
+      with
+      | Ok report ->
+          print_string (Vendor.render_report report);
           Exit_code 0
       | Error message -> report_error message)
 
@@ -2086,6 +2344,7 @@ let run_explain (options : explain_options) =
 
 let commands =
   [
+    Command { doc = init_doc; parse = parse_init_args; run = run_init };
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
     Command { doc = action_doc; parse = parse_action_args; run = run_action_command };
     Command { doc = graph_doc; parse = parse_graph_args; run = run_graph };
@@ -2095,6 +2354,8 @@ let commands =
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
     Command { doc = promote_doc; parse = parse_promote_args; run = run_promote };
     Command { doc = deps_doc; parse = parse_deps_args; run = run_deps };
+    Command { doc = lock_doc; parse = parse_lock_args; run = run_lock };
+    Command { doc = vendor_doc; parse = parse_vendor_args; run = run_vendor };
     Command { doc = env_doc; parse = parse_env_args; run = run_env };
     Command { doc = repl_doc; parse = parse_repl_args; run = run_repl };
     Command { doc = install_doc; parse = parse_install_args; run = run_install };

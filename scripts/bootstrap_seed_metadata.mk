@@ -2,8 +2,8 @@
 # Edit oasis.toml instead of this file.
 # Refresh with: make refresh-bootstrap-seed-metadata
 BOOTSTRAP_LIBRARY_PROFILE := default
-BOOTSTRAP_LIBRARY_COMPILE_SOURCES := src/string_util.ml src/fs.ml src/process.ml src/toolchain.ml src/manifest.ml src/explain.ml src/layout.ml src/builder.ml src/actioner.ml src/cleaner.ml src/promoter.ml src/installer.ml src/deps.ml src/env_report.ml src/graph.ml src/migrate.ml src/repl.ml src/bootstrap.ml src/bench.ml
-BOOTSTRAP_LIBRARY_MODULE_STEMS := string_util fs process toolchain manifest explain layout builder actioner cleaner promoter installer deps env_report graph migrate repl bootstrap bench
+BOOTSTRAP_LIBRARY_COMPILE_SOURCES := src/string_util.ml src/fs.ml src/process.ml src/toolchain.ml src/manifest.ml src/explain.ml src/layout.ml src/builder.ml src/actioner.ml src/cleaner.ml src/promoter.ml src/installer.ml src/deps.ml src/env_report.ml src/graph.ml src/init.ml src/locker.ml src/migrate.ml src/repl.ml src/vendor.ml src/bootstrap.ml src/bench.ml
+BOOTSTRAP_LIBRARY_MODULE_STEMS := string_util fs process toolchain manifest explain layout builder actioner cleaner promoter installer deps env_report graph init locker migrate repl vendor bootstrap bench
 BOOTSTRAP_LIBRARY_PACKAGES := unix
 BOOTSTRAP_LIBRARY_ENV_PREFIX := 
 BOOTSTRAP_LIBRARY_COMPILE_FLAGS := 
