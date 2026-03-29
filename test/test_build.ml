@@ -320,6 +320,81 @@ deps = ["core"]
               "executables should compile against the generated wrapper module";
             assert_string_equal "wrapped\n" run.output
               "wrapped libraries should expose child modules through the namespace wrapper")) );
+    ( "builds wrapped libraries with a checked-in wrapper module and removes stale generated wrappers",
+      (fun () ->
+        with_temp_dir "oasis-wrapped-custom-wrapper" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+wrapped = true
+dir = "lib"
+modules = ["greeting"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/greeting.ml" {|let message = "wrapped"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.Greeting.message|};
+            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 first_build.status
+              "wrapped libraries should build before switching to a checked-in wrapper";
+            let generated_wrapper =
+              Filename.concat (Layout.library_out_dir workspace "core")
+                "generated/core.ml"
+            in
+            assert_file_exists generated_wrapper;
+            write_source workspace "lib/core.ml"
+              {|
+module Greeting = Greeting
+let message = Greeting.message ^ " via wrapper"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 second_build.status
+              "wrapped libraries should accept a checked-in wrapper module";
+            assert_true (not (Fs.exists generated_wrapper))
+              "a checked-in wrapper should replace the generated wrapper source instead of competing with stale materialized files";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables should compile against the checked-in wrapper module";
+            assert_string_equal "wrapped via wrapper\n" run.output
+              "checked-in wrapper modules should define the wrapped library surface")) );
+    ( "builds wrapped libraries with a checked-in wrapper interface",
+      (fun () ->
+        with_temp_dir "oasis-wrapped-wrapper-interface" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+wrapped = true
+dir = "lib"
+modules = ["greeting"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.mli"
+              {|
+module Greeting : sig
+  val message : string
+end
+|};
+            write_source workspace "lib/greeting.ml" {|let message = "interface"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.Greeting.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "wrapped libraries should support a checked-in wrapper interface";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables should compile against the checked-in wrapper interface";
+            assert_string_equal "interface\n" run.output
+              "checked-in wrapper interfaces should constrain the generated wrapper implementation")) );
     ( "rejects wrapped libraries that reuse the reserved wrapper stem",
       (fun () ->
         with_temp_dir "oasis-wrapped-conflict" (fun workspace ->
@@ -767,6 +842,66 @@ modules = ["version"]
               "the build should explain why the generated output is unsafe";
             assert_string_contains ~needle:"app/version.ml" build.output
               "the collision report should point at the checked-in source path")) );
+    ( "writes action stdout directly into declared generated outputs",
+      (fun () ->
+        with_temp_dir "oasis-action-stdout" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+outputs = ["version.ml"]
+stdout = "version.ml"
+sandbox = "target"
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nprintf 'let message = \"stdout\"\\n'\n");
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "actions should support redirecting stdout into declared outputs without a shell wrapper";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "action stdout builds should produce a runnable executable";
+            assert_string_equal "stdout\n" run.output
+              "action stdout redirection should materialize compiler-readable generated modules")) );
+    ( "feeds preprocessors from declared stdin_path inputs",
+      (fun () ->
+        with_temp_dir "oasis-preprocess-stdin-path" (fun workspace ->
+            write_manifest workspace
+              {|
+[preprocess.seed]
+argv = ["./scripts/cat.sh"]
+stdin_path = "fixtures/main_template.ml"
+deps = ["fixtures/main_template.ml"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+preprocess = ["seed"]
+|};
+            ignore
+              (write_executable workspace "scripts/cat.sh" "#!/bin/sh\ncat\n");
+            write_source workspace "fixtures/main_template.ml"
+              {|let () = print_endline "seeded"|};
+            write_source workspace "app/main.ml" {|let () = failwith "ignored"|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "preprocessors should support stdin_path-backed transforms without shell indirection";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "stdin_path preprocess builds should still produce runnable executables";
+            assert_string_equal "seeded\n" run.output
+              "stdin_path preprocessors should read from the declared file input instead of the original source contents")) );
     ( "applies named preprocessors in pipeline order",
       (fun () ->
         with_temp_dir "oasis-preprocess" (fun workspace ->

@@ -83,6 +83,30 @@ Examples:
 - `oasis test unit integration`
 - `oasis test --workspace examples/hello --profile ci --verbose`
 
+## bench
+
+Build executable targets and report stable benchmark timing summaries.
+
+Usage:
+
+`oasis bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--verbose, -v`: Print detailed process execution as commands run.
+- `--json`: Print machine-readable JSON output instead of the text report.
+- `--warmup COUNT`: Run each benchmark target COUNT warmup times before measuring.
+- `--iterations COUNT`: Run each benchmark target COUNT measured times.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis bench`
+- `oasis bench demo`
+- `oasis bench --warmup 1 --iterations 5 demo`
+- `oasis bench --json demo`
+
 ## clean
 
 Remove the whole artifact tree or only the requested target outputs.

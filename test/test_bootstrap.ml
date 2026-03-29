@@ -215,6 +215,47 @@ deps = ["core"]
               ~needle:("$(OBJ_DIR)/core.$(OBJ_EXT): " ^ wrapper_path ^ " $(BOOTSTRAP_MK) $(OBJ_DIR)/alpha.$(OBJ_EXT) | $(OBJ_DIR)")
               makefile
               "bootstrap generation should compile the generated wrapper after its child modules")) );
+    ( "uses checked-in wrapper modules in bootstrap plans without materializing generated wrappers",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-custom-wrapper" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+wrapped = true
+dir = "src"
+modules = ["alpha"]
+
+[executable.demo]
+dir = "src"
+main = "main"
+deps = ["core"]
+
+[test.suite]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+|};
+            write_source workspace "src/core.ml" {|module Alpha = Alpha|};
+            write_source workspace "src/alpha.ml" {|let value = "alpha"|};
+            write_source workspace "src/main.ml"
+              {|let () = print_endline Core.Alpha.value|};
+            write_source workspace "test/test_main.ml"
+              {|let () = print_endline Core.Alpha.value|};
+            let makefile = expect_ok (render_bootstrap workspace) in
+            let generated_wrapper =
+              Filename.concat workspace
+                "_bootstrap/materialized/default/library-core/generated/core.ml"
+            in
+            assert_true (not (Fs.exists generated_wrapper))
+              "bootstrap generation should not materialize a generated wrapper when a checked-in wrapper exists";
+            assert_string_contains
+              ~needle:"COMMON_OBJS := $(OBJ_DIR)/alpha.$(OBJ_EXT) $(OBJ_DIR)/core.$(OBJ_EXT)"
+              makefile
+              "checked-in wrapper modules should still participate in bootstrap object lists";
+            assert_string_contains
+              ~needle:"$(OBJ_DIR)/core.$(OBJ_EXT): src/core.ml $(BOOTSTRAP_MK) $(OBJ_DIR)/alpha.$(OBJ_EXT) | $(OBJ_DIR)"
+              makefile
+              "bootstrap generation should compile the checked-in wrapper source instead of a generated one")) );
     ( "renders the full bootstrap makefile through the compiled oasis binary",
       (fun () ->
         with_temp_dir "oasis-bootstrap-compiled" (fun workspace ->

@@ -28,12 +28,15 @@ type raw_action = {
   cwd : string option;
   deps : string list;
   outputs : string list;
+  stdin_path : string option;
+  stdout : string option;
 }
 
 type raw_preprocessor = {
   name : string;
   argv : string list;
   cwd : string option;
+  stdin_path : string option;
   deps : string list;
 }
 
@@ -328,6 +331,8 @@ let collect_results items f =
 type parsed_command = {
   argv : string list;
   cwd : string option;
+  stdin_path : string option;
+  stdout : string option;
 }
 
 type inferred_deps = {
@@ -345,20 +350,45 @@ let parse_run_like ~dir args =
   let* argv = atoms_of_values "run" args in
   match argv with
   | [] -> Error "dune run action is missing a program"
-  | prog :: rest -> Ok { argv = rebase_command_prog dir prog :: rest; cwd = None }
+  | prog :: rest ->
+      Ok
+        {
+          argv = rebase_command_prog dir prog :: rest;
+          cwd = None;
+          stdin_path = None;
+          stdout = None;
+        }
 
 let shell_fragment_of_command (command : parsed_command) =
-  match command.cwd with
-  | None -> shell_join command.argv
-  | Some cwd ->
-      "cd " ^ String_util.shell_quote cwd ^ " && " ^ shell_join command.argv
+  let base =
+    match command.cwd with
+    | None -> shell_join command.argv
+    | Some cwd ->
+        "cd " ^ String_util.shell_quote cwd ^ " && " ^ shell_join command.argv
+  in
+  base
+  ^
+  match command.stdin_path with
+  | Some path -> " < " ^ String_util.shell_quote path
+  | None -> ""
+  ^
+  match command.stdout with
+  | Some path -> " > " ^ String_util.shell_quote path
+  | None -> ""
 
 let rec parse_command_form ~dir = function
   | List (Atom "run" :: args) -> parse_run_like ~dir args
   | List [ Atom "bash"; Atom script ] ->
-      Ok { argv = [ "sh"; "-c"; script ]; cwd = None }
+      Ok
+        { argv = [ "sh"; "-c"; script ]; cwd = None; stdin_path = None; stdout = None }
   | List [ Atom "system"; Atom command ] ->
-      Ok { argv = [ "sh"; "-c"; command ]; cwd = None }
+      Ok
+        {
+          argv = [ "sh"; "-c"; command ];
+          cwd = None;
+          stdin_path = None;
+          stdout = None;
+        }
   | List [ Atom "copy"; Atom src; Atom dst ]
   | List [ Atom "copy#"; Atom src; Atom dst ] ->
       Ok
@@ -370,6 +400,8 @@ let rec parse_command_form ~dir = function
               rebase_dune_relative_path dir dst;
             ];
           cwd = None;
+          stdin_path = None;
+          stdout = None;
         }
   | List [ Atom "diff"; Atom left; Atom right ] ->
       Ok
@@ -382,21 +414,12 @@ let rec parse_command_form ~dir = function
               rebase_dune_relative_path dir right;
             ];
           cwd = None;
+          stdin_path = None;
+          stdout = None;
         }
   | List [ Atom "with-stdin-from"; Atom path; nested ] ->
       let* command = parse_command_form ~dir nested in
-      let input_path = rebase_dune_relative_path dir path in
-      Ok
-        {
-          argv =
-            [
-              "sh";
-              "-c";
-              shell_fragment_of_command command ^ " < "
-              ^ String_util.shell_quote input_path;
-            ];
-          cwd = None;
-        }
+      Ok { command with stdin_path = Some (rebase_dune_relative_path dir path) }
   | List [ Atom "chdir"; Atom cwd; nested ] ->
       let* command = parse_command_form ~dir nested in
       Ok
@@ -405,9 +428,10 @@ let rec parse_command_form ~dir = function
           cwd = Some (rebase_dune_relative_path dir cwd);
         }
   | List (Atom "progn" :: forms) ->
-      let* commands = collect_results forms (parse_command_form ~dir) in
-      if commands = [] then Error "dune progn action is empty"
+      if forms = [] then Error "dune progn action is empty"
+      else if List.length forms = 1 then parse_command_form ~dir (List.hd forms)
       else
+        let* commands = collect_results forms (parse_command_form ~dir) in
         Ok
           {
             argv =
@@ -418,6 +442,8 @@ let rec parse_command_form ~dir = function
                   (List.map shell_fragment_of_command commands);
               ];
             cwd = None;
+            stdin_path = None;
+            stdout = None;
           }
   | _ -> Error "unsupported dune action form"
 
@@ -435,16 +461,12 @@ let parse_rule_command ~dir ~outputs = function
       in
       Ok
         {
-          argv =
-            [
-              "sh";
-              "-c";
-              shell_join command.argv ^ " > " ^ String_util.shell_quote output;
-            ];
+          command with
           cwd =
             (match command.cwd with
             | Some _ as cwd -> cwd
             | None -> Some dir);
+          stdout = Some output;
         }
   | form -> parse_command_form ~dir form
 
@@ -688,6 +710,15 @@ let source_stems_in_dir dir =
            else None)
     |> List.sort_uniq String.compare
 
+let has_checked_in_wrapper_source dune_dir name =
+  Fs.exists (Filename.concat dune_dir (name ^ ".ml"))
+  || Fs.exists (Filename.concat dune_dir (name ^ ".mli"))
+
+let maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name modules =
+  if wrapped && has_checked_in_wrapper_source dune_dir name then
+    List.filter (fun module_name -> module_name <> name) modules
+  else modules
+
 let relative_dir workspace_root dune_path =
   let dune_dir = Filename.dirname dune_path in
   if dune_dir = workspace_root then "."
@@ -762,7 +793,13 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
         in
         let acc =
           with_preprocessor acc
-            { name; argv = command.argv; cwd; deps = inferred.deps }
+            {
+              name;
+              argv = command.argv;
+              cwd;
+              stdin_path = command.stdin_path;
+              deps = inferred.deps;
+            }
         in
         Ok (acc, [ name ], [])
     | Ok (Some _) ->
@@ -869,6 +906,8 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                   | None -> Some dir);
                 deps;
                 outputs;
+                stdin_path = command.stdin_path;
+                stdout = command.stdout;
               }
             in
             Ok (with_action acc action))
@@ -879,12 +918,15 @@ let parse_library ~workspace_root ~dune_path acc fields =
   let* public_name = optional_atom_field "public_name" fields in
   let* wrapped = optional_bool_field "wrapped" fields in
   let dir = relative_dir workspace_root dune_path in
+  let dune_dir = Filename.dirname dune_path in
   let inferred_modules = source_stems_in_dir (Filename.dirname dune_path) in
   let* modules = field_atoms "modules" fields in
+  let wrapped = Option.value ~default:true wrapped in
   let modules =
     match modules with
     | Some modules -> modules
-    | None -> inferred_modules
+    | None ->
+        maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name inferred_modules
   in
   let* libraries = optional_atom_list_field "libraries" fields in
   let* acc, preprocess, ppx =
@@ -897,7 +939,7 @@ let parse_library ~workspace_root ~dune_path acc fields =
           kind = Library;
           name;
           public_name;
-          wrapped = Option.value ~default:true wrapped;
+          wrapped;
           dir;
           main = None;
           modules = Some modules;
@@ -1179,6 +1221,14 @@ let render_action (action : raw_action) =
   | [] -> []
   | deps -> [ "deps = " ^ toml_array deps ])
   @
+  (match action.stdin_path with
+  | Some path -> [ "stdin_path = " ^ toml_string path ]
+  | None -> [])
+  @
+  (match action.stdout with
+  | Some path -> [ "stdout = " ^ toml_string path ]
+  | None -> [])
+  @
   match action.cwd with
   | Some cwd -> [ "cwd = " ^ toml_string cwd ]
   | None -> []
@@ -1191,6 +1241,10 @@ let render_preprocessor (tool : raw_preprocessor) =
   @
   (match tool.cwd with
   | Some cwd -> [ "cwd = " ^ toml_string cwd ]
+  | None -> [])
+  @
+  (match tool.stdin_path with
+  | Some path -> [ "stdin_path = " ^ toml_string path ]
   | None -> [])
   @
   match tool.deps with

@@ -308,12 +308,14 @@ let library_plan ~session ~workspace_root ~profile workspace index library =
       ~pipeline
   in
   let* () =
-    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize ~out_dir
-      library
+    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize
+      ~workspace_root ~out_dir library
   in
   let* sources =
     Builder.library_source_descriptors ~workspace_root ~out_dir
-      ~planned_generated_outputs:(Builder.wrapped_library_generated_outputs library)
+      ~planned_generated_outputs:
+        (Builder.wrapped_library_generated_outputs ~workspace_root library
+        @ Builder.planned_generated_output_names pipeline.actions)
       library
   in
   let* prepared_sources =
@@ -362,12 +364,16 @@ let runnable_plan ~session ~workspace_root ~profile workspace index ~kind runnab
   let* module_sources =
     Builder.source_descriptors ~workspace_root
       ~generated_root:(Builder.generated_root out_dir)
-      ~planned_generated_outputs:[] ~dir:runnable.dir runnable.modules
+      ~planned_generated_outputs:
+        (Builder.planned_generated_output_names pipeline.actions)
+      ~dir:runnable.dir runnable.modules
   in
   let* main_source =
     Builder.source_descriptor ~workspace_root
       ~generated_root:(Builder.generated_root out_dir)
-      ~planned_generated_outputs:[] ~dir:runnable.dir runnable.main
+      ~planned_generated_outputs:
+        (Builder.planned_generated_output_names pipeline.actions)
+      ~dir:runnable.dir runnable.main
   in
   let all_sources = module_sources @ [ main_source ] in
   let* prepared_sources =

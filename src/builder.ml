@@ -292,6 +292,17 @@ let action_output_paths out_dir (action : Manifest.action) =
   let root = generated_root out_dir in
   List.map (fun output -> Filename.concat root output) action.outputs
 
+let dedup_optional_path path paths =
+  match path with
+  | Some path -> String_util.dedup_preserve (paths @ [ path ])
+  | None -> paths
+
+let action_declared_inputs (action : Manifest.action) =
+  dedup_optional_path action.stdin_path action.deps
+
+let preprocessor_declared_inputs (tool : Manifest.command_tool) =
+  dedup_optional_path tool.stdin_path tool.deps
+
 let planned_generated_output_names actions =
   List.concat_map
     (fun (action : Manifest.action) -> action.outputs)
@@ -301,8 +312,30 @@ let planned_generated_output_names actions =
 let wrapped_library_stems (library : Manifest.library) =
   if library.wrapped then [ library.name ] else []
 
-let wrapped_library_generated_outputs (library : Manifest.library) =
-  List.map (fun stem -> stem ^ ".ml") (wrapped_library_stems library)
+let wrapped_library_ml_name (library : Manifest.library) = library.name ^ ".ml"
+
+let wrapped_library_mli_name (library : Manifest.library) = library.name ^ ".mli"
+
+let wrapped_library_workspace_ml_path ~workspace_root (library : Manifest.library) =
+  Filename.concat workspace_root
+    (Filename.concat library.dir (wrapped_library_ml_name library))
+
+let wrapped_library_workspace_mli_path ~workspace_root
+    (library : Manifest.library) =
+  Filename.concat workspace_root
+    (Filename.concat library.dir (wrapped_library_mli_name library))
+
+let wrapped_library_has_checked_in_ml ~workspace_root library =
+  Fs.exists (wrapped_library_workspace_ml_path ~workspace_root library)
+
+let wrapped_library_has_checked_in_mli ~workspace_root library =
+  Fs.exists (wrapped_library_workspace_mli_path ~workspace_root library)
+
+let wrapped_library_generated_outputs ~workspace_root
+    (library : Manifest.library) =
+  if library.wrapped && not (wrapped_library_has_checked_in_ml ~workspace_root library)
+  then [ wrapped_library_ml_name library ]
+  else []
 
 let wrapped_library_module_name stem = String.capitalize_ascii stem
 
@@ -329,56 +362,46 @@ let validate_wrapped_library_source_conflicts ~workspace_root
           reserved wrapper stem '%s'"
          library.name library.name)
   else
-    let wrapper_ml = library.name ^ ".ml" in
-    let wrapper_mli = library.name ^ ".mli" in
-    let workspace_wrapper_ml =
-      Filename.concat workspace_root (Filename.concat library.dir wrapper_ml)
+    let wrapper_ml = wrapped_library_ml_name library in
+    let wrapper_mli = wrapped_library_mli_name library in
+    let rec find_conflicting_action = function
+      | [] -> None
+      | (action : Manifest.action) :: rest ->
+          if List.mem wrapper_ml action.outputs || List.mem wrapper_mli action.outputs
+          then
+            Some
+              ( action,
+                if List.mem wrapper_ml action.outputs then wrapper_ml else wrapper_mli
+              )
+          else find_conflicting_action rest
     in
-    let workspace_wrapper_mli =
-      Filename.concat workspace_root (Filename.concat library.dir wrapper_mli)
-    in
-    if Fs.exists workspace_wrapper_ml then
-      Error
-        (Printf.sprintf
-           "library '%s' sets wrapped = true, but %s already exists; wrapped \
-            libraries reserve module stem '%s' for the generated wrapper"
-           library.name workspace_wrapper_ml library.name)
-    else if Fs.exists workspace_wrapper_mli then
-      Error
-        (Printf.sprintf
-           "library '%s' sets wrapped = true, but %s already exists; wrapped \
-            libraries reserve module stem '%s' for the generated wrapper"
-           library.name workspace_wrapper_mli library.name)
-    else
-      let rec find_conflicting_action = function
-        | [] -> None
-        | (action : Manifest.action) :: rest ->
-            if List.mem wrapper_ml action.outputs || List.mem wrapper_mli action.outputs
-            then Some (action, if List.mem wrapper_ml action.outputs then wrapper_ml else wrapper_mli)
-            else find_conflicting_action rest
-      in
-      match find_conflicting_action actions with
-      | Some (action, output) ->
-          Error
-            (Printf.sprintf
-               "library '%s' sets wrapped = true, but action '%s' also \
-                declares output '%s'; wrapped libraries reserve module stem \
-                '%s' for the generated wrapper"
-               library.name action.name output library.name)
-      | None -> Ok ()
+    match find_conflicting_action actions with
+    | Some (action, output) ->
+        Error
+          (Printf.sprintf
+             "library '%s' sets wrapped = true, but action '%s' also \
+              declares output '%s'; wrapped libraries reserve module stem '%s' \
+              for the wrapper module"
+             library.name action.name output library.name)
+    | None -> Ok ()
 
-let materialize_wrapped_library_source ~mode ~out_dir (library : Manifest.library)
-    =
+let wrapped_library_generated_ml_path out_dir (library : Manifest.library) =
+  Filename.concat (generated_root out_dir) (wrapped_library_ml_name library)
+
+let materialize_wrapped_library_source ~mode ~workspace_root ~out_dir
+    (library : Manifest.library) =
   if (not library.wrapped) || mode = Plan_only then Ok ()
   else
-    let path =
-      Filename.concat (generated_root out_dir) (library.name ^ ".ml")
-    in
-    let contents = wrapped_library_source_contents library in
-    if Fs.exists path && Fs.read_file path = contents then Ok ()
-    else (
-      Fs.write_file path contents;
+    let path = wrapped_library_generated_ml_path out_dir library in
+    if wrapped_library_has_checked_in_ml ~workspace_root library then (
+      if Fs.exists path then Fs.remove_tree path;
       Ok ())
+    else
+      let contents = wrapped_library_source_contents library in
+      if Fs.exists path && Fs.read_file path = contents then Ok ()
+      else (
+        Fs.write_file path contents;
+        Ok ())
 
 let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     ~dir stem =
@@ -389,7 +412,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     List.mem (stem ^ ".ml") planned_generated_outputs
   in
   let ml_path =
-    if Fs.exists generated_ml_path || generated_ml_declared then generated_ml_path
+    if generated_ml_declared then generated_ml_path
     else workspace_ml_path
   in
   let ml_exists = Fs.exists ml_path in
@@ -400,7 +423,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     List.mem (stem ^ ".mli") planned_generated_outputs
   in
   let mli_path =
-    if Fs.exists generated_mli_path || generated_mli_declared then generated_mli_path
+    if generated_mli_declared then generated_mli_path
     else workspace_mli_path
   in
   let mli_exists = Fs.exists mli_path in
@@ -617,6 +640,11 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
           copy_once "action program" prog
         else Ok ()
       in
+      let* () =
+        match action.Manifest.stdin_path with
+        | Some path -> copy_once "action stdin_path" path
+        | None -> Ok ()
+      in
       List.fold_left
         (fun result dep ->
           let* () = result in
@@ -660,6 +688,12 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
   (match action.stdin with
   | Some stdin -> append_line buffer ("stdin " ^ Digest.to_hex (Digest.string stdin))
   | None -> ());
+  (match action.stdin_path with
+  | Some path -> append_line buffer ("stdin-path " ^ path)
+  | None -> ());
+  (match action.stdout with
+  | Some path -> append_line buffer ("stdout " ^ path)
+  | None -> ());
   List.iter (append_line buffer)
     (command_fingerprint_lines ~workspace_root action.argv);
   List.iter
@@ -669,10 +703,22 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
     action.outputs;
   let* dependency_lines =
     dependency_fingerprint_lines ~workspace_root ~line_prefix:"dep"
-      ~error_label:"action dependency" action.deps
+      ~error_label:"action dependency" (action_declared_inputs action)
   in
   List.iter (append_line buffer) dependency_lines;
   Ok (Buffer.contents buffer)
+
+let input_string_for_path ~workspace_root ~label relative_path =
+  let path = Filename.concat workspace_root relative_path in
+  if Fs.exists path && not (Fs.is_directory path) then Ok (Fs.read_file path)
+  else
+    Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
+
+let sandbox_input_string ~sandbox_root ~label relative_path =
+  let path = Filename.concat sandbox_root relative_path in
+  if Fs.exists path && not (Fs.is_directory path) then Ok (Fs.read_file path)
+  else
+    Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
 
 let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
     (action : Manifest.action) =
@@ -718,11 +764,34 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
           | Some cwd -> Filename.concat sandbox_root cwd
           | None -> default_cwd
         in
+        let sandbox_target_dir = Filename.concat sandbox_root target_dir in
+        let* stdin =
+          match (action.stdin, action.stdin_path) with
+          | Some stdin, None -> Ok (Some stdin)
+          | None, Some path ->
+              let* stdin = sandbox_input_string ~sandbox_root
+                  ~label:"action stdin_path" path
+              in
+              Ok (Some stdin)
+          | None, None -> Ok None
+          | Some _, Some _ ->
+              Error
+                "internal error: action manifest resolved both stdin and stdin_path"
+        in
+        let* () =
+          match action.stdout with
+          | Some output ->
+              Fs.ensure_dir (Filename.dirname (Filename.concat sandbox_target_dir output));
+              Ok ()
+          | None -> Ok ()
+        in
+        let stdout_path =
+          Option.map (Filename.concat sandbox_target_dir) action.stdout
+        in
         let* _ =
-          Process.ensure_success ~cwd ~env ?stdin:action.stdin prog args
+          Process.ensure_success ~cwd ~env ?stdin ?stdout_path prog args
         in
         Fs.ensure_dir generated_dir;
-        let sandbox_target_dir = Filename.concat sandbox_root target_dir in
         let* () =
           List.fold_left
             (fun result output ->
@@ -861,7 +930,12 @@ let run_preprocessor ~workspace_root ~target_env (tool : Manifest.command_tool)
   let cwd =
     command_cwd ~workspace_root ~default_dir:workspace_root tool.Manifest.cwd
   in
-  let* outcome = Process.ensure_success ~cwd ~env ~stdin:input prog args in
+  let* stdin =
+    match tool.stdin_path with
+    | Some path -> input_string_for_path ~workspace_root ~label:"preprocess stdin_path" path
+    | None -> Ok input
+  in
+  let* outcome = Process.ensure_success ~cwd ~env ~stdin prog args in
   Ok outcome.Process.output
 
 let planned_preprocessed_path out_dir logical_path =
@@ -978,6 +1052,10 @@ let render_preprocessor_command ~workspace_root ~target_env
     command_cwd ~workspace_root ~default_dir:workspace_root tool.Manifest.cwd
   in
   Process.render ~cwd ~env prog args
+  ^
+  match tool.stdin_path with
+  | Some path -> " < " ^ String_util.shell_quote path
+  | None -> ""
 
 let render_module_order_command ~session ~env ~package_resolution source_files =
   match source_files with
@@ -1181,13 +1259,17 @@ let target_extra_lines ~workspace_root ~profile pipeline action_results =
         let* dependency_lines =
           tool_dependency_fingerprint_lines ~workspace_root
             ~line_prefix:"preprocess-dep" ~error_label:"preprocessor" tool.name
-            tool.deps
+            (preprocessor_declared_inputs tool)
         in
         Ok
           (("preprocess " ^ tool.name)
           :: (match tool.cwd with
              | Some cwd -> [ "preprocess-cwd " ^ cwd ]
              | None -> [])
+          @
+          (match tool.stdin_path with
+          | Some path -> [ "preprocess-stdin-path " ^ tool.name ^ " " ^ path ]
+          | None -> [])
           @ List.map
               (fun (name, value) ->
                 "preprocess-env " ^ tool.name ^ " " ^ name ^ "=" ^ value)
@@ -1244,21 +1326,34 @@ let render_action_resolution_lines (action : Manifest.action) =
   let name = Manifest.action_display_name action in
   [
     "action " ^ name ^ " outputs: " ^ joined_names action.outputs;
-    "action " ^ name ^ " deps: " ^ joined_names action.deps;
+    "action " ^ name ^ " deps: " ^ joined_names (action_declared_inputs action);
   ]
   @
   (match action.cwd with
   | Some cwd -> [ "action " ^ name ^ " cwd: " ^ cwd ]
   | None -> [])
+  @
+  (match action.stdin_path with
+  | Some path -> [ "action " ^ name ^ " stdin_path: " ^ path ]
+  | None -> [])
+  @
+  (match action.stdout with
+  | Some path -> [ "action " ^ name ^ " stdout: " ^ path ]
+  | None -> [])
 
 let render_preprocessor_resolution_lines (tool : Manifest.command_tool) =
   let name = Manifest.command_tool_display_name tool in
   [
-    "preprocess " ^ name ^ " deps: " ^ joined_names tool.deps;
+    "preprocess " ^ name ^ " deps: "
+    ^ joined_names (preprocessor_declared_inputs tool);
   ]
   @
   (match tool.cwd with
   | Some cwd -> [ "preprocess " ^ name ^ " cwd: " ^ cwd ]
+  | None -> [])
+  @
+  (match tool.stdin_path with
+  | Some path -> [ "preprocess " ^ name ^ " stdin_path: " ^ path ]
   | None -> [])
 
 let render_ppx_resolution_lines (tool : Manifest.ppx_tool) =
@@ -1403,14 +1498,14 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   let* action_results =
     run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
-  let* () = materialize_wrapped_library_source ~mode ~out_dir library in
-  let wrapper_generated_outputs = wrapped_library_generated_outputs library in
+  let* () =
+    materialize_wrapped_library_source ~mode ~workspace_root ~out_dir library
+  in
+  let wrapper_generated_outputs =
+    wrapped_library_generated_outputs ~workspace_root library
+  in
   let planned_generated_outputs =
-    wrapper_generated_outputs
-    @
-    match mode with
-    | Materialize -> []
-    | Plan_only -> planned_generated_output_names pipeline.actions
+    wrapper_generated_outputs @ planned_generated_output_names pipeline.actions
   in
   let* sources =
     library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outputs
@@ -1669,9 +1764,7 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
   let planned_generated_outputs =
-    match mode with
-    | Materialize -> []
-    | Plan_only -> planned_generated_output_names pipeline.actions
+    planned_generated_output_names pipeline.actions
   in
   let* module_sources =
     source_descriptors ~workspace_root ~generated_root:(generated_root out_dir)

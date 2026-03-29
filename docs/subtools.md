@@ -20,8 +20,8 @@ exit codes rather than hidden global state.
 - `oasis run`: build and launch executables with exact argv and signal
   semantics.
 - `oasis test`: discover, build, run, and summarize test targets.
-- `oasis bench`: run benchmark targets with stable output and machine-readable
-  summaries.
+- `oasis bench`: build executable targets, run stable timing loops, and print
+  machine-readable summaries.
 
 ### Dependencies and packages
 

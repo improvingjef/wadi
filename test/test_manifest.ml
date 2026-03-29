@@ -183,6 +183,23 @@ modules = ["greeting"]
             assert_true library.wrapped
               "library wrapped mode should parse from boolean manifest fields"
         | _ -> fail "expected a single wrapped library target")) ;
+    ( "allows wrapped libraries to declare no child modules",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[library.core]
+wrapped = true
+dir = "lib"
+modules = []
+|})
+        in
+        match workspace.Manifest.targets with
+        | [ Manifest.Library library ] ->
+            assert_true (library.modules = [])
+              "wrapped libraries should be allowed to rely on an explicit wrapper without child modules"
+        | _ -> fail "expected a single wrapped library target")) ;
     ( "parses defaults, tools, and profile target overrides",
       (fun () ->
         let workspace =

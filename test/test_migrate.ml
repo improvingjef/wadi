@@ -86,6 +86,26 @@ let cases =
               ~needle:"[library.core]\ndir = \"lib\"\nmodules = [\"core\"]\n"
               migrate.output
               "wrapped=false dune libraries should still migrate as normal libraries")) );
+    ( "drops checked-in wrapper sources from migrated wrapped-library module lists",
+      (fun () ->
+        with_temp_dir "oasis-migrate-custom-wrapper" (fun workspace ->
+            write_workspace_file workspace "lib/dune"
+              {|
+(library
+ (name core))
+|};
+            write_source workspace "lib/core.ml" {|module Greeting = Greeting|};
+            write_source workspace "lib/greeting.ml" {|let message = "hello"|};
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should preserve wrapped libraries with checked-in wrapper modules";
+            assert_string_contains
+              ~needle:"[library.core]\nwrapped = true\ndir = \"lib\"\nmodules = [\"greeting\"]\n"
+              migrate.output
+              "migrate should omit the checked-in wrapper stem from wrapped-library child modules";
+            assert_string_not_contains ~needle:"modules = [\"core\", \"greeting\"]"
+              migrate.output
+              "migrate should not emit the wrapper stem as a child module")) );
     ( "infers helper modules for dune executables groups",
       (fun () ->
         with_temp_dir "oasis-migrate-executables" (fun workspace ->
@@ -184,7 +204,7 @@ version = 1
                   migrate.output
                   "migrate should resolve dune pps into ppx sections";
                 assert_string_contains
-                  ~needle:"[action.dune_action_3]\nargv = [\"sh\", \"-c\", \"'tools/version.sh' > 'version.ml'\"]\noutputs = [\"version.ml\"]\ndeps = [\"config/version.txt\"]\ncwd = \".\"\n"
+                  ~needle:"[action.dune_action_3]\nargv = [\"tools/version.sh\"]\noutputs = [\"version.ml\"]\ndeps = [\"config/version.txt\"]\nstdout = \"version.ml\"\ncwd = \".\"\n"
                   migrate.output
                   "migrate should turn dune rules into oasis actions";
                 assert_string_contains
@@ -265,7 +285,7 @@ version = 1
             assert_int_equal 0 migrate.status
               "migrate should support richer dune action forms without manual fallback";
             assert_string_contains
-              ~needle:"[preprocess.dune_preprocess_1]\nargv = [\"sh\", \"-c\", \"'tools/filter.sh' < 'fixtures/input.txt'\"]\ncwd = \".\"\ndeps = [\"fixtures/input.txt\"]\n"
+              ~needle:"[preprocess.dune_preprocess_1]\nargv = [\"tools/filter.sh\"]\ncwd = \".\"\nstdin_path = \"fixtures/input.txt\"\ndeps = [\"fixtures/input.txt\"]\n"
               migrate.output
               "migrate should translate with-stdin-from preprocess actions and infer their file deps";
             assert_string_contains

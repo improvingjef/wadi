@@ -182,8 +182,15 @@ let spawn ?cwd ?(env = []) ?stdin_fd ?stdout_fd ?stderr_fd ?(extra_closes = [])
           Unix._exit 127)
   | pid -> pid
 
-let run_capture ?cwd ?(verbose = false) ?(env = []) ?stdin prog args =
-  let command = render ?cwd ~env prog args in
+let render_with_redirects ?cwd ?(env = []) ?stdout_path prog args =
+  render ?cwd ~env prog args
+  ^
+  match stdout_path with
+  | Some path -> " > " ^ String_util.shell_quote path
+  | None -> ""
+
+let run_capture ?cwd ?(verbose = false) ?(env = []) ?stdin ?stdout_path prog args =
+  let command = render_with_redirects ?cwd ~env ?stdout_path prog args in
   if verbose then prerr_endline command;
   let read_fd, write_fd = Unix.pipe () in
   let stdin_read_fd, stdin_write_fd =
@@ -193,14 +200,26 @@ let run_capture ?cwd ?(verbose = false) ?(env = []) ?stdin prog args =
         (Some read_fd, Some write_fd)
     | None -> (None, None)
   in
+  let stdout_fd, extra_closes, close_parent_stdout =
+    match stdout_path with
+    | None -> (write_fd, [], fun () -> ())
+    | Some path ->
+        let output_fd =
+          Unix.openfile path
+            [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ]
+            0o644
+        in
+        (output_fd, [ output_fd ], fun () -> close_noerr output_fd)
+  in
   let pid =
-    spawn ?cwd ~env ?stdin_fd:stdin_read_fd ~stdout_fd:write_fd ~stderr_fd:write_fd
+    spawn ?cwd ~env ?stdin_fd:stdin_read_fd ~stdout_fd
+      ~stderr_fd:write_fd
       ~extra_closes:
-        (read_fd
-        :: List.filter_map Fun.id [ stdin_write_fd ])
+        (read_fd :: extra_closes @ List.filter_map Fun.id [ stdin_write_fd ])
       prog args
   in
   close_noerr write_fd;
+  close_parent_stdout ();
   (match stdin_read_fd with
   | Some fd -> close_noerr fd
   | None -> ());
@@ -240,8 +259,8 @@ let run_status ?cwd ?(verbose = false) ?(env = []) ?stdin prog args =
   let unix_status = waitpid pid in
   { command; status = status_to_code unix_status; unix_status }
 
-let ensure_success ?cwd ?verbose ?(env = []) ?stdin prog args =
-  let outcome = run_capture ?cwd ?verbose ~env ?stdin prog args in
+let ensure_success ?cwd ?verbose ?(env = []) ?stdin ?stdout_path prog args =
+  let outcome = run_capture ?cwd ?verbose ~env ?stdin ?stdout_path prog args in
   if is_success outcome.unix_status then Ok outcome
   else
     Error

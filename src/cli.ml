@@ -23,6 +23,17 @@ type test_options = {
   profile : string option;
 }
 
+type bench_options = {
+  workspace_dir : string;
+  verbose : bool;
+  targets : string list;
+  backend_request : Toolchain.backend_request;
+  profile : string option;
+  json : bool;
+  warmup : int;
+  iterations : int;
+}
+
 type clean_options = {
   workspace_dir : string;
   verbose : bool;
@@ -255,6 +266,20 @@ let script_option =
       "Read noninteractive toplevel phrases from PATH via stdin instead of passing a script file as an OCaml argv.";
   }
 
+let warmup_option =
+  {
+    usage = "--warmup COUNT";
+    flags = [ "--warmup" ];
+    description = "Run each benchmark target COUNT warmup times before measuring.";
+  }
+
+let iterations_option =
+  {
+    usage = "--iterations COUNT";
+    flags = [ "--iterations" ];
+    description = "Run each benchmark target COUNT measured times.";
+  }
+
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
 
 let completion_protocol_name = "__oasis_completion"
@@ -332,6 +357,34 @@ let test_doc =
         "oasis test --workspace examples/hello --profile ci --verbose";
       ];
     options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    completion_words = [];
+  }
+
+let bench_doc =
+  {
+    name = "bench";
+    summary =
+      "Build executable targets and report stable benchmark timing summaries.";
+    signature =
+      "oasis bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]";
+    examples =
+      [
+        "oasis bench";
+        "oasis bench demo";
+        "oasis bench --warmup 1 --iterations 5 demo";
+        "oasis bench --json demo";
+      ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        verbose_option;
+        json_option;
+        warmup_option;
+        iterations_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -558,6 +611,7 @@ let command_docs =
     graph_doc;
     run_doc;
     test_doc;
+    bench_doc;
     clean_doc;
     deps_doc;
     env_doc;
@@ -934,6 +988,63 @@ let parse_test_args (args : string list) : (test_options, string) result =
       targets = [];
       backend_request = default_backend_request;
       profile = None;
+    }
+    args
+
+let parse_count flag value =
+  try
+    let parsed = int_of_string value in
+    if parsed < 0 then
+      Error (Printf.sprintf "%s requires a non-negative integer" flag)
+    else Ok parsed
+  with
+  | Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
+
+let parse_iterations value =
+  let* parsed = parse_count "--iterations" value in
+  if parsed = 0 then Error "--iterations requires a positive integer" else Ok parsed
+
+let parse_bench_args (args : string list) : (bench_options, string) result =
+  let* default_backend_request = default_backend_request () in
+  let rec loop (options : bench_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--json" :: rest -> loop { options with json = true } rest
+    | "--warmup" :: value :: rest ->
+        let* warmup = parse_count "--warmup" value in
+        loop { options with warmup } rest
+    | "--warmup" :: [] -> Error "--warmup requires an integer"
+    | "--iterations" :: value :: rest ->
+        let* iterations = parse_iterations value in
+        loop { options with iterations } rest
+    | "--iterations" :: [] -> Error "--iterations requires an integer"
+    | "--help" :: _ -> Error (command_usage bench_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop
+    {
+      workspace_dir = ".";
+      verbose = false;
+      targets = [];
+      backend_request = default_backend_request;
+      profile = None;
+      json = false;
+      warmup = 1;
+      iterations = 5;
     }
     args
 
@@ -1334,7 +1445,7 @@ let find_command_doc name =
 
 let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
-  | "--output" | "--script" ->
+  | "--output" | "--script" | "--warmup" | "--iterations" ->
       true
   | _ -> false
 
@@ -1374,6 +1485,7 @@ let positional_completion_candidates ?workspace command_name rest =
             executable_target_candidates workspace
           else []
       | "test" -> test_target_candidates workspace
+      | "bench" -> executable_target_candidates workspace
       | "repl" ->
           if positional_argument_count rest = 0 then
             List.map target_candidate workspace.Manifest.targets
@@ -1599,6 +1711,24 @@ let run_tests (options : test_options) =
           ?profile:options.profile ~requested_targets:options.targets workspace
       with
       | Ok status -> Exit_code status
+      | Error message -> report_error message)
+
+let run_bench (options : bench_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Bench.report ~workspace_root:options.workspace_dir
+          ~verbose:options.verbose ~backend_request:options.backend_request
+          ?profile:options.profile ~warmup:options.warmup
+          ~iterations:options.iterations ~requested_targets:options.targets
+          workspace
+      with
+      | Ok summaries ->
+          print_string
+            (if options.json then Bench.render_json_report summaries
+             else Bench.render_report summaries);
+          Exit_code 0
       | Error message -> report_error message)
 
 let run_clean (options : clean_options) =
@@ -1833,6 +1963,7 @@ let commands =
     Command { doc = graph_doc; parse = parse_graph_args; run = run_graph };
     Command { doc = run_doc; parse = parse_run_args; run = run_executable };
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };
+    Command { doc = bench_doc; parse = parse_bench_args; run = run_bench };
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
     Command { doc = deps_doc; parse = parse_deps_args; run = run_deps };
     Command { doc = env_doc; parse = parse_env_args; run = run_env };

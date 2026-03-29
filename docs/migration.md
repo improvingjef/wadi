@@ -127,10 +127,17 @@ Important rules:
 - `oasis migrate` now infers `deps` for straightforward dune `action (run ...)`
   preprocessors and rules when the form names concrete file inputs directly,
   which cuts down the remaining review-only warnings.
+- dune `with-stdin-from` and `with-stdout-to` wrappers now migrate to
+  first-class `stdin_path` / `stdout` manifest fields when possible instead of
+  always collapsing into shell-quoted `sh -c` fallbacks.
 - common dune `rule` stanzas become `action.*` sections when oasis can map the
   targets, deps, and command form directly
 - Generated `.ml` or `.mli` files may not collide with checked-in source files
   in the target directory. Oasis fails fast instead of silently choosing one.
+- Wrapped libraries may keep a checked-in `Foo.ml` and/or `Foo.mli` wrapper.
+  When `oasis migrate` infers modules from the source tree, it omits that
+  wrapper stem from `modules = [...]` so the manifest matches the wrapped
+  library surface instead of fighting it.
 
 ## Multi-Package Workspaces
 

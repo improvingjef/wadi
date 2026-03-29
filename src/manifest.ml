@@ -54,6 +54,7 @@ type command_tool = {
   argv : string list;
   cwd : string option;
   env : env_binding list;
+  stdin_path : string option;
   deps : string list;
 }
 
@@ -73,6 +74,8 @@ type action = {
   outputs : string list;
   env : env_binding list;
   stdin : string option;
+  stdin_path : string option;
+  stdout : string option;
   sandbox : sandbox option;
 }
 
@@ -591,7 +594,7 @@ let parse_library path section name =
   let* packages = optional_strings path section "packages" in
   let* options = parse_target_options path section in
   let* () =
-    validate_identifier_list ~allow_empty:false path section.line "modules"
+    validate_identifier_list ~allow_empty:wrapped path section.line "modules"
       modules
   in
   let* () = validate_identifier_list ~allow_empty:true path section.line "deps" deps in
@@ -672,7 +675,17 @@ let parse_test path section name =
 let parse_action path section name =
   let* () =
     allowed_fields path section
-      [ "argv"; "cwd"; "deps"; "outputs"; "env"; "stdin"; "sandbox" ]
+      [
+        "argv";
+        "cwd";
+        "deps";
+        "outputs";
+        "env";
+        "stdin";
+        "stdin_path";
+        "stdout";
+        "sandbox";
+      ]
   in
   let* argv = required_strings path section "argv" in
   let* cwd = optional_string path section "cwd" in
@@ -680,6 +693,8 @@ let parse_action path section name =
   let* outputs = required_strings path section "outputs" in
   let* env = optional_env_bindings path section "env" in
   let* stdin = optional_string path section "stdin" in
+  let* stdin_path = optional_string path section "stdin_path" in
+  let* stdout = optional_string path section "stdout" in
   let* sandbox = optional_sandbox path section "sandbox" in
   let* () = validate_string_list path section.line "argv" argv in
   let* () = validate_relative_paths path section.line "deps" deps in
@@ -694,6 +709,32 @@ let parse_action path section name =
     | None -> Ok ()
     | Some cwd -> validate_relative_path ~allow_dot:true path section.line "cwd" cwd
   in
+  let* () =
+    match stdin_path with
+    | None -> Ok ()
+    | Some stdin_path ->
+        validate_relative_path ~allow_dot:false path section.line "stdin_path"
+          stdin_path
+  in
+  let* () =
+    match stdout with
+    | None -> Ok ()
+    | Some stdout ->
+        let* () =
+          validate_relative_path ~allow_dot:false path section.line "stdout"
+            stdout
+        in
+        if List.mem stdout outputs then Ok ()
+        else
+          error path section.line
+            "stdout must name one of the declared action outputs"
+  in
+  let* () =
+    match (stdin, stdin_path) with
+    | Some _, Some _ ->
+        error path section.line "stdin and stdin_path are mutually exclusive"
+    | _ -> Ok ()
+  in
   Ok
     {
       name;
@@ -704,14 +745,19 @@ let parse_action path section name =
       outputs;
       env;
       stdin;
+      stdin_path;
+      stdout;
       sandbox;
     }
 
 let parse_command_tool label path section name =
-  let* () = allowed_fields path section [ "argv"; "cwd"; "env"; "deps" ] in
+  let* () =
+    allowed_fields path section [ "argv"; "cwd"; "env"; "stdin_path"; "deps" ]
+  in
   let* argv = required_strings path section "argv" in
   let* cwd = optional_string path section "cwd" in
   let* env = optional_env_bindings path section "env" in
+  let* stdin_path = optional_string path section "stdin_path" in
   let* deps = optional_strings path section "deps" in
   let* () = validate_string_list path section.line "argv" argv in
   let* () = validate_relative_paths path section.line "deps" deps in
@@ -725,7 +771,14 @@ let parse_command_tool label path section name =
     | None -> Ok ()
     | Some cwd -> validate_relative_path ~allow_dot:true path section.line "cwd" cwd
   in
-  Ok { name; package_path = None; argv; cwd; env; deps }
+  let* () =
+    match stdin_path with
+    | None -> Ok ()
+    | Some stdin_path ->
+        validate_relative_path ~allow_dot:false path section.line "stdin_path"
+          stdin_path
+  in
+  Ok { name; package_path = None; argv; cwd; env; stdin_path; deps }
 
 let parse_ppx_tool path section name =
   let* () = allowed_fields path section [ "argv"; "deps" ] in
@@ -1063,6 +1116,9 @@ let rebase_action member_path (action : action) =
     argv = rebase_command_argv member_path action.argv;
     cwd =
       Option.map (rebase_relative_path ~allow_dot:true member_path) action.cwd;
+    stdin_path =
+      Option.map (rebase_relative_path ~allow_dot:false member_path)
+        action.stdin_path;
     deps = List.map (rebase_relative_path ~allow_dot:false member_path) action.deps;
   }
 
@@ -1072,6 +1128,9 @@ let rebase_preprocessor member_path (tool : command_tool) =
     package_path = Some member_path;
     argv = rebase_command_argv member_path tool.argv;
     cwd = Option.map (rebase_relative_path ~allow_dot:true member_path) tool.cwd;
+    stdin_path =
+      Option.map (rebase_relative_path ~allow_dot:false member_path)
+        tool.stdin_path;
     deps = List.map (rebase_relative_path ~allow_dot:false member_path) tool.deps;
   }
 

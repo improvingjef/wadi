@@ -59,9 +59,11 @@ Rules:
 - `public_name` controls the staged install name for libraries, `META` files, and executables.
 - `wrapped = true` generates a namespace wrapper module named after the library
   stem, so `core` exposes `Core.Alpha`, `Core.Beta`, and so on.
-- Wrapped libraries reserve the library-name stem for the generated wrapper. Do
-  not list it in `modules`, generate it from an action, or check in
-  `dir/<library>.ml` or `dir/<library>.mli`.
+- Wrapped libraries reserve the library-name stem for the wrapper surface. Do
+  not list it in `modules` or generate it from an action.
+- A wrapped library may provide a checked-in `dir/<library>.ml` and/or
+  `dir/<library>.mli` as the wrapper implementation/interface. If no checked-in
+  `.ml` exists, oasis generates the wrapper implementation automatically.
 
 ## Actions
 
@@ -72,7 +74,8 @@ cwd = "."
 deps = ["templates/version.txt"]
 outputs = ["version.ml"]
 env = ["MODE=release"]
-stdin = "template input"
+stdin_path = "templates/version.txt"
+stdout = "version.ml"
 sandbox = "target"
 ```
 
@@ -81,6 +84,12 @@ Rules:
 - `argv[0]` may be a relative program path.
 - `cwd` and `deps` are workspace-relative in the root manifest.
 - `outputs` are relative to the target directory.
+- `stdin` feeds literal text to the action process.
+- `stdin_path` feeds a workspace-relative file to stdin and is tracked as an
+  input.
+- `stdin` and `stdin_path` are mutually exclusive.
+- `stdout` redirects process stdout into one declared output path without
+  forcing a shell wrapper.
 - If an output is `.ml` or `.mli`, it may not collide with checked-in source in
   the target directory.
 - `sandbox = "workspace"` copies the workspace into the sandbox; `target`
@@ -93,10 +102,14 @@ Rules:
 argv = ["./scripts/expand.sh"]
 cwd = "scripts"
 env = ["MODE=pre"]
+stdin_path = "templates/banner.txt"
 deps = ["templates/banner.txt"]
 ```
 
-Preprocessors are stdin/stdout transforms applied in declared order.
+Preprocessors are stdin/stdout transforms applied in declared order. `stdin_path`
+lets a preprocessor read from a workspace file instead of the original source
+text, which is useful when migrating dune `with-stdin-from` forms without
+falling back to `sh -c`.
 
 Why `deps` matters:
 
