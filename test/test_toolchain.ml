@@ -56,7 +56,7 @@ let cases =
             assert_string_contains ~needle:"oasis toolchain" help.output
               "toolchain help should include the toolchain signature";
             assert_string_not_contains
-              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               help.output
               "toolchain help should stay scoped to the requested command")) );
   ]

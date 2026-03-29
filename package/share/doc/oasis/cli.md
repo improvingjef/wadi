@@ -8,10 +8,11 @@ Scaffold a minimal oasis workspace without hand-writing the first manifest.
 
 Usage:
 
-`oasis init [--dir DIR] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]`
+`oasis init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]`
 
 Options:
 - `--dir DIR`: Create or update the scaffold in DIR instead of the current directory.
+- `--member PATH`: Scaffold a package-local manifest at PATH and register it under members = [...].
 - `--name NAME`: Set the generated workspace or vendor name explicitly.
 - `--library NAME`: Scaffold a library target named NAME.
 - `--executable NAME`: Scaffold an executable target named NAME.
@@ -22,6 +23,7 @@ Options:
 Examples:
 - `oasis init`
 - `oasis init --name demo`
+- `oasis init --dir monorepo --member packages/core --library core`
 - `oasis init --dir examples/demo --library core --executable demo`
 - `oasis init --dir scratch --bare`
 
@@ -31,18 +33,21 @@ Compile libraries, executables, and tests into predictable artifact roots.
 
 Usage:
 
-`oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]`
+`oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
 - `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--locked`: Require oasis.lock to match the current manifest and resolved package paths before continuing.
+- `--warn-locked`: Warn when oasis.lock is missing or stale, but continue with the build or install.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis build`
 - `oasis build hello`
+- `oasis build --locked hello`
 - `oasis build --workspace examples/hello --profile release --verbose`
 
 ## action
@@ -64,6 +69,30 @@ Examples:
 - `oasis action core`
 - `oasis action demo`
 - `oasis action --profile release core demo`
+
+## ppx
+
+Inspect or dump the post-preprocess, post-PPX source for one target module.
+
+Usage:
+
+`oasis ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--verbose, -v`: Print detailed process execution as commands run.
+- `--interface`: Inspect or apply the target module interface (`.mli`) instead of the implementation.
+- `--plan`: Print the resolved preprocessor and PPX pipeline without dumping transformed source.
+- `--output PATH`: Write the transformed source to PATH instead of stdout.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis ppx demo`
+- `oasis ppx demo main`
+- `oasis ppx --interface core version`
+- `oasis ppx --plan demo main`
+- `oasis ppx --output _debug/main.ml demo main`
 
 ## graph
 
@@ -301,7 +330,7 @@ Stage installable libraries, executables, and metadata under a prefix.
 
 Usage:
 
-`oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]`
+`oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -309,12 +338,15 @@ Options:
 - `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
 - `--prefix DIR`: Stage installed files under DIR instead of the default profile root.
 - `--destdir DIR`: Prepend DIR to the resolved install prefix for packaging-style staging.
+- `--locked`: Require oasis.lock to match the current manifest and resolved package paths before continuing.
+- `--warn-locked`: Warn when oasis.lock is missing or stale, but continue with the build or install.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis install`
 - `oasis install hello`
+- `oasis install --warn-locked --prefix _stage hello`
 - `oasis install --prefix _stage hello greeting`
 - `oasis install --prefix /usr/local --destdir _pkg hello`
 

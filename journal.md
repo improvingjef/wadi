@@ -138,3 +138,9 @@
 - A useful first lock file does not need a dependency solver. Capturing manifest digests, resolved toolchain paths, backend choice, and `ocamlfind` package roots already makes dependency state reviewable.
 - Vendoring is mostly a manifest-edit problem, not a copy problem. The sharp edge is keeping vendored packages member-safe and updating `members = [...]` without forcing manual surgery in the root manifest.
 - Packaging metadata is part of the normal edit loop. Any tracked-file change that affects the source archive means the generated Homebrew checksum becomes stale immediately.
+
+## 2026-03-29
+
+- Lock validation needs both workspace-wide package-path checks and per-target closure checks, and the tests have to mutate the specific `package_paths` entries they mean to exercise. A naked string replacement against `unix` can accidentally hit recorded toolchain fields instead of the locked dependency graph.
+- `oasis ppx` is a source-inspection tool, not a runtime evaluator. If a test wants to prove “preprocessor plus PPX,” the PPX fixture has to rewrite the post-preprocess syntax tree the compiler actually sees rather than expecting runtime-style string concatenation from a pretty-printed source dump.
+- The bootstrap path is much better than the old hard-coded object lists, but `scripts/bootstrap_seed_metadata.mk` is still a visible maintenance seam whenever core-module ordering changes. Anything that still requires a tracked metadata refresh is a real source of friction, not just cleanup debt.

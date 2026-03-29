@@ -1,13 +1,20 @@
+type lock_policy =
+  | Ignore_lock
+  | Warn_locked
+  | Require_locked
+
 type build_options = {
   workspace_dir : string;
   verbose : bool;
   targets : string list;
   backend_request : Toolchain.backend_request;
   profile : string option;
+  lock_policy : lock_policy;
 }
 
 type init_options = {
   dir : string;
+  member_path : string option;
   name : string option;
   library : string option;
   executable : string option;
@@ -83,6 +90,17 @@ type lock_options = {
   stdout : bool;
 }
 
+type ppx_options = {
+  workspace_dir : string;
+  verbose : bool;
+  target : string option;
+  module_name : string option;
+  profile : string option;
+  interface : bool;
+  output_path : string option;
+  plan : bool;
+}
+
 type vendor_options = {
   workspace_dir : string;
   source_dir : string option;
@@ -118,6 +136,7 @@ type install_options = {
   profile : string option;
   prefix : string option;
   destdir : string option;
+  lock_policy : lock_policy;
 }
 
 type explain_options = {
@@ -250,6 +269,13 @@ let output_option =
     description = "Write the generated manifest to PATH instead of oasis.toml.";
   }
 
+let ppx_output_option =
+  {
+    usage = "--output PATH";
+    flags = [ "--output" ];
+    description = "Write the transformed source to PATH instead of stdout.";
+  }
+
 let stdout_option =
   {
     usage = "--stdout";
@@ -295,6 +321,14 @@ let plan_option =
       "Print the resolved REPL plan and exit without launching the toplevel.";
   }
 
+let ppx_plan_option =
+  {
+    usage = "--plan";
+    flags = [ "--plan" ];
+    description =
+      "Print the resolved preprocessor and PPX pipeline without dumping transformed source.";
+  }
+
 let script_option =
   {
     usage = "--script PATH";
@@ -332,6 +366,14 @@ let name_option =
     description = "Set the generated workspace or vendor name explicitly.";
   }
 
+let member_option =
+  {
+    usage = "--member PATH";
+    flags = [ "--member" ];
+    description =
+      "Scaffold a package-local manifest at PATH and register it under members = [...].";
+  }
+
 let library_name_option =
   {
     usage = "--library NAME";
@@ -353,11 +395,34 @@ let bare_option =
     description = "Write only a root manifest without any targets or source files.";
   }
 
+let locked_option =
+  {
+    usage = "--locked";
+    flags = [ "--locked" ];
+    description =
+      "Require oasis.lock to match the current manifest and resolved package paths before continuing.";
+  }
+
+let warn_locked_option =
+  {
+    usage = "--warn-locked";
+    flags = [ "--warn-locked" ];
+    description =
+      "Warn when oasis.lock is missing or stale, but continue with the build or install.";
+  }
+
 let source_option =
   {
     usage = "--source DIR";
     flags = [ "--source" ];
     description = "Copy the vendored package from DIR into vendor/NAME.";
+  }
+
+let interface_option =
+  {
+    usage = "--interface";
+    flags = [ "--interface" ];
+    description = "Inspect or apply the target module interface (`.mli`) instead of the implementation.";
   }
 
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
@@ -395,14 +460,24 @@ let build_doc =
     name = "build";
     summary = "Compile libraries, executables, and tests into predictable artifact roots.";
     signature =
-      "oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
+      "oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis build";
         "oasis build hello";
+        "oasis build --locked hello";
         "oasis build --workspace examples/hello --profile release --verbose";
       ];
-    options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        locked_option;
+        warn_locked_option;
+        verbose_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -411,17 +486,19 @@ let init_doc =
     name = "init";
     summary = "Scaffold a minimal oasis workspace without hand-writing the first manifest.";
     signature =
-      "oasis init [--dir DIR] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]";
+      "oasis init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]";
     examples =
       [
         "oasis init";
         "oasis init --name demo";
+        "oasis init --dir monorepo --member packages/core --library core";
         "oasis init --dir examples/demo --library core --executable demo";
         "oasis init --dir scratch --bare";
       ];
     options =
       [
         dir_option;
+        member_option;
         name_option;
         library_name_option;
         executable_name_option;
@@ -447,6 +524,34 @@ let action_doc =
         "oasis action --profile release core demo";
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
+    completion_words = [];
+  }
+
+let ppx_doc =
+  {
+    name = "ppx";
+    summary =
+      "Inspect or dump the post-preprocess, post-PPX source for one target module.";
+    signature =
+      "oasis ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]";
+    examples =
+      [
+        "oasis ppx demo";
+        "oasis ppx demo main";
+        "oasis ppx --interface core version";
+        "oasis ppx --plan demo main";
+        "oasis ppx --output _debug/main.ml demo main";
+      ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        verbose_option;
+        interface_option;
+        ppx_plan_option;
+        ppx_output_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -673,11 +778,12 @@ let install_doc =
     name = "install";
     summary = "Stage installable libraries, executables, and metadata under a prefix.";
     signature =
-      "oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]";
+      "oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis install";
         "oasis install hello";
+        "oasis install --warn-locked --prefix _stage hello";
         "oasis install --prefix _stage hello greeting";
         "oasis install --prefix /usr/local --destdir _pkg hello";
       ];
@@ -688,6 +794,8 @@ let install_doc =
         backend_option;
         prefix_option;
         destdir_option;
+        locked_option;
+        warn_locked_option;
         verbose_option;
         help_option;
       ];
@@ -788,6 +896,7 @@ let command_docs =
     init_doc;
     build_doc;
     action_doc;
+    ppx_doc;
     graph_doc;
     run_doc;
     test_doc;
@@ -1070,6 +1179,14 @@ let report_error message =
 
 let default_backend_request () = Toolchain.env_backend_request ()
 
+let choose_lock_policy current requested =
+  match (current, requested) with
+  | Ignore_lock, requested -> Ok requested
+  | Warn_locked, Ignore_lock | Require_locked, Ignore_lock -> Ok current
+  | Warn_locked, Warn_locked | Require_locked, Require_locked -> Ok current
+  | Warn_locked, Require_locked | Require_locked, Warn_locked ->
+      Error "--locked cannot be combined with --warn-locked"
+
 let parse_build_args (args : string list) : (build_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : build_options) = function
@@ -1085,6 +1202,12 @@ let parse_build_args (args : string list) : (build_options, string) result =
         loop { options with backend_request } rest
     | "--backend" :: [] ->
         Error "--backend requires auto, native, or bytecode"
+    | "--locked" :: rest ->
+        let* lock_policy = choose_lock_policy options.lock_policy Require_locked in
+        loop { options with lock_policy } rest
+    | "--warn-locked" :: rest ->
+        let* lock_policy = choose_lock_policy options.lock_policy Warn_locked in
+        loop { options with lock_policy } rest
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage build_doc)
@@ -1099,6 +1222,7 @@ let parse_build_args (args : string list) : (build_options, string) result =
       targets = [];
       backend_request = default_backend_request;
       profile = None;
+      lock_policy = Ignore_lock;
     }
     args
 
@@ -1107,6 +1231,9 @@ let parse_init_args (args : string list) : (init_options, string) result =
     | [] -> Ok options
     | "--dir" :: dir :: rest -> loop { options with dir } rest
     | "--dir" :: [] -> Error "--dir requires a directory"
+    | "--member" :: member_path :: rest ->
+        loop { options with member_path = Some member_path } rest
+    | "--member" :: [] -> Error "--member requires a path"
     | "--name" :: name :: rest -> loop { options with name = Some name } rest
     | "--name" :: [] -> Error "--name requires a value"
     | "--library" :: name :: rest ->
@@ -1125,6 +1252,7 @@ let parse_init_args (args : string list) : (init_options, string) result =
   loop
     {
       dir = ".";
+      member_path = None;
       name = None;
       library = None;
       executable = None;
@@ -1378,6 +1506,57 @@ let parse_lock_args (args : string list) : (lock_options, string) result =
   in
   loop { workspace_dir = "."; targets = []; output_path = None; stdout = false } args
 
+let parse_ppx_args (args : string list) : (ppx_options, string) result =
+  let rec loop (options : ppx_options) = function
+    | [] -> Ok options
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: value :: rest ->
+        loop { options with profile = Some value } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--interface" :: rest ->
+        loop { options with interface = true } rest
+    | "--plan" :: rest -> loop { options with plan = true } rest
+    | "--output" :: path :: rest ->
+        loop { options with output_path = Some path } rest
+    | "--output" :: [] -> Error "--output requires a path"
+    | "--help" :: _ -> Error (command_usage ppx_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | value :: rest -> (
+        match (options.target, options.module_name) with
+        | None, _ -> loop { options with target = Some value } rest
+        | Some _, None ->
+            loop { options with module_name = Some value } rest
+        | Some _, Some _ -> Error "ppx accepts at most TARGET and MODULE")
+  in
+  let* options =
+    loop
+      {
+        workspace_dir = ".";
+        verbose = false;
+        target = None;
+        module_name = None;
+        profile = None;
+        interface = false;
+        output_path = None;
+        plan = false;
+      }
+      args
+  in
+  match (options.target, options.module_name, options.plan, options.output_path) with
+  | None, _, _, _ -> Error "ppx requires a target name"
+  | Some _, None, false, Some _ ->
+      Error "ppx --output requires MODULE unless --plan is set"
+  | Some _, None, _, _ when options.interface ->
+      Error "ppx --interface requires MODULE"
+  | Some _, _, true, Some _ ->
+      Error "ppx --plan cannot be combined with --output"
+  | Some _, _, _, _ -> Ok options
+
 let parse_vendor_args (args : string list) : (vendor_options, string) result =
   let rec loop (options : vendor_options) = function
     | [] -> Ok options
@@ -1598,6 +1777,12 @@ let parse_install_args (args : string list) : (install_options, string) result =
     | "--destdir" :: destdir :: rest ->
         loop { options with destdir = Some destdir } rest
     | "--destdir" :: [] -> Error "--destdir requires a directory"
+    | "--locked" :: rest ->
+        let* lock_policy = choose_lock_policy options.lock_policy Require_locked in
+        loop { options with lock_policy } rest
+    | "--warn-locked" :: rest ->
+        let* lock_policy = choose_lock_policy options.lock_policy Warn_locked in
+        loop { options with lock_policy } rest
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage install_doc)
@@ -1614,6 +1799,7 @@ let parse_install_args (args : string list) : (install_options, string) result =
       profile = None;
       prefix = None;
       destdir = None;
+      lock_policy = Ignore_lock;
     }
     args
 
@@ -1747,7 +1933,7 @@ let find_command_doc name =
 let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
   | "--output" | "--script" | "--warmup" | "--iterations" | "--dir"
-  | "--name" | "--library" | "--executable" | "--source" ->
+  | "--name" | "--member" | "--library" | "--executable" | "--source" ->
       true
   | _ -> false
 
@@ -1783,6 +1969,10 @@ let positional_completion_candidates ?workspace command_name rest =
       | "build" | "action" | "clean" | "promote" | "graph" | "deps" | "lock"
       | "explain" ->
           List.map target_candidate workspace.Manifest.targets
+      | "ppx" ->
+          if positional_argument_count rest = 0 then
+            List.map target_candidate workspace.Manifest.targets
+          else []
       | "run" ->
           if positional_argument_count rest = 0 then
             executable_target_candidates workspace
@@ -1817,13 +2007,15 @@ let value_completion_candidates ?workspace = function
       | None -> [])
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
   | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script"
-  | "--dir" | "--name" | "--library" | "--executable" | "--source" ->
+  | "--dir" | "--name" | "--member" | "--library" | "--executable"
+  | "--source" ->
       []
   | _ -> []
 
 let value_completion_response ?workspace = function
   | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source" ->
       Complete_directories
+  | "--member" -> Complete_directories
   | "--output" | "--script" -> Complete_files
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
@@ -1950,23 +2142,44 @@ let resolve_explain_targets workspace requested_targets =
     in
     loop [] requested_targets
 
+let validate_lock_policy lock_policy ~workspace_root workspace requested_targets =
+  match lock_policy with
+  | Ignore_lock -> Ok ()
+  | Warn_locked -> (
+      match
+        Locker.validate_current ~workspace_root workspace requested_targets
+      with
+      | Ok () -> Ok ()
+      | Error message ->
+          prerr_endline ("oasis: warning: " ^ message);
+          Ok ())
+  | Require_locked ->
+      Locker.validate_current ~workspace_root workspace requested_targets
+
 let run_build (options : build_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        Builder.build ~workspace_root:options.workspace_dir
-          ~verbose:options.verbose ~requested_targets:options.targets
-          ~backend_request:options.backend_request ?profile:options.profile
-          workspace
+        validate_lock_policy options.lock_policy
+          ~workspace_root:options.workspace_dir workspace options.targets
       with
-      | Ok _ -> Exit_code 0
+      | Ok () -> (
+          match
+            Builder.build ~workspace_root:options.workspace_dir
+              ~verbose:options.verbose ~requested_targets:options.targets
+              ~backend_request:options.backend_request ?profile:options.profile
+              workspace
+          with
+          | Ok _ -> Exit_code 0
+          | Error message -> report_error message)
       | Error message -> report_error message)
 
 let run_init (options : init_options) =
   match
     Init.init ~root_dir:options.dir ?name:options.name ?library:options.library
-      ?executable:options.executable ~bare:options.bare ~force:options.force ()
+      ?executable:options.executable ?member:options.member_path
+      ~bare:options.bare ~force:options.force ()
   with
   | Ok report ->
       print_string (Init.render_report report);
@@ -2139,6 +2352,43 @@ let run_lock (options : lock_options) =
               print_endline ("Wrote lock file " ^ output_path);
               Exit_code 0))
 
+let run_ppx (options : ppx_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      let profile = resolve_profile workspace options.profile in
+      match options.target with
+      | None -> report_error "ppx requires a target name"
+      | Some target_name ->
+          if options.plan || options.module_name = None then
+            match
+              Ppx_tool.plan ~workspace_root:options.workspace_dir
+                ~verbose:options.verbose ?module_name:options.module_name
+                ~interface:options.interface ~profile workspace target_name
+            with
+            | Ok plan ->
+                print_string
+                  (Ppx_tool.render_plan ~workspace_root:options.workspace_dir
+                     plan);
+                Exit_code 0
+            | Error message -> report_error message
+          else
+            match options.module_name with
+            | None -> report_error "ppx requires MODULE unless --plan is used"
+            | Some module_name -> (
+                match
+                  Ppx_tool.apply ~workspace_root:options.workspace_dir
+                    ~verbose:options.verbose ~interface:options.interface
+                    ?output_path:options.output_path ~profile workspace
+                    target_name module_name
+                with
+                | Ok applied ->
+                    print_string
+                      (Ppx_tool.render_applied_report options.output_path
+                         applied);
+                    Exit_code 0
+                | Error message -> report_error message))
+
 let run_vendor (options : vendor_options) =
   match options.source_dir with
   | None -> report_error "vendor requires --source DIR"
@@ -2199,12 +2449,19 @@ let run_install (options : install_options) =
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        Installer.install ~workspace_root:options.workspace_dir
-          ~verbose:options.verbose ~backend_request:options.backend_request
-          ?profile:options.profile ?prefix:options.prefix ?destdir:options.destdir
-          ~requested_targets:options.targets workspace
+        validate_lock_policy options.lock_policy
+          ~workspace_root:options.workspace_dir workspace options.targets
       with
-      | Ok status -> Exit_code status
+      | Ok () -> (
+          match
+            Installer.install ~workspace_root:options.workspace_dir
+              ~verbose:options.verbose ~backend_request:options.backend_request
+              ?profile:options.profile ?prefix:options.prefix
+              ?destdir:options.destdir ~requested_targets:options.targets
+              workspace
+          with
+          | Ok status -> Exit_code status
+          | Error message -> report_error message)
       | Error message -> report_error message)
 
 let run_docs (_options : docs_options) =
@@ -2347,6 +2604,7 @@ let commands =
     Command { doc = init_doc; parse = parse_init_args; run = run_init };
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
     Command { doc = action_doc; parse = parse_action_args; run = run_action_command };
+    Command { doc = ppx_doc; parse = parse_ppx_args; run = run_ppx };
     Command { doc = graph_doc; parse = parse_graph_args; run = run_graph };
     Command { doc = run_doc; parse = parse_run_args; run = run_executable };
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };

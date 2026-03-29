@@ -90,4 +90,77 @@ let cases =
             assert_true
               (not (Fs.exists (Filename.concat workspace "lib")))
               "bare scaffolds should not create library trees") );
+    ( "initializes and registers member packages inside an existing workspace",
+      fun () ->
+        with_temp_dir "oasis-init-member" (fun parent ->
+            let workspace = Filename.concat parent "mono" in
+            let root =
+              run_oasis ~cwd:parent
+                [ "init"; "--dir"; workspace; "--name"; "mono"; "--bare" ]
+            in
+            assert_int_equal 0 root.status
+              "the root workspace scaffold should succeed before member init";
+            let init =
+              run_oasis ~cwd:parent
+                [
+                  "init";
+                  "--dir";
+                  workspace;
+                  "--member";
+                  "packages/app";
+                  "--executable";
+                  "demo";
+                ]
+            in
+            assert_int_equal 0 init.status
+              "init --member should scaffold package-local targets";
+            assert_string_contains ~needle:"Registered workspace member packages/app"
+              init.output
+              "member init should report root manifest registration";
+            assert_file_exists (Filename.concat workspace "packages/app/oasis.toml");
+            assert_file_exists (Filename.concat workspace "packages/app/app/main.ml");
+            assert_string_contains ~needle:{|members = ["packages/app"]|}
+              (Fs.read_file (manifest_path workspace))
+              "member init should register the member path in the root manifest";
+            let run = run_oasis ~cwd:workspace [ "run"; "demo" ] in
+            assert_int_equal 0 run.status
+              "member scaffolds should build from the workspace root immediately";
+            assert_string_contains ~needle:"Hello from app\n" run.output
+              "member executables should use the member scaffold greeting") );
+    ( "can bootstrap a multi-package workspace root and member in one command",
+      fun () ->
+        with_temp_dir "oasis-init-member-root" (fun parent ->
+            let workspace = Filename.concat parent "mono" in
+            let init =
+              run_oasis ~cwd:parent
+                [
+                  "init";
+                  "--dir";
+                  workspace;
+                  "--name";
+                  "mono";
+                  "--member";
+                  "packages/core";
+                  "--library";
+                  "core";
+                ]
+            in
+            assert_int_equal 0 init.status
+              "init --member should create a missing workspace root";
+            assert_file_exists (manifest_path workspace);
+            assert_file_exists (Filename.concat workspace "packages/core/oasis.toml");
+            assert_string_contains ~needle:{|workspace = "mono"|}
+              (Fs.read_file (manifest_path workspace))
+              "member bootstrapping should still name the root workspace";
+            assert_string_contains ~needle:{|members = ["packages/core"]|}
+              (Fs.read_file (manifest_path workspace))
+              "member bootstrapping should create the initial members list";
+            assert_string_not_contains ~needle:"workspace ="
+              (Fs.read_file (Filename.concat workspace "packages/core/oasis.toml"))
+              "member manifests should stay package-local";
+            let build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 build.status
+              "the bootstrapped member workspace should build immediately";
+            assert_string_contains ~needle:"Built library core" build.output
+              "the bootstrapped library member should compile from the root") );
   ]

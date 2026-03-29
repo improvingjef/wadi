@@ -5,6 +5,27 @@ let write_source workspace relative_path contents =
 
 let lock_path workspace = Filename.concat workspace "oasis.lock"
 
+let replace_once ~needle ~replacement text =
+  let needle_length = String.length needle in
+  let text_length = String.length text in
+  let rec find index =
+    if index + needle_length > text_length then None
+    else if String.sub text index needle_length = needle then Some index
+    else find (index + 1)
+  in
+  match find 0 with
+  | Some index ->
+      String.sub text 0 index ^ replacement
+      ^ String.sub text (index + needle_length)
+          (text_length - index - needle_length)
+  | None -> fail ("missing substring to replace: " ^ needle)
+
+let resolve_package_path package_name =
+  let outcome = Process.run_capture "ocamlfind" [ "query"; package_name ] in
+  assert_int_equal 0 outcome.status
+    ("expected ocamlfind query to resolve " ^ package_name);
+  String.trim outcome.output
+
 let cases =
   [
     ( "writes a lock file with toolchain facts and package resolutions",
@@ -95,4 +116,93 @@ main = "unit"
               contents "custom lock files should preserve the selected targets";
             assert_string_not_contains ~needle:{|"name":"unit"|} contents
               "custom lock files should omit unrelated targets") );
+    ( "build --locked accepts a matching lock snapshot",
+      fun () ->
+        with_temp_dir "oasis-lock-build" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+packages = ["unix"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.ml"
+              {|let message = Unix.getcwd () |> Filename.basename|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            assert_int_equal 0 lock.status
+              "lock should succeed before strict validation is exercised";
+            let build = run_oasis ~cwd:workspace [ "build"; "--locked"; "demo" ] in
+            assert_int_equal 0 build.status
+              "build --locked should succeed when oasis.lock matches";
+            assert_string_contains ~needle:"Built executable demo" build.output
+              "build --locked should still perform the build") );
+    ( "build --locked fails when package paths drift from the lock snapshot",
+      fun () ->
+        with_temp_dir "oasis-lock-drift" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+packages = ["unix"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let message = "locked"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            assert_int_equal 0 lock.status
+              "lock should succeed before drift is introduced";
+            let unix_path = resolve_package_path "unix" in
+            let package_entry =
+              Printf.sprintf {|"name":"unix","path":"%s"|} unix_path
+            in
+            let drifted =
+              replace_once ~needle:package_entry
+                ~replacement:{|"name":"unix","path":"/tmp/drifted-unix"|}
+                (Fs.read_file (lock_path workspace))
+            in
+            Fs.write_file (lock_path workspace) drifted;
+            let build = run_oasis ~cwd:workspace [ "build"; "--locked"; "demo" ] in
+            assert_true (build.status <> 0)
+              "build --locked should fail when a locked package path changes";
+            assert_string_contains ~needle:"package 'unix' path drifted"
+              build.output
+              "strict lock validation should explain which package drifted";
+            assert_string_contains ~needle:"Refresh the snapshot with `oasis lock`."
+              build.output
+              "strict lock validation should explain how to refresh the snapshot") );
+    ( "install --warn-locked reports drift but still stages artifacts",
+      fun () ->
+        with_fixture "hello" (fun workspace ->
+            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            assert_int_equal 0 lock.status
+              "lock should succeed before warning-mode validation is exercised";
+            let drifted =
+              replace_once ~needle:{|"path":"oasis.toml"|} ~replacement:{|"path":"stale.toml"|}
+                (Fs.read_file (lock_path workspace))
+            in
+            Fs.write_file (lock_path workspace) drifted;
+            let prefix = Filename.concat workspace "_warn-stage" in
+            let install =
+              run_oasis ~cwd:workspace
+                [ "install"; "--warn-locked"; "--prefix"; prefix; "hello" ]
+            in
+            assert_int_equal 0 install.status
+              "install --warn-locked should continue when the snapshot is stale";
+            assert_string_contains ~needle:"warning: lock validation failed against"
+              install.output
+              "warning mode should surface the lock drift";
+            assert_file_exists (Filename.concat prefix "bin/hello")) );
   ]

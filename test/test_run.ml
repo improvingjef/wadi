@@ -159,6 +159,174 @@ main = "main"
               "run summaries should surface the member package path";
             assert_string_contains ~needle:"member run\n" run.output
               "run should still stream the executable output")) );
+    ( "inspects preprocessor and ppx pipelines for a selected module",
+      (fun () ->
+        with_temp_dir "oasis-ppx-plan" (fun workspace ->
+            let _ppx_binary =
+              Test_build.compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let replace_ppx_marker value =
+  let marker = "__PPX__" in
+  let marker_length = String.length marker in
+  let value_length = String.length value in
+  let rec find index =
+    if index + marker_length > value_length then None
+    else if String.sub value index marker_length = marker then Some index
+    else find (index + 1)
+  in
+  match find 0 with
+  | None -> None
+  | Some index ->
+      Some
+        (String.sub value 0 index ^ "rewritten by ppx"
+       ^ String.sub value (index + marker_length)
+           (value_length - index - marker_length))
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      {
+        pconst_desc = Pconst_string (value, _, delimiter);
+        pconst_loc = loc;
+      }
+    -> (
+      match replace_ppx_marker value with
+      | Some rewritten ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string (rewritten, loc, delimiter);
+          pconst_loc = loc;
+        }
+      | None -> default_mapper.expr mapper expression )
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            ignore
+              (write_executable workspace "tools/expand.sh"
+                 "#!/bin/sh\nset -eu\nsed 's/__PRE__/pre/g'\n");
+            write_manifest workspace
+              {|
+[preprocess.expand]
+argv = ["./tools/expand.sh"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__PRE__:__PPX__"|};
+            let plan =
+              run_oasis ~cwd:workspace [ "ppx"; "--plan"; "demo"; "main" ]
+            in
+            assert_int_equal 0 plan.status
+              "ppx --plan should inspect the selected target module";
+            assert_string_contains ~needle:"Target: demo" plan.output
+              "ppx plans should identify the selected target";
+            assert_string_contains ~needle:"Preprocessors:" plan.output
+              "ppx plans should list configured preprocessors";
+            assert_string_contains ~needle:"tools/expand.sh" plan.output
+              "ppx plans should show the resolved preprocessor command";
+            assert_string_contains ~needle:"PPX:" plan.output
+              "ppx plans should list configured ppx tools";
+            assert_string_contains ~needle:"ppx/rewrite.exe" plan.output
+              "ppx plans should show the resolved ppx executable";
+            assert_string_contains ~needle:"Selected-module: main" plan.output
+              "ppx plans should show the selected module";
+            assert_string_contains ~needle:"Prepared-source:" plan.output
+              "ppx plans should show the transformed input path";
+            assert_string_contains ~needle:"Compiler-command:" plan.output
+              "ppx plans should show the exact dump command")) );
+    ( "dumps transformed source for a module after preprocessors and ppx",
+      (fun () ->
+        with_temp_dir "oasis-ppx-apply" (fun workspace ->
+            let _ppx_binary =
+              Test_build.compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let replace_ppx_marker value =
+  let marker = "__PPX__" in
+  let marker_length = String.length marker in
+  let value_length = String.length value in
+  let rec find index =
+    if index + marker_length > value_length then None
+    else if String.sub value index marker_length = marker then Some index
+    else find (index + 1)
+  in
+  match find 0 with
+  | None -> None
+  | Some index ->
+      Some
+        (String.sub value 0 index ^ "rewritten by ppx"
+       ^ String.sub value (index + marker_length)
+           (value_length - index - marker_length))
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      {
+        pconst_desc = Pconst_string (value, _, delimiter);
+        pconst_loc = loc;
+      }
+    -> (
+      match replace_ppx_marker value with
+      | Some rewritten ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string (rewritten, loc, delimiter);
+          pconst_loc = loc;
+        }
+      | None -> default_mapper.expr mapper expression )
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            ignore
+              (write_executable workspace "tools/expand.sh"
+                 "#!/bin/sh\nset -eu\nsed 's/__PRE__/pre/g'\n");
+            write_manifest workspace
+              {|
+[preprocess.expand]
+argv = ["./tools/expand.sh"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__PRE__:__PPX__"|};
+            let dump = run_oasis ~cwd:workspace [ "ppx"; "demo"; "main" ] in
+            assert_int_equal 0 dump.status
+              "ppx should dump transformed source for the requested module";
+            assert_string_contains ~needle:"pre:rewritten by ppx" dump.output
+              "ppx output should reflect both preprocessor and ppx rewrites";
+            assert_string_not_contains ~needle:"__PRE__" dump.output
+              "ppx output should not leave the preprocessor marker behind";
+            assert_string_not_contains ~needle:"__PPX__" dump.output
+              "ppx output should not leave the ppx marker behind")) );
     ( "runs declared actions without compiling target artifacts",
       (fun () ->
         with_temp_dir "oasis-action" (fun workspace ->
@@ -335,14 +503,17 @@ actions = ["generate"]
             assert_true (run.status <> 0)
               "invoking oasis without a command should print usage";
             assert_string_contains
-              ~needle:"oasis init [--dir DIR] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]"
+              ~needle:"oasis init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]"
               run.output "top-level usage should include the init command";
             assert_string_contains
-              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
               ~needle:"oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the action command";
+            assert_string_contains
+              ~needle:"oasis ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]"
+              run.output "top-level usage should include the ppx command";
             assert_string_contains
               ~needle:"oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               run.output "top-level usage should include the run command";
@@ -374,7 +545,7 @@ actions = ["generate"]
               ~needle:"oasis repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]"
               run.output "top-level usage should include the repl command";
             assert_string_contains
-              ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]"
+              ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the install command";
             assert_string_contains ~needle:"oasis docs" run.output
               "top-level usage should include the docs command";
@@ -400,7 +571,7 @@ actions = ["generate"]
               ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
               help.output "explain help should include the explain signature";
             assert_string_not_contains
-              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               help.output
               "command-specific help should not include unrelated commands")) );
     ( "prints command-specific help from the command table",
@@ -410,7 +581,7 @@ actions = ["generate"]
             assert_true (help.status <> 0)
               "build --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               help.output "build help should include the build signature";
             assert_string_not_contains
               ~needle:"oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
@@ -430,6 +601,8 @@ actions = ["generate"]
               "docs output should include the graph command";
             assert_string_contains ~needle:"## action" docs.output
               "docs output should include the action command";
+            assert_string_contains ~needle:"## ppx" docs.output
+              "docs output should include the ppx command";
             assert_string_contains ~needle:"## deps" docs.output
               "docs output should include the deps command";
             assert_string_contains ~needle:"## lock" docs.output
@@ -466,6 +639,22 @@ actions = ["generate"]
               ~needle:"- `--output PATH`: Write the generated manifest to PATH instead of oasis.toml."
               docs.output
               "docs output should include the migrate output-path description";
+            assert_string_contains
+              ~needle:"- `--member PATH`: Scaffold a package-local manifest at PATH and register it under members = [...]."
+              docs.output
+              "docs output should include the member init description";
+            assert_string_contains
+              ~needle:"- `--locked`: Require oasis.lock to match the current manifest and resolved package paths before continuing."
+              docs.output
+              "docs output should include the strict lock description";
+            assert_string_contains
+              ~needle:"- `--warn-locked`: Warn when oasis.lock is missing or stale, but continue with the build or install."
+              docs.output
+              "docs output should include the warning lock description";
+            assert_string_contains
+              ~needle:"- `--output PATH`: Write the transformed source to PATH instead of stdout."
+              docs.output
+              "docs output should include the ppx output description";
             assert_string_contains
               ~needle:"- `--stdout`: Print the generated output instead of writing a file."
               docs.output

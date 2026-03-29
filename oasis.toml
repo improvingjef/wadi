@@ -3,7 +3,7 @@ version = 1
 
 [library.oasis_core]
 dir = "src"
-modules = ["string_util", "fs", "process", "toolchain", "manifest", "explain", "layout", "builder", "actioner", "cleaner", "promoter", "installer", "deps", "env_report", "graph", "init", "locker", "migrate", "repl", "vendor", "bootstrap", "bench"]
+modules = ["string_util", "fs", "process", "toolchain", "manifest", "explain", "layout", "builder", "actioner", "cleaner", "promoter", "installer", "deps", "ppx_tool", "env_report", "graph", "vendor", "init", "locker", "migrate", "repl", "bootstrap", "bench"]
 packages = ["unix"]
 
 [executable.oasis]

@@ -126,7 +126,10 @@
 117. [x] Implement `oasis init` so new workspaces stop starting with a blank `oasis.toml` and immediately scaffold into something that builds.
 118. [x] Implement `oasis lock` so resolved toolchain facts plus external package paths can be snapshotted into a reviewable machine-readable file.
 119. [x] Implement `oasis vendor` for local source dependencies so package-only manifests can be copied under `vendor/` and registered as workspace members without hand-editing the root manifest.
-120. [ ] Teach `oasis build` and `oasis install` to optionally consume `oasis.lock` and fail or warn when resolved package paths drift from the committed snapshot.
+120. [x] Teach `oasis build` and `oasis install` to optionally consume `oasis.lock` and fail or warn when resolved package paths drift from the committed snapshot.
 121. [ ] Extend `oasis vendor` beyond local directories to git/url sources plus checksum pinning so vendoring does not depend on a manual checkout step.
-122. [ ] Add `oasis init --member` plus multi-package templates so package scaffolding does not fall back to hand-edited `members = [...]`.
-123. [ ] Implement `oasis ppx` as an explicit inspect/apply subtool so preprocess and PPX debugging is as decomposed as build/action/promote.
+122. [x] Add `oasis init --member` plus multi-package templates so package scaffolding does not fall back to hand-edited `members = [...]`.
+123. [x] Implement `oasis ppx` as an explicit inspect/apply subtool so preprocess and PPX debugging is as decomposed as build/action/promote.
+124. [ ] Validate recorded `oasis.lock` toolchain facts like compiler version, stdlib/unix roots, and package search roots so snapshot drift cannot hide outside `package_paths`.
+125. [ ] Eliminate the remaining tracked `scripts/bootstrap_seed_metadata.mk` maintenance seam by deriving or refreshing seed metadata directly from the compiled planner during normal workflows.
+126. [ ] Add shared preprocess-plus-PPX fixture helpers for source-inspection tests so transform expectations follow real rewritten syntax instead of ad hoc test-only assumptions.
