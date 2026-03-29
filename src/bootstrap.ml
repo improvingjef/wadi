@@ -92,10 +92,11 @@ let ordered_module_plans ~workspace_root ~target_kind ~target_name ~dir ~modules
   let* sources =
     Builder.source_descriptors ~workspace_root
       ~generated_root:(Filename.concat workspace_root "_oasis-bootstrap-generated")
+      ~planned_generated_outputs:[]
       ~dir modules
   in
   let* prepared_sources =
-    Builder.prepare_sources ~workspace_root
+    Builder.prepare_sources ~mode:Builder.Materialize ~workspace_root
       ~out_dir:(Filename.concat workspace_root "_oasis-bootstrap-preprocessed")
       ~target_env:[] [] sources
   in
@@ -128,6 +129,7 @@ let append_main_module ~workspace_root (runnable : Manifest.runnable)
   let* main_source =
     Builder.source_descriptor ~workspace_root
       ~generated_root:(Filename.concat workspace_root "_oasis-bootstrap-generated")
+      ~planned_generated_outputs:[]
       ~dir:runnable.dir
       runnable.main
   in

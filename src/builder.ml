@@ -31,8 +31,10 @@ type source_descriptor = {
   stem : string;
   ml_path : string;
   ml_relative : string;
+  ml_exists : bool;
   mli_path : string;
   mli_relative : string;
+  mli_exists : bool;
   has_mli : bool;
 }
 
@@ -52,7 +54,12 @@ type resolved_pipeline = {
 type action_result = {
   name : string;
   fingerprint : string;
+  output_paths : string list;
 }
+
+type pipeline_mode =
+  | Materialize
+  | Plan_only
 
 type explain_report = {
   target_name : string;
@@ -274,20 +281,41 @@ let tool_dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label
           (fingerprint_dependency_line
              (line_prefix ^ " " ^ tool_name) relative_path path))
 
-let source_descriptor ~workspace_root ~generated_root ~dir stem =
+let action_output_paths out_dir (action : Manifest.action) =
+  let root = generated_root out_dir in
+  List.map (fun output -> Filename.concat root output) action.outputs
+
+let planned_generated_output_names actions =
+  List.concat_map
+    (fun (action : Manifest.action) -> action.outputs)
+    actions
+  |> String_util.dedup_preserve
+
+let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
+    ~dir stem =
   let ml_relative = Filename.concat dir (stem ^ ".ml") in
   let workspace_ml_path = Filename.concat workspace_root ml_relative in
   let generated_ml_path = Filename.concat generated_root (stem ^ ".ml") in
-  let ml_path =
-    if Fs.exists generated_ml_path then generated_ml_path else workspace_ml_path
+  let generated_ml_declared =
+    List.mem (stem ^ ".ml") planned_generated_outputs
   in
+  let ml_path =
+    if Fs.exists generated_ml_path || generated_ml_declared then generated_ml_path
+    else workspace_ml_path
+  in
+  let ml_exists = Fs.exists ml_path in
   let mli_relative = Filename.concat dir (stem ^ ".mli") in
   let workspace_mli_path = Filename.concat workspace_root mli_relative in
   let generated_mli_path = Filename.concat generated_root (stem ^ ".mli") in
-  let mli_path =
-    if Fs.exists generated_mli_path then generated_mli_path else workspace_mli_path
+  let generated_mli_declared =
+    List.mem (stem ^ ".mli") planned_generated_outputs
   in
-  if not (Fs.exists ml_path) then
+  let mli_path =
+    if Fs.exists generated_mli_path || generated_mli_declared then generated_mli_path
+    else workspace_mli_path
+  in
+  let mli_exists = Fs.exists mli_path in
+  if (not ml_exists) && not generated_ml_declared then
     Error
       (Printf.sprintf "missing source file for module '%s': %s" stem ml_path)
   else
@@ -296,13 +324,18 @@ let source_descriptor ~workspace_root ~generated_root ~dir stem =
         stem;
         ml_path;
         ml_relative;
+        ml_exists;
         mli_path;
         mli_relative;
-        has_mli = Fs.exists mli_path;
+        mli_exists;
+        has_mli = mli_exists || generated_mli_declared;
       }
 
-let source_descriptors ~workspace_root ~generated_root ~dir stems =
-  collect_results stems (source_descriptor ~workspace_root ~generated_root ~dir)
+let source_descriptors ~workspace_root ~generated_root ~planned_generated_outputs
+    ~dir stems =
+  collect_results stems
+    (source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
+       ~dir)
 
 let prepared_source_files prepared_source =
   match prepared_source.mli_compile_path with
@@ -314,37 +347,66 @@ let ordered_source_table sources =
   List.iter (fun source -> Hashtbl.replace table source.source.stem source) sources;
   table
 
+let infer_module_order_from_files ~session ~verbose ~env ~target_kind
+    ~target_name package_resolution requested source_files =
+  let* sorted_paths =
+    match
+      Toolchain.sort_sources ~session ~env ~verbose package_resolution source_files
+    with
+    | Ok sorted_paths -> Ok sorted_paths
+    | Error message ->
+        Error
+          (Printf.sprintf
+             "%s '%s' failed module dependency inference:\n%s" target_kind
+             target_name message)
+  in
+  let sorted_stems =
+    sorted_paths
+    |> List.filter_map (fun path ->
+           let stem = Filename.basename path |> Filename.remove_extension in
+           if List.mem stem requested then Some stem else None)
+    |> String_util.dedup_preserve
+  in
+  if List.length sorted_stems = List.length requested then Ok sorted_stems
+  else
+    Error
+      (Printf.sprintf
+         "%s '%s' failed to infer a complete module order for %s from ocamldep"
+         target_kind target_name (String.concat ", " requested))
+
 let infer_module_order ~session ~verbose ~env ~target_kind ~target_name
     package_resolution sources =
   if sources = [] then Ok []
   else
     let requested = List.map (fun source -> source.source.stem) sources in
     let source_files = List.concat_map prepared_source_files sources in
-    let* sorted_paths =
-      match
-        Toolchain.sort_sources ~session ~env ~verbose package_resolution
-          source_files
-      with
-      | Ok sorted_paths -> Ok sorted_paths
-      | Error message ->
-          Error
-            (Printf.sprintf
-               "%s '%s' failed module dependency inference:\n%s" target_kind
-               target_name message)
+    infer_module_order_from_files ~session ~verbose ~env ~target_kind
+      ~target_name package_resolution requested source_files
+
+let dry_run_module_order ~session ~verbose ~env ~target_kind ~target_name
+    ~preprocessors package_resolution sources =
+  if sources = [] then Ok []
+  else if preprocessors <> [] then
+    Ok (List.map (fun source -> source.source.stem) sources)
+  else
+    let requested = List.map (fun source -> source.source.stem) sources in
+    let source_files =
+      List.concat_map
+        (fun source ->
+          (if source.source.mli_exists then [ source.source.mli_path ] else [])
+          @
+          (if source.source.ml_exists then [ source.source.ml_path ] else []))
+        sources
     in
-    let sorted_stems =
-      sorted_paths
-      |> List.filter_map (fun path ->
-             let stem = Filename.basename path |> Filename.remove_extension in
-             if List.mem stem requested then Some stem else None)
-      |> String_util.dedup_preserve
-    in
-    if List.length sorted_stems = List.length requested then Ok sorted_stems
+    if List.length source_files <> List.length (List.concat_map prepared_source_files sources)
+    then Ok requested
     else
-      Error
-        (Printf.sprintf
-           "%s '%s' failed to infer a complete module order for %s from ocamldep"
-           target_kind target_name (String.concat ", " requested))
+      match
+        infer_module_order_from_files ~session ~verbose ~env ~target_kind
+          ~target_name package_resolution requested source_files
+      with
+      | Ok ordered -> Ok ordered
+      | Error _ -> Ok requested
 
 let target_is_up_to_date ~stamp_path expected_outputs fingerprint =
   Fs.exists stamp_path && List.for_all Fs.exists expected_outputs
@@ -373,10 +435,12 @@ let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
     (fun source ->
       append_line buffer
         (Printf.sprintf "ml %s %s" source.ml_relative
-           (Digest.to_hex (Digest.file source.ml_path)));
+           (if source.ml_exists then Digest.to_hex (Digest.file source.ml_path)
+            else "planned-generated"));
       append_line buffer
         (Printf.sprintf "mli %s %s" source.mli_relative
-           (if source.has_mli then Digest.to_hex (Digest.file source.mli_path)
+           (if source.mli_exists then Digest.to_hex (Digest.file source.mli_path)
+            else if source.has_mli then "planned-generated"
             else "missing")))
     sources;
   List.iter
@@ -509,14 +573,12 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
   let* fingerprint =
     action_fingerprint ~workspace_root ~target_env ~target_dir options action
   in
-  let generated_root = generated_root out_dir in
-  let output_paths =
-    List.map (fun output -> Filename.concat generated_root output) action.outputs
-  in
+  let generated_dir = generated_root out_dir in
+  let output_paths = action_output_paths out_dir action in
   let stamp_path = action_stamp_path out_dir action.name in
   Fs.ensure_dir (Filename.dirname stamp_path);
   if target_is_up_to_date ~stamp_path output_paths fingerprint then
-    Ok { name = action.name; fingerprint }
+    Ok { name = action.name; fingerprint; output_paths }
   else
     let sandbox = effective_sandbox options action in
     let env = Manifest.merge_env_bindings target_env action.env in
@@ -536,14 +598,14 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
         let* _ =
           Process.ensure_success ~cwd ~env ?stdin:action.stdin prog args
         in
-        Fs.ensure_dir generated_root;
+        Fs.ensure_dir generated_dir;
         let sandbox_target_dir = Filename.concat sandbox_root target_dir in
         let* () =
           List.fold_left
             (fun result output ->
               let* () = result in
               let src = Filename.concat sandbox_target_dir output in
-              let dst = Filename.concat generated_root output in
+              let dst = Filename.concat generated_dir output in
               if not (Fs.exists src) then
                 Error
                   (Printf.sprintf
@@ -556,7 +618,14 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
             (Ok ()) action.outputs
         in
         Fs.write_file stamp_path fingerprint;
-        Ok { name = action.name; fingerprint })
+        Ok { name = action.name; fingerprint; output_paths })
+
+let plan_action ~workspace_root ~out_dir ~target_dir ~target_env options
+    (action : Manifest.action) =
+  let* fingerprint =
+    action_fingerprint ~workspace_root ~target_env ~target_dir options action
+  in
+  Ok { name = action.name; fingerprint; output_paths = action_output_paths out_dir action }
 
 let resolve_pipeline ~workspace_root workspace ~profile target =
   let* options = Manifest.resolve_target_options workspace profile target in
@@ -613,13 +682,19 @@ let resolve_pipeline ~workspace_root workspace ~profile target =
   in
   Ok { options; actions; preprocessors; ppx_tools }
 
-let run_actions ~workspace_root ~out_dir ~target ~pipeline =
+let run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline =
   Fs.ensure_dir out_dir;
   let target_env = pipeline.options.env in
   let options = pipeline.options in
   collect_results pipeline.actions (fun action ->
-      run_action ~workspace_root ~out_dir ~target_dir:(Manifest.target_dir target)
-        ~target_env options action)
+      match mode with
+      | Materialize ->
+          run_action ~workspace_root ~out_dir ~target_dir:(Manifest.target_dir target)
+            ~target_env options action
+      | Plan_only ->
+          plan_action ~workspace_root ~out_dir
+            ~target_dir:(Manifest.target_dir target)
+            ~target_env options action)
 
 let run_preprocessor ~workspace_root ~target_env (tool : Manifest.command_tool)
     input =
@@ -632,9 +707,14 @@ let run_preprocessor ~workspace_root ~target_env (tool : Manifest.command_tool)
   let* outcome = Process.ensure_success ~cwd ~env ~stdin:input prog args in
   Ok outcome.Process.output
 
-let preprocess_source_path ~workspace_root ~out_dir ~target_env
+let planned_preprocessed_path out_dir logical_path =
+  Filename.concat (preprocessed_root out_dir) logical_path
+
+let preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
     (preprocessors : Manifest.command_tool list) logical_path source_path =
   if preprocessors = [] then Ok source_path
+  else if mode = Plan_only then
+    Ok (planned_preprocessed_path out_dir logical_path)
   else
     let* output =
       List.fold_left
@@ -643,16 +723,16 @@ let preprocess_source_path ~workspace_root ~out_dir ~target_env
           run_preprocessor ~workspace_root ~target_env tool input)
         (Ok (Fs.read_file source_path)) preprocessors
     in
-    let path = Filename.concat (preprocessed_root out_dir) logical_path in
+    let path = planned_preprocessed_path out_dir logical_path in
     Fs.write_file path output;
     Ok path
 
-let prepare_source ~workspace_root ~out_dir ~target_env
+let prepare_source ~mode ~workspace_root ~out_dir ~target_env
     (preprocessors : Manifest.command_tool list) source =
   let logical_ml_path = Filename.basename source.ml_relative in
   let* ml_compile_path =
-    preprocess_source_path ~workspace_root ~out_dir ~target_env preprocessors
-      logical_ml_path source.ml_path
+    preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
+      preprocessors logical_ml_path source.ml_path
   in
   let* mli_compile_path =
     match source.has_mli with
@@ -660,17 +740,17 @@ let prepare_source ~workspace_root ~out_dir ~target_env
     | true ->
         let logical_mli_path = Filename.basename source.mli_relative in
         let* path =
-          preprocess_source_path ~workspace_root ~out_dir ~target_env preprocessors
-            logical_mli_path source.mli_path
+          preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
+            preprocessors logical_mli_path source.mli_path
         in
         Ok (Some path)
   in
   Ok { source; ml_compile_path; mli_compile_path }
 
-let prepare_sources ~workspace_root ~out_dir ~target_env
+let prepare_sources ~mode ~workspace_root ~out_dir ~target_env
     (preprocessors : Manifest.command_tool list) sources =
   collect_results sources
-    (prepare_source ~workspace_root ~out_dir ~target_env preprocessors)
+    (prepare_source ~mode ~workspace_root ~out_dir ~target_env preprocessors)
 
 let expected_module_outputs backend out_dir stem =
   match backend with
@@ -732,6 +812,15 @@ let render_module_order_command ~session ~env ~package_resolution source_files =
           ("-sort" :: source_files)
       in
       Ok (Toolchain.render_invocation ~env invocation)
+
+let dry_run_module_order_command ~session ~env ~package_resolution
+    ~preprocessors source_files =
+  if source_files = [] then Ok "module-order not needed"
+  else if preprocessors <> [] || List.exists (fun path -> not (Fs.exists path)) source_files then
+    Ok
+      "module-order fallback: dry-run kept source transforms side-effect-free, \
+       so declared module order is shown"
+  else render_module_order_command ~session ~env ~package_resolution source_files
 
 let render_compile_commands ~session ~workspace_root ~backend ~out_dir
     ~include_dirs ~package_resolution ~compile_flags
@@ -836,6 +925,26 @@ let rec collect_dependency_closure index acc = function
             collect_dependency_closure index acc (dependency_names target @ rest)
         | None -> acc)
 
+let missing_action_output_reasons action_results =
+  List.concat_map
+    (fun (action_result : action_result) ->
+      List.filter_map
+        (fun path ->
+          if Fs.exists path then None else Some ("missing generated output: " ^ path))
+        action_result.output_paths)
+    action_results
+
+let include_action_output_reasons status action_results =
+  match missing_action_output_reasons action_results with
+  | [] -> status
+  | reasons ->
+      ({
+         Explain.build_status = Explain.Rebuilt;
+         Explain.reasons =
+           String_util.dedup_preserve (status.Explain.reasons @ reasons);
+       }
+        : Explain.target_status)
+
 let target_extra_lines ~workspace_root ~profile pipeline action_results =
   let option_lines =
     [
@@ -914,6 +1023,28 @@ let joined_names names =
   | [] -> "none"
   | names -> String.concat ", " names
 
+let render_action_resolution_lines (action : Manifest.action) =
+  [
+    "action " ^ action.name ^ " outputs: " ^ joined_names action.outputs;
+    "action " ^ action.name ^ " deps: " ^ joined_names action.deps;
+  ]
+  @
+  (match action.cwd with
+  | Some cwd -> [ "action " ^ action.name ^ " cwd: " ^ cwd ]
+  | None -> [])
+
+let render_preprocessor_resolution_lines (tool : Manifest.command_tool) =
+  [
+    "preprocess " ^ tool.name ^ " deps: " ^ joined_names tool.deps;
+  ]
+  @
+  (match tool.cwd with
+  | Some cwd -> [ "preprocess " ^ tool.name ^ " cwd: " ^ cwd ]
+  | None -> [])
+
+let render_ppx_resolution_lines (tool : Manifest.ppx_tool) =
+  [ "ppx " ^ tool.name ^ " deps: " ^ joined_names tool.deps ]
+
 let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     ~package_resolution (pipeline : resolved_pipeline) =
   let stdlib_line =
@@ -963,12 +1094,17 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
         (List.map
            (fun (tool : Manifest.command_tool) -> tool.name)
            pipeline.preprocessors);
+  ]
+  @ List.concat_map render_action_resolution_lines pipeline.actions
+  @ List.concat_map render_preprocessor_resolution_lines pipeline.preprocessors
+  @ [
     "ppx: "
     ^ joined_names
         (List.map
            (fun (tool : Manifest.ppx_tool) -> tool.name)
            pipeline.ppx_tools);
   ]
+  @ List.concat_map render_ppx_resolution_lines pipeline.ppx_tools
   @
   if package_resolution.Toolchain.packages = [] then []
   else
@@ -1006,7 +1142,7 @@ let write_target_report out_dir report json_report =
 
 let static_archive_path archive = Filename.remove_extension archive ^ ".a"
 
-let describe_library ~session ~workspace_root ~verbose ~manifest_path
+let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile workspace library
     library_outputs =
   let target = Manifest.Library library in
@@ -1033,20 +1169,34 @@ let describe_library ~session ~workspace_root ~verbose ~manifest_path
     Toolchain.resolve_packages ~session effective_packages
   in
   let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
-  let* action_results = run_actions ~workspace_root ~out_dir ~target ~pipeline in
+  let* action_results =
+    run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline
+  in
+  let planned_generated_outputs =
+    match mode with
+    | Materialize -> []
+    | Plan_only -> planned_generated_output_names pipeline.actions
+  in
   let* sources =
     source_descriptors ~workspace_root ~generated_root:(generated_root out_dir)
-      ~dir:library.dir library.modules
+      ~planned_generated_outputs ~dir:library.dir library.modules
   in
   let* prepared_sources =
     let target_env = pipeline.options.env in
-    prepare_sources ~workspace_root ~out_dir ~target_env pipeline.preprocessors
-      sources
+    prepare_sources ~mode ~workspace_root ~out_dir ~target_env
+      pipeline.preprocessors sources
   in
   let* ordered_modules =
-    infer_module_order ~session ~verbose ~env:(pipeline.options.env)
-      ~target_kind:"library" ~target_name:library.name package_resolution
-      prepared_sources
+    match mode with
+    | Materialize ->
+        infer_module_order ~session ~verbose ~env:(pipeline.options.env)
+          ~target_kind:"library" ~target_name:library.name package_resolution
+          prepared_sources
+    | Plan_only ->
+        dry_run_module_order ~session ~verbose ~env:(pipeline.options.env)
+          ~target_kind:"library" ~target_name:library.name
+          ~preprocessors:pipeline.preprocessors package_resolution
+          prepared_sources
   in
   let* extra_lines =
     target_extra_lines ~workspace_root ~profile pipeline action_results
@@ -1083,8 +1233,14 @@ let describe_library ~session ~workspace_root ~verbose ~manifest_path
   let include_dirs = out_dir :: dependency_include_dirs in
   let module_order_sources = List.concat_map prepared_source_files prepared_sources in
   let* module_order_command =
-    render_module_order_command ~session ~env:(pipeline.options.env)
-      ~package_resolution module_order_sources
+    match mode with
+    | Materialize ->
+        render_module_order_command ~session ~env:(pipeline.options.env)
+          ~package_resolution module_order_sources
+    | Plan_only ->
+        dry_run_module_order_command ~session ~env:(pipeline.options.env)
+          ~package_resolution ~preprocessors:pipeline.preprocessors
+          module_order_sources
   in
   let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
@@ -1113,6 +1269,11 @@ let describe_library ~session ~workspace_root ~verbose ~manifest_path
   let status =
     Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
       ~expected_outputs ~fingerprint
+  in
+  let status =
+    match mode with
+    | Materialize -> status
+    | Plan_only -> include_action_output_reasons status action_results
   in
   let resolution_lines =
     target_resolution_lines ~session ~backend_request ~backend
@@ -1154,9 +1315,9 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile workspace library
     library_outputs =
   let* description =
-    describe_library ~session ~workspace_root ~verbose ~manifest_path
-      ~backend_request ~backend ~compiler_version ~profile workspace library
-      library_outputs
+    describe_library ~mode:Materialize ~session ~workspace_root ~verbose
+      ~manifest_path ~backend_request ~backend ~compiler_version ~profile
+      workspace library library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
   if description.status.Explain.build_status = Explain.Reused then (
@@ -1218,7 +1379,7 @@ let runnable_kind_name = function
   | Executable_kind -> "executable"
   | Test_kind -> "test"
 
-let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
+let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile ~kind workspace
     runnable order index library_outputs =
   let target =
@@ -1249,19 +1410,26 @@ let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
     Toolchain.resolve_packages ~session effective_packages
   in
   let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
-  let* action_results = run_actions ~workspace_root ~out_dir ~target ~pipeline in
+  let* action_results =
+    run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline
+  in
+  let planned_generated_outputs =
+    match mode with
+    | Materialize -> []
+    | Plan_only -> planned_generated_output_names pipeline.actions
+  in
   let* module_sources =
     source_descriptors ~workspace_root ~generated_root:(generated_root out_dir)
-      ~dir:runnable.dir runnable.modules
+      ~planned_generated_outputs ~dir:runnable.dir runnable.modules
   in
   let* main_source =
     source_descriptor ~workspace_root ~generated_root:(generated_root out_dir)
-      ~dir:runnable.dir runnable.main
+      ~planned_generated_outputs ~dir:runnable.dir runnable.main
   in
   let* prepared_sources =
     let target_env = pipeline.options.env in
-    prepare_sources ~workspace_root ~out_dir ~target_env pipeline.preprocessors
-      (module_sources @ [ main_source ])
+    prepare_sources ~mode ~workspace_root ~out_dir ~target_env
+      pipeline.preprocessors (module_sources @ [ main_source ])
   in
   let module_prepared_sources =
     List.filter
@@ -1269,9 +1437,16 @@ let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
       prepared_sources
   in
   let* ordered_modules =
-    infer_module_order ~session ~verbose ~env:(pipeline.options.env)
-      ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name
-      package_resolution module_prepared_sources
+    match mode with
+    | Materialize ->
+        infer_module_order ~session ~verbose ~env:(pipeline.options.env)
+          ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name
+          package_resolution module_prepared_sources
+    | Plan_only ->
+        dry_run_module_order ~session ~verbose ~env:(pipeline.options.env)
+          ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name
+          ~preprocessors:pipeline.preprocessors package_resolution
+          module_prepared_sources
   in
   let sources = module_sources @ [ main_source ] in
   let source_order = ordered_modules @ [ runnable.main ] in
@@ -1325,8 +1500,14 @@ let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
     List.concat_map prepared_source_files module_prepared_sources
   in
   let* module_order_command =
-    render_module_order_command ~session ~env:(pipeline.options.env)
-      ~package_resolution module_order_sources
+    match mode with
+    | Materialize ->
+        render_module_order_command ~session ~env:(pipeline.options.env)
+          ~package_resolution module_order_sources
+    | Plan_only ->
+        dry_run_module_order_command ~session ~env:(pipeline.options.env)
+          ~package_resolution ~preprocessors:pipeline.preprocessors
+          module_order_sources
   in
   let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
@@ -1354,6 +1535,11 @@ let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
   let status =
     Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
       ~expected_outputs ~fingerprint
+  in
+  let status =
+    match mode with
+    | Materialize -> status
+    | Plan_only -> include_action_output_reasons status action_results
   in
   let resolution_lines =
     target_resolution_lines ~session ~backend_request ~backend
@@ -1395,9 +1581,9 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile ~kind workspace
     runnable order index library_outputs =
   let* description =
-    describe_runnable ~session ~workspace_root ~verbose ~manifest_path
-      ~backend_request ~backend ~compiler_version ~profile ~kind workspace
-      runnable order index library_outputs
+    describe_runnable ~mode:Materialize ~session ~workspace_root ~verbose
+      ~manifest_path ~backend_request ~backend ~compiler_version ~profile
+      ~kind workspace runnable order index library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
   if description.status.Explain.build_status = Explain.Reused then (
@@ -1549,9 +1735,9 @@ let explain_current ~workspace_root ?(requested_targets = [])
     | [] -> Ok ()
     | Manifest.Library library :: rest ->
         let* description =
-          describe_library ~session ~workspace_root ~verbose:false
-            ~manifest_path ~backend_request ~backend ~compiler_version
-            ~profile workspace library library_outputs
+          describe_library ~mode:Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend
+            ~compiler_version ~profile workspace library library_outputs
         in
         Hashtbl.replace library_outputs library.name
           {
@@ -1569,10 +1755,10 @@ let explain_current ~workspace_root ?(requested_targets = [])
         loop rest
     | Manifest.Executable executable :: rest ->
         let* description =
-          describe_runnable ~session ~workspace_root ~verbose:false
-            ~manifest_path ~backend_request ~backend ~compiler_version
-            ~profile ~kind:Executable_kind workspace executable order index
-            library_outputs
+          describe_runnable ~mode:Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend
+            ~compiler_version ~profile ~kind:Executable_kind workspace
+            executable order index library_outputs
         in
         Hashtbl.replace reports executable.name
           {
@@ -1583,9 +1769,10 @@ let explain_current ~workspace_root ?(requested_targets = [])
         loop rest
     | Manifest.Test test :: rest ->
         let* description =
-          describe_runnable ~session ~workspace_root ~verbose:false
-            ~manifest_path ~backend_request ~backend ~compiler_version
-            ~profile ~kind:Test_kind workspace test order index library_outputs
+          describe_runnable ~mode:Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend
+            ~compiler_version ~profile ~kind:Test_kind workspace test order
+            index library_outputs
         in
         Hashtbl.replace reports test.name
           {

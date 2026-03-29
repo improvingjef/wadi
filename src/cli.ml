@@ -50,7 +50,10 @@ type explain_options = {
   backend_specified : bool;
 }
 
-type completion_options = { shell : string }
+type completion_options = {
+  shell : string;
+  workspace_dir : string;
+}
 
 type docs_options = unit
 
@@ -147,7 +150,7 @@ let current_option =
     usage = "--current";
     flags = [ "--current" ];
     description =
-      "Compute a fresh rebuild explanation from current inputs without compiling or linking.";
+      "Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources.";
   }
 
 let build_doc =
@@ -256,9 +259,9 @@ let completion_doc =
   {
     name = "completion";
     summary = "Generate shell completion scripts from the live command table.";
-    signature = "oasis completion SHELL";
+    signature = "oasis completion [--workspace DIR] SHELL";
     examples = [ "oasis completion bash"; "oasis completion zsh"; "oasis completion fish" ];
-    options = [ help_option ];
+    options = [ workspace_option; help_option ];
     completion_words = [ "bash"; "zsh"; "fish" ];
   }
 
@@ -651,13 +654,23 @@ let parse_docs_args args =
   | _ -> Error "docs does not accept positional arguments"
 
 let parse_completion_args args =
-  match args with
-  | [ "--help" ] -> Error (command_usage completion_doc)
-  | [ shell ] -> Ok { shell }
-  | [] -> Error "completion requires a shell name"
-  | option :: _ when String_util.starts_with ~prefix:"-" option ->
-      Error (Printf.sprintf "unknown option '%s'" option)
-  | _ -> Error "completion accepts exactly one shell name"
+  let rec loop options shell = function
+    | [] -> (
+        match shell with
+        | Some shell -> Ok { shell; workspace_dir = options.workspace_dir }
+        | None -> Error "completion requires a shell name")
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } shell rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--help" :: _ -> Error (command_usage completion_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | value :: rest -> (
+        match shell with
+        | None -> loop options (Some value) rest
+        | Some _ -> Error "completion accepts exactly one shell name")
+  in
+  loop { shell = ""; workspace_dir = "." } None args
 
 let parse_install_args (args : string list) : (install_options, string) result =
   let* default_backend_request = default_backend_request () in
@@ -745,6 +758,73 @@ let load_workspace workspace_dir =
     if not (Fs.exists manifest_path) then
       Error (Printf.sprintf "manifest not found: %s" manifest_path)
     else Manifest.load manifest_path
+
+let load_workspace_if_present workspace_dir =
+  if not (Fs.is_directory workspace_dir) then
+    Error
+      (Printf.sprintf "workspace directory does not exist: %s" workspace_dir)
+  else
+    let manifest_path = Filename.concat workspace_dir Manifest.default_filename in
+    if Fs.exists manifest_path then Manifest.load manifest_path |> Result.map Option.some
+    else Ok None
+
+let profile_names workspace =
+  Manifest.default_profile workspace
+  :: List.map (fun (profile : Manifest.profile) -> profile.name) workspace.profiles
+  |> String_util.dedup_preserve
+
+let all_target_names workspace =
+  List.map Manifest.target_name workspace.Manifest.targets
+
+let executable_target_names workspace =
+  List.filter_map
+    (function
+      | Manifest.Executable executable -> Some executable.name
+      | Manifest.Library _ | Manifest.Test _ -> None)
+    workspace.Manifest.targets
+
+let test_target_names workspace =
+  List.filter_map
+    (function
+      | Manifest.Test test -> Some test.name
+      | Manifest.Library _ | Manifest.Executable _ -> None)
+    workspace.Manifest.targets
+
+let installable_target_names workspace =
+  List.filter_map
+    (function
+      | Manifest.Library library -> Some library.name
+      | Manifest.Executable executable -> Some executable.name
+      | Manifest.Test _ -> None)
+    workspace.Manifest.targets
+
+let with_completion_words doc words =
+  {
+    doc with
+    completion_words =
+      String_util.dedup_preserve (doc.completion_words @ words);
+  }
+
+let completion_docs ?workspace () =
+  match workspace with
+  | None -> command_docs
+  | Some workspace ->
+      let profiles = profile_names workspace in
+      let all_targets = all_target_names workspace in
+      let executable_targets = executable_target_names workspace in
+      let test_targets = test_target_names workspace in
+      let installable_targets = installable_target_names workspace in
+      List.map
+        (fun doc ->
+          match doc.name with
+          | "build" | "clean" | "explain" ->
+              with_completion_words doc (profiles @ all_targets)
+          | "run" -> with_completion_words doc (profiles @ executable_targets)
+          | "test" -> with_completion_words doc (profiles @ test_targets)
+          | "install" ->
+              with_completion_words doc (profiles @ installable_targets)
+          | _ -> doc)
+        command_docs
 
 let executable_names workspace =
   List.filter_map
@@ -908,11 +988,14 @@ let run_docs (_options : docs_options) =
   Exit_code 0
 
 let run_completion (options : completion_options) =
-  match completion_script options.shell command_docs with
-  | Ok script ->
-      print_string script;
-      Exit_code 0
+  match load_workspace_if_present options.workspace_dir with
   | Error message -> report_error message
+  | Ok workspace -> (
+      match completion_script options.shell (completion_docs ?workspace ()) with
+      | Ok script ->
+          print_string script;
+          Exit_code 0
+      | Error message -> report_error message)
 
 let run_toolchain (_options : toolchain_options) =
   Toolchain.inspect () |> Toolchain.render_report |> print_endline;

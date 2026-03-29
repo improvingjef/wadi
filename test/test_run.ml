@@ -118,7 +118,9 @@ main = "main"
               run.output "top-level usage should include the install command";
             assert_string_contains ~needle:"oasis docs" run.output
               "top-level usage should include the docs command";
-            assert_string_contains ~needle:"oasis completion SHELL" run.output
+            assert_string_contains
+              ~needle:"oasis completion [--workspace DIR] SHELL"
+              run.output
               "top-level usage should include the completion command";
             assert_string_contains ~needle:"oasis toolchain" run.output
               "top-level usage should include the toolchain command";
@@ -176,9 +178,51 @@ main = "main"
               docs.output
               "docs output should include the explain JSON description";
             assert_string_contains
-              ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling or linking."
+              ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources."
               docs.output
               "docs output should include the current explain description")) );
+    ( "renders workspace-local targets and profiles into completions",
+      (fun () ->
+        with_temp_dir "oasis-cli-workspace-completion" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+
+[profile.dev]
+
+[library.core]
+dir = "lib"
+modules = ["core"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+
+[test.demo_suite]
+dir = "test"
+main = "main"
+|};
+            write_source workspace "lib/core.ml" {|let value = "core"|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            write_source workspace "test/main.ml" {|let () = print_endline "suite"|};
+            with_temp_dir "oasis-cli-workspace-completion-cwd" (fun outside ->
+                let completion =
+                  run_oasis ~cwd:outside
+                    [ "completion"; "--workspace"; workspace; "bash" ]
+                in
+                assert_int_equal 0 completion.status
+                  "completion should load workspace-local words when asked";
+                assert_string_contains ~needle:"release" completion.output
+                  "completion should suggest the default profile name";
+                assert_string_contains ~needle:"dev" completion.output
+                  "completion should suggest additional profile names";
+                assert_string_contains ~needle:"core" completion.output
+                  "completion should suggest library targets";
+                assert_string_contains ~needle:"demo" completion.output
+                  "completion should suggest executable targets";
+                assert_string_contains ~needle:"demo_suite" completion.output
+                  "completion should suggest test targets")) ));
     ( "renders bash completions from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-bash-completion" (fun workspace ->

@@ -234,6 +234,156 @@ let cases =
               "current explain JSON should include the executable target";
             assert_string_contains ~needle:"\"state\": \"rebuilt\"" explain.output
               "current explain JSON should report the planned rebuild state")) );
+    ( "keeps current explain side-effect-light for generated and preprocessed sources",
+      (fun () ->
+        with_temp_dir "oasis-explain-current-dry-run" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+deps = ["config/version.txt"]
+outputs = ["version.ml"]
+
+[preprocess.trace]
+argv = ["./scripts/trace.sh"]
+deps = ["config/banner.txt"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+actions = ["generate_version"]
+preprocess = ["trace"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nversion=$(cat ../config/version.txt)\nprintf 'let message = \"%s\"\\n' \"$version\" > version.ml\n");
+            ignore
+              (write_executable workspace "scripts/trace.sh"
+                 "#!/bin/sh\ncat\n");
+            write_source workspace "config/version.txt" "v1";
+            write_source workspace "config/banner.txt" "banner";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let out_dir = Layout.executable_out_dir workspace "demo" in
+            let generated_output = Filename.concat (Filename.concat out_dir "generated") "version.ml" in
+            let preprocessed_main =
+              Filename.concat (Filename.concat out_dir "preprocessed") "main.ml"
+            in
+            let explain =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+            in
+            assert_int_equal 0 explain.status
+              "current explain should succeed for generated-source targets before a build";
+            assert_true (not (Fs.exists generated_output))
+              "current explain should not materialize action outputs";
+            assert_true (not (Fs.exists preprocessed_main))
+              "current explain should not materialize preprocessed sources";
+            assert_string_contains ~needle:"missing generated output:"
+              explain.output
+              "current explain should report that declared generated sources are absent")) );
+    ( "shows declared action and preprocessor inputs in persisted explain output",
+      (fun () ->
+        with_temp_dir "oasis-explain-steady-action-inputs" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+deps = ["config/version.txt"]
+outputs = ["version.ml"]
+
+[preprocess.trace]
+argv = ["./scripts/trace.sh"]
+deps = ["config/banner.txt"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+actions = ["generate_version"]
+preprocess = ["trace"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nversion=$(cat ../config/version.txt)\nprintf 'let message = \"%s\"\\n' \"$version\" > version.ml\n");
+            ignore
+              (write_executable workspace "scripts/trace.sh"
+                 "#!/bin/sh\ncat\n");
+            write_source workspace "config/version.txt" "v1";
+            write_source workspace "config/banner.txt" "banner";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            assert_int_equal 0 build.status
+              "the generated-source build should succeed before reading explain data";
+            let explain = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            assert_int_equal 0 explain.status
+              "persisted explain should load after a generated-source build";
+            assert_string_contains
+              ~needle:"action generate_version outputs: version.ml" explain.output
+              "persisted explain should show declared action outputs";
+            assert_string_contains
+              ~needle:"action generate_version deps: config/version.txt"
+              explain.output
+              "persisted explain should show declared action auxiliary inputs";
+            assert_string_contains
+              ~needle:"preprocess trace deps: config/banner.txt" explain.output
+              "persisted explain should show declared preprocessor auxiliary inputs")) );
+    ( "shows declared ppx inputs in persisted explain output",
+      (fun () ->
+        with_temp_dir "oasis-explain-steady-ppx-inputs" (fun workspace ->
+            let _ppx_binary =
+              compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let read_message () =
+  let channel = open_in "ppx/message.txt" in
+  Fun.protect
+    ~finally:(fun () -> close_in channel)
+    (fun () -> input_line channel)
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("__PPX__", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string (read_message (), loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            write_manifest workspace
+              {|
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/message.txt"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+ppx = ["rewrite"]
+|};
+            write_source workspace "ppx/message.txt" "first";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__PPX__"|};
+            let build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            assert_int_equal 0 build.status
+              "the ppx-backed build should succeed before reading explain data";
+            let explain = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            assert_int_equal 0 explain.status
+              "persisted explain should load after a ppx-backed build";
+            assert_string_contains
+              ~needle:"ppx rewrite deps: ppx/message.txt" explain.output
+              "persisted explain should show declared ppx auxiliary inputs")) );
     ( "surfaces rebuild reasons and planned compiler commands",
       (fun () ->
         with_fixture "hello" (fun workspace ->

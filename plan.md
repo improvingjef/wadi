@@ -45,15 +45,17 @@
 44. [x] Add `oasis explain --current` or an equivalent dry-run diff so users can inspect why a target would rebuild before paying the build cost.
 45. [x] Export findlib-friendly `META` files and install-layout metadata from `oasis install` so staged libraries can be consumed without bespoke `-I` wiring.
 46. [x] Add `DESTDIR` or equivalent relocation support to `oasis install` so package-manager staging does not have to rewrite prefixes after the fact.
-47. [ ] Teach `oasis completion` to suggest workspace-local target names and profile names instead of only static flags and shell names.
+47. [x] Teach `oasis completion` to suggest workspace-local target names and profile names instead of only static flags and shell names.
 48. [x] Add `oasis explain --json` so automation can print the persisted `.oasis-explain.json` payload directly instead of opening files by path.
 49. [ ] Generate release docs and packaged shell-completion artifacts from `oasis docs` and `oasis completion` in CI so shipped assets cannot drift from the command table.
 50. [x] Close over transitive workspace-library dependencies during `oasis install` or warn when generated `META` files reference unstaged internal packages.
 51. [x] Clarify and test relative `--prefix` plus `--destdir` semantics so local staging does not inherit surprising absolute workspace paths.
 52. [x] Add an explicit `--backend` flag to `oasis explain --current` so dry-run answers can mirror non-default build requests instead of relying only on ambient backend selection.
-53. [ ] Separate pure explain planning from action/preprocess materialization so `oasis explain --current` stays side-effect-light even for generated-source targets.
+53. [x] Separate pure explain planning from action/preprocess materialization so `oasis explain --current` stays side-effect-light even for generated-source targets.
 54. [ ] Allow member manifests to declare package-local actions, preprocessors, and PPX tools with automatic path rebasing so multi-package repos do not centralize every helper in the root manifest.
 55. [x] Record which `oasis install` artifacts were explicitly requested versus added by dependency closure so packaging automation can explain why extra libraries were staged.
 56. [ ] Surface member package paths in diagnostics and future dynamic completions so globally unique target names stay navigable in larger workspaces.
 57. [ ] Add manifest reference and migration examples for preprocessor/PPX `deps` plus generated-source collision rules so users do not learn the new constraints by failing builds.
-58. [ ] Show declared auxiliary tool inputs in steady-state `oasis explain` output, not just rebuild reasons, so codegen and transform pipelines stay inspectable before anything changes.
+58. [x] Show declared auxiliary tool inputs in steady-state `oasis explain` output, not just rebuild reasons, so codegen and transform pipelines stay inspectable before anything changes.
+59. [ ] Replace generation-time workspace completion snapshots with a runtime completion query protocol so one sourced script stays accurate as users move between workspaces.
+60. [ ] Distinguish fully reused targets from action-only regeneration in build and explain reports so missing generated outputs do not look like a perfect cache hit after the tool repairs them.
