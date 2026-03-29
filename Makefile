@@ -19,7 +19,7 @@ BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
 BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
-.PHONY: all test clean bootstrap-smoke release-artifacts benchmark-bootstrap refresh-bootstrap-seed-metadata
+.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests benchmark-bootstrap refresh-bootstrap-seed-metadata
 
 include $(BOOTSTRAP_SEED_METADATA)
 
@@ -34,6 +34,9 @@ test: bootstrap-smoke $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
 
 release-artifacts: $(BIN_DIR)/oasis
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) bash scripts/generate_release_artifacts.sh
+
+release-manifests:
+	bash scripts/generate_packaging_manifests.sh
 
 benchmark-bootstrap:
 	scripts/benchmark_bootstrap.sh --workspace .

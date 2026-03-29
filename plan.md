@@ -85,8 +85,8 @@
 67. [x] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
 68. [x] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
 69. [x] Publish an `oasis.opam` package to the opam repository so OCaml developers can install oasis through their existing toolchain with `opam install oasis`.
-70. [ ] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
-71. [ ] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
+70. [x] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
+71. [x] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
 72. [x] Add a `flake.nix` so Nix users can run oasis directly or add it to their development shells.
 79. [x] Add `oasis bench` with stable benchmark target execution and machine-readable summaries so the execution subtool split covers Dune’s benchmarking workflows as well as builds and tests.
 80. [x] Eliminate the remaining app-only interpreter seed from bootstrap generation so cold-start builds no longer depend on `scripts/generate_bootstrap_makefile.ml` loading source through the toplevel at all.
@@ -107,4 +107,6 @@
 98. [x] Teach the compiled bootstrap planner to refresh `scripts/bootstrap_seed_metadata.mk` directly so the legacy metadata helper script can disappear instead of surviving as a generator-only maintenance path.
 99. [x] Gate shared `oasis-seed` object reuse on profile-sensitive compile inputs so future bootstrap-profile flags, env, preprocessors, or PPX on the core library cannot silently reuse mismatched seed artifacts.
 100. [ ] Teach the bootstrap seed compiler itself to honor common-library actions, preprocessors, PPX, and profile env so safe shared-object reuse remains available even after `oasis_core` stops compiling from raw checked-in sources.
-101. [ ] Define one canonical release metadata source for archive URLs, checksums, homepage/bug-report links, and license so opam/Homebrew/GitHub release plumbing stops depending on repo-local placeholders.
+101. [x] Define one canonical release metadata source for archive URLs, checksums, homepage/bug-report links, and license so opam/Homebrew/GitHub release plumbing stops depending on repo-local placeholders.
+102. [ ] Publish the generated `Formula/oasis.rb` through a dedicated tap update flow so users can get from `brew install oasis` to a working binary without pointing Homebrew at this repo directly.
+103. [ ] Collapse release version bumps, source-archive refresh, and tag validation into one explicit release-cut command so the packaging metadata stops depending on a manually remembered sequence.

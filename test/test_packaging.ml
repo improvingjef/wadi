@@ -54,11 +54,96 @@ let cases =
                   (Fs.read_file
                      (Filename.concat prefix "share/doc/oasis/cli.md"))
                   "the installed doc copy should come from the installed binary"))) );
+    ( "generates packaging manifests from the canonical release metadata",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let manifest_script =
+          Filename.concat repo_root "scripts/generate_packaging_manifests.sh"
+        in
+        with_temp_dir "oasis-packaging-manifests" (fun output_dir ->
+            let generated =
+              Process.run_capture ~cwd:repo_root "bash"
+                [ manifest_script; "--output-dir"; output_dir ]
+            in
+            assert_int_equal 0 generated.status
+              "packaging manifest generation should succeed";
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "oasis.opam"))
+              (Fs.read_file (Filename.concat repo_root "oasis.opam"))
+              "oasis.opam should be generated from the shared release metadata";
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
+              (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
+              "the committed Homebrew formula should be generated from the shared release metadata"));
+    ( "builds deterministic source and binary release archives",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let archive_script =
+          Filename.concat repo_root "scripts/build_release_archives.sh"
+        in
+        with_temp_dir "oasis-packaging-archives" (fun output_dir ->
+            let source_run =
+              Process.run_capture ~cwd:repo_root "bash"
+                [ archive_script; "--source-only"; "--output-dir"; output_dir ]
+            in
+            assert_int_equal 0 source_run.status
+              "source archive generation should succeed";
+            let binary_run =
+              Process.run_capture ~cwd:repo_root
+                ~env:[ ("OASIS_BIN", oasis_bin ()) ]
+                "bash"
+                [
+                  archive_script;
+                  "--binary-only";
+                  "--output-dir";
+                  output_dir;
+                  "--binary";
+                  oasis_bin ();
+                  "--os";
+                  "macos";
+                  "--arch";
+                  "arm64";
+                ]
+            in
+            assert_int_equal 0 binary_run.status
+              "binary archive generation should succeed";
+            assert_file_exists
+              (Filename.concat output_dir "oasis-0.1.0-source.tar.gz");
+            assert_file_exists
+              (Filename.concat output_dir "oasis-0.1.0-arm64-macos.tar.gz");
+            let listing =
+              Process.run_capture ~cwd:output_dir "tar"
+                [ "-tzf"; "oasis-0.1.0-arm64-macos.tar.gz" ]
+            in
+            assert_int_equal 0 listing.status
+              "binary archives should be valid tarballs";
+            assert_string_contains ~needle:"oasis-0.1.0-arm64-macos/bin/oasis\n"
+              listing.output
+              "binary release archives should stage the oasis binary";
+            assert_string_contains
+              ~needle:"oasis-0.1.0-arm64-macos/share/doc/oasis/cli.md\n"
+              listing.output
+              "binary release archives should stage packaged docs";
+            let source_listing =
+              Process.run_capture ~cwd:output_dir "tar"
+                [ "-tzf"; "oasis-0.1.0-source.tar.gz" ]
+            in
+            assert_int_equal 0 source_listing.status
+              "source archives should be valid tarballs";
+            assert_string_contains ~needle:"oasis-0.1.0/LICENSE\n"
+              source_listing.output
+              "source release archives should include the license text";
+            assert_string_contains ~needle:"oasis-0.1.0/release/metadata.sh\n"
+              source_listing.output
+              "source release archives should include the canonical release metadata"));
     ( "keeps package-manager definitions aligned with the shared release install script",
       (fun () ->
         let repo_root = Sys.getcwd () in
         let opam = Fs.read_file (Filename.concat repo_root "oasis.opam") in
         let flake = Fs.read_file (Filename.concat repo_root "flake.nix") in
+        let formula =
+          Fs.read_file (Filename.concat repo_root "Formula/oasis.rb")
+        in
         assert_string_contains ~needle:"[make \"release-artifacts\"]" opam
           "the opam package should build through the canonical release-artifact target";
         assert_string_contains ~needle:"scripts/install_release_tree.sh" opam
@@ -66,13 +151,46 @@ let cases =
         assert_string_contains ~needle:"make release-artifacts" flake
           "the Nix flake should build through the canonical release-artifact target";
         assert_string_contains ~needle:"scripts/install_release_tree.sh" flake
-          "the Nix flake should install through the shared release-tree installer")) ;
+          "the Nix flake should install through the shared release-tree installer";
+        assert_string_contains ~needle:"system \"make\", \"release-artifacts\""
+          formula
+          "the Homebrew formula should build through the canonical release-artifact target";
+        assert_string_contains ~needle:"scripts/install_release_tree.sh" formula
+          "the Homebrew formula should install through the shared release-tree installer")) ;
+    ( "keeps the Homebrew formula syntax-valid",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let check =
+          Process.run_capture ~cwd:repo_root "ruby"
+            [ "-c"; "Formula/oasis.rb" ]
+        in
+        assert_int_equal 0 check.status
+          ("Formula/oasis.rb should stay valid Ruby\n" ^ check.output));
     ( "keeps oasis.opam valid under opam lint",
-      (fun () ->
+      fun () ->
         let repo_root = Sys.getcwd () in
         let lint =
           Process.run_capture ~cwd:repo_root "opam" [ "lint"; "oasis.opam" ]
         in
         assert_int_equal 0 lint.status
-          ("oasis.opam should stay valid under opam lint\n" ^ lint.output))) ;
+          ("oasis.opam should stay valid under opam lint\n" ^ lint.output));
+    ( "keeps the release workflow aligned with the release metadata and formula",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let workflow =
+          Fs.read_file
+            (Filename.concat repo_root ".github/workflows/release.yml")
+        in
+        assert_string_contains ~needle:". release/metadata.sh" workflow
+          "the release workflow should load the canonical release metadata";
+        assert_string_contains
+          ~needle:"scripts/build_release_archives.sh --source-only --output-dir dist"
+          workflow
+          "the release workflow should publish a deterministic source archive";
+        assert_string_contains
+          ~needle:"scripts/render_homebrew_formula.sh"
+          workflow
+          "the release workflow should render the Homebrew formula from the source archive";
+        assert_string_contains ~needle:"softprops/action-gh-release@v2" workflow
+          "the release workflow should publish the generated release assets");
   ]

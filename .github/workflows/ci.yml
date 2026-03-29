@@ -39,6 +39,10 @@ jobs:
         if: matrix.backend == 'native'
         run: make release-artifacts
 
+      - name: Refresh packaging manifests
+        if: matrix.backend == 'native'
+        run: make release-manifests
+
       - name: Check committed release artifacts
         if: matrix.backend == 'native'
-        run: git diff --exit-code -- docs/cli.md completions package
+        run: git diff --exit-code -- docs/cli.md completions package oasis.opam Formula

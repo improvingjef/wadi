@@ -1,0 +1,121 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate release metadata
+        run: |
+          . release/metadata.sh
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            expected=$(oasis_release_tag)
+            actual=${GITHUB_REF_NAME:-}
+            if [ "$actual" != "$expected" ]; then
+              echo "release tag '$actual' does not match metadata tag '$expected'" >&2
+              exit 1
+            fi
+          fi
+
+  source:
+    needs: validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build source archive
+        run: bash scripts/build_release_archives.sh --source-only --output-dir dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-source
+          path: dist/*.tar.gz
+
+  binaries:
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            os_name: linux
+            arch_name: x86_64
+          - runner: macos-13
+            os_name: macos
+            arch_name: x86_64
+          - runner: macos-14
+            os_name: macos
+            arch_name: arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.4.0
+
+      - name: Install OCaml dependencies
+        run: opam install -y ocamlfind
+
+      - name: Build release tree
+        run: make release-artifacts
+
+      - name: Build binary archive
+        run: |
+          bash scripts/build_release_archives.sh \
+            --binary-only \
+            --output-dir dist \
+            --binary _bootstrap/bin/oasis \
+            --os "${{ matrix.os_name }}" \
+            --arch "${{ matrix.arch_name }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os_name }}-${{ matrix.arch_name }}
+          path: dist/*.tar.gz
+
+  publish:
+    needs:
+      - source
+      - binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Render packaging manifests
+        run: |
+          . release/metadata.sh
+          bash scripts/render_oasis_opam.sh > dist/oasis.opam
+          bash scripts/render_homebrew_formula.sh \
+            --source-archive "dist/$(oasis_release_source_archive_name)" \
+            > dist/oasis.rb
+          diff -u oasis.opam dist/oasis.opam
+          diff -u Formula/oasis.rb dist/oasis.rb
+          sha256sum dist/*.tar.gz > dist/SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/oasis.rb
