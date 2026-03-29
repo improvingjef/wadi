@@ -191,9 +191,11 @@ stdin = "hello"
 argv = ["./scripts/expand.sh"]
 cwd = "scripts"
 env = ["MODE=pre"]
+deps = ["scripts/template.txt"]
 
 [ppx.rewrite]
 argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/config.txt"]
 
 [profile.release]
 compile_flags = ["-strict-sequence"]
@@ -218,6 +220,12 @@ main = "main"
           "preprocessors should be parsed into their own registry";
         assert_int_equal 1 (List.length workspace.Manifest.ppx_tools)
           "ppx tools should be parsed into their own registry";
+        let preprocessor = List.hd workspace.Manifest.preprocessors in
+        let ppx_tool = List.hd workspace.Manifest.ppx_tools in
+        assert_string_equal "scripts/template.txt" (List.hd preprocessor.Manifest.deps)
+          "preprocessors should keep declared auxiliary inputs";
+        assert_string_equal "ppx/config.txt" (List.hd ppx_tool.Manifest.deps)
+          "ppx tools should keep declared auxiliary inputs";
         let target =
           match workspace.Manifest.targets with
           | [ Manifest.Executable executable ] ->

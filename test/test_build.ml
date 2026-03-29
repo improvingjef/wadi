@@ -464,6 +464,38 @@ modules = ["version"]
               "generated-module executables should still run successfully";
             assert_string_equal "from-template from-stdin\n" run.output
               "generated modules should compile from declared action outputs")) );
+    ( "rejects generated source outputs that collide with checked-in files",
+      (fun () ->
+        with_temp_dir "oasis-action-collision" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+outputs = ["version.ml"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nprintf 'let message = \"generated\"\\n' > version.ml\n");
+            write_source workspace "app/version.ml"
+              {|let message = "checked-in"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_true (build.status <> 0)
+              "colliding generated source outputs should fail before the build runs";
+            assert_string_contains ~needle:"collides with checked-in source"
+              build.output
+              "the build should explain why the generated output is unsafe";
+            assert_string_contains ~needle:"app/version.ml" build.output
+              "the collision report should point at the checked-in source path")) );
     ( "applies named preprocessors in pipeline order",
       (fun () ->
         with_temp_dir "oasis-preprocess" (fun workspace ->

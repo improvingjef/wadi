@@ -116,8 +116,17 @@ deps = ["greeting"]
             let metadata =
               Fs.read_file (Filename.concat prefix "share/oasis/workspace/install.json")
             in
+            assert_string_contains ~needle:"\"requested_targets\": [\"hello\"]"
+              metadata
+              "install metadata should record the explicit top-level install request";
+            assert_string_contains ~needle:"\"selection\": \"requested\"" metadata
+              "install metadata should preserve which artifacts were explicitly selected";
             assert_string_contains ~needle:"\"name\": \"greeting\"" metadata
               "install metadata should record required internal libraries";
+            assert_string_contains ~needle:"\"selection\": \"dependency\"" metadata
+              "install metadata should mark closure-added libraries as dependencies";
+            assert_string_contains ~needle:"\"requested_by\": [\"hello\"]" metadata
+              "install metadata should record which top-level target pulled a dependency in";
             assert_string_not_contains ~needle:"\"name\": \"unused\"" metadata
               "install metadata should omit unrelated internal libraries")) );
     ( "supports packaging-style staging with --destdir",

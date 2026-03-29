@@ -9,6 +9,26 @@ let write_executable workspace relative_path contents =
   Unix.chmod path 0o755;
   path
 
+let compile_ppx workspace relative_path contents output_relative_path =
+  let source_path = Filename.concat workspace relative_path in
+  Fs.write_file source_path contents;
+  let output_path = Filename.concat workspace output_relative_path in
+  let outcome =
+    Process.run_capture "ocamlfind"
+      [
+        "ocamlopt";
+        "-package";
+        "compiler-libs.common";
+        "-linkpkg";
+        "-o";
+        output_path;
+        source_path;
+      ]
+  in
+  assert_int_equal 0 outcome.status
+    "expected the helper ppx binary to compile successfully";
+  output_path
+
 let resolve_command prog =
   let outcome = Process.run_capture "/bin/sh" [ "-c"; "command -v " ^ prog ] in
   assert_int_equal 0 outcome.status
@@ -252,6 +272,118 @@ let cases =
             assert_string_contains ~needle:"dependency changed: greeting"
               executable_explain.output
               "downstream targets should explain dependency-triggered rebuilds")) );
+    ( "explains preprocessor auxiliary input changes",
+      (fun () ->
+        with_temp_dir "oasis-explain-preprocess-deps" (fun workspace ->
+            write_manifest workspace
+              {|
+[preprocess.expand]
+argv = ["./scripts/expand.sh"]
+deps = ["config/banner.txt"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+preprocess = ["expand"]
+|};
+            ignore
+              (write_executable workspace "scripts/expand.sh"
+                 "#!/bin/sh\nbanner=$(cat config/banner.txt)\nsed \"s/__TOKEN__/$banner/\"\n");
+            write_source workspace "config/banner.txt" "first";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__TOKEN__"|};
+            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 first_build.status
+              "the initial preprocessor-backed build should succeed";
+            write_source workspace "config/banner.txt" "second";
+            let current =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+            in
+            assert_int_equal 0 current.status
+              "current explain should succeed after a preprocessor input edit";
+            assert_string_contains
+              ~needle:"preprocessor auxiliary input changed: config/banner.txt (expand)"
+              current.output
+              "current explain should call out the edited preprocessor input";
+            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 second_build.status
+              "the edited preprocessor input should trigger a rebuild";
+            assert_string_contains ~needle:"Built executable demo" second_build.output
+              "the executable should rebuild after a preprocessor input edit";
+            let run = run_binary (Layout.executable_binary workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "the rebuilt executable should still run";
+            assert_string_equal "second\n" run.output
+              "the rebuilt executable should reflect the updated preprocessor input")) );
+    ( "explains ppx auxiliary input changes",
+      (fun () ->
+        with_temp_dir "oasis-explain-ppx-deps" (fun workspace ->
+            let _ppx_binary =
+              compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let read_message () =
+  let channel = open_in "ppx/message.txt" in
+  Fun.protect
+    ~finally:(fun () -> close_in channel)
+    (fun () -> input_line channel)
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("__PPX__", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string (read_message (), loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            write_manifest workspace
+              {|
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/message.txt"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+ppx = ["rewrite"]
+|};
+            write_source workspace "ppx/message.txt" "first";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__PPX__"|};
+            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 first_build.status
+              "the initial ppx-backed build should succeed";
+            write_source workspace "ppx/message.txt" "second";
+            let current =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+            in
+            assert_int_equal 0 current.status
+              "current explain should succeed after a ppx input edit";
+            assert_string_contains
+              ~needle:"ppx auxiliary input changed: ppx/message.txt (rewrite)"
+              current.output
+              "current explain should call out the edited ppx input";
+            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 second_build.status
+              "the edited ppx input should trigger a rebuild";
+            assert_string_contains ~needle:"Built executable demo" second_build.output
+              "the executable should rebuild after a ppx input edit";
+            let run = run_binary (Layout.executable_binary workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "the rebuilt executable should still run";
+            assert_string_equal "second\n" run.output
+              "the rebuilt executable should reflect the updated ppx input")) );
     ( "caches package and toolchain discovery within one build session",
       (fun () ->
         with_temp_dir "oasis-explain-cache" (fun workspace ->

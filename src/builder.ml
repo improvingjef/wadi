@@ -181,6 +181,10 @@ let collect_results items f =
   in
   loop [] items
 
+let collect_line_groups items f =
+  let* groups = collect_results items f in
+  Ok (List.concat groups)
+
 let resolve_command_prog ~workspace_root prog =
   if Filename.is_relative prog && String.contains prog '/' then
     Filename.concat workspace_root prog
@@ -229,6 +233,46 @@ let effective_sandbox (options : Manifest.target_options)
       match options.Manifest.sandbox with
       | Some sandbox -> sandbox
       | None -> Manifest.Target)
+
+let is_source_path path =
+  List.exists
+    (fun suffix -> String_util.ends_with ~suffix path)
+    [ ".ml"; ".mli" ]
+
+let rec digest_path path =
+  if Sys.is_directory path then
+    let entries = Sys.readdir path |> Array.to_list |> List.sort String.compare in
+    let buffer = Buffer.create 256 in
+    List.iter
+      (fun name ->
+        append_line buffer ("entry " ^ name);
+        append_line buffer (digest_path (Filename.concat path name)))
+      entries;
+    "dir:" ^ Digest.to_hex (Digest.string (Buffer.contents buffer))
+  else "file:" ^ Digest.to_hex (Digest.file path)
+
+let fingerprint_dependency_line prefix relative_path path =
+  prefix ^ " " ^ relative_path ^ " " ^ digest_path path
+
+let dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label deps =
+  collect_results deps (fun relative_path ->
+      let path = Filename.concat workspace_root relative_path in
+      if not (Fs.exists path) then
+        Error (Printf.sprintf "%s does not exist: %s" error_label relative_path)
+      else Ok (fingerprint_dependency_line line_prefix relative_path path))
+
+let tool_dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label
+    tool_name deps =
+  collect_results deps (fun relative_path ->
+      let path = Filename.concat workspace_root relative_path in
+      if not (Fs.exists path) then
+        Error
+          (Printf.sprintf "%s '%s' dependency does not exist: %s" error_label tool_name
+             relative_path)
+      else
+        Ok
+          (fingerprint_dependency_line
+             (line_prefix ^ " " ^ tool_name) relative_path path))
 
 let source_descriptor ~workspace_root ~generated_root ~dir stem =
   let ml_relative = Filename.concat dir (stem ^ ".ml") in
@@ -409,6 +453,30 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
           copy_once "action dependency" dep)
         (Ok ()) action.Manifest.deps
 
+let validate_generated_source_collisions ~workspace_root ~target_dir ~target_name
+    actions =
+  List.fold_left
+    (fun result (action : Manifest.action) ->
+      let* () = result in
+      let action_name = (action : Manifest.action).name in
+      List.fold_left
+        (fun result output ->
+          let* () = result in
+          if not (is_source_path output) then Ok ()
+          else
+            let workspace_output_path =
+              Filename.concat workspace_root (Filename.concat target_dir output)
+            in
+            if Fs.exists workspace_output_path then
+              Error
+                (Printf.sprintf
+                   "target '%s' action '%s' output '%s' collides with checked-in \
+                    source %s"
+                   target_name action_name output workspace_output_path)
+            else Ok ())
+        (Ok ()) action.Manifest.outputs)
+    (Ok ()) actions
+
 let action_fingerprint ~workspace_root ~target_env ~target_dir options
     (action : Manifest.action) =
   let sandbox = effective_sandbox options action in
@@ -429,22 +497,11 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
     env;
   List.iter (fun output -> append_line buffer ("output " ^ output))
     action.outputs;
-  let* () =
-    List.fold_left
-      (fun result dep ->
-        let* () = result in
-        let dep_path = Filename.concat workspace_root dep in
-        if not (Fs.exists dep_path) then
-          Error (Printf.sprintf "action dependency does not exist: %s" dep)
-        else if Sys.is_directory dep_path then (
-          append_line buffer ("dep-dir " ^ dep);
-          Ok ())
-        else (
-          append_line buffer
-            ("dep " ^ dep ^ " " ^ Digest.to_hex (Digest.file dep_path));
-          Ok ()))
-      (Ok ()) action.deps
+  let* dependency_lines =
+    dependency_fingerprint_lines ~workspace_root ~line_prefix:"dep"
+      ~error_label:"action dependency" action.deps
   in
+  List.iter (append_line buffer) dependency_lines;
   Ok (Buffer.contents buffer)
 
 let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
@@ -501,7 +558,7 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
         Fs.write_file stamp_path fingerprint;
         Ok { name = action.name; fingerprint })
 
-let resolve_pipeline workspace ~profile target =
+let resolve_pipeline ~workspace_root workspace ~profile target =
   let* options = Manifest.resolve_target_options workspace profile target in
   let* actions =
     collect_results options.actions (fun name ->
@@ -548,6 +605,11 @@ let resolve_pipeline workspace ~profile target =
               Ok ()))
           (Ok ()) action.Manifest.outputs)
       (Ok ()) actions
+  in
+  let* () =
+    validate_generated_source_collisions ~workspace_root
+      ~target_dir:(Manifest.target_dir target)
+      ~target_name:(Manifest.target_name target) actions
   in
   Ok { options; actions; preprocessors; ppx_tools }
 
@@ -790,26 +852,37 @@ let target_extra_lines ~workspace_root ~profile pipeline action_results =
         (fun (name, value) -> "env " ^ name ^ "=" ^ value)
         pipeline.options.env
   in
-  let preprocessor_lines =
-    List.concat_map
+  let* preprocessor_lines =
+    collect_line_groups pipeline.preprocessors
       (fun (tool : Manifest.command_tool) ->
-        ("preprocess " ^ tool.name)
-        :: (match tool.cwd with
-           | Some cwd -> [ "preprocess-cwd " ^ cwd ]
-           | None -> [])
-        @ List.map
-            (fun (name, value) ->
-              "preprocess-env " ^ tool.name ^ " " ^ name ^ "=" ^ value)
-            tool.env
-        @ command_fingerprint_lines ~workspace_root tool.argv)
-      pipeline.preprocessors
+        let* dependency_lines =
+          tool_dependency_fingerprint_lines ~workspace_root
+            ~line_prefix:"preprocess-dep" ~error_label:"preprocessor" tool.name
+            tool.deps
+        in
+        Ok
+          (("preprocess " ^ tool.name)
+          :: (match tool.cwd with
+             | Some cwd -> [ "preprocess-cwd " ^ cwd ]
+             | None -> [])
+          @ List.map
+              (fun (name, value) ->
+                "preprocess-env " ^ tool.name ^ " " ^ name ^ "=" ^ value)
+              tool.env
+          @ command_fingerprint_lines ~workspace_root tool.argv
+          @ dependency_lines))
   in
-  let ppx_lines =
-    List.concat_map
+  let* ppx_lines =
+    collect_line_groups pipeline.ppx_tools
       (fun (tool : Manifest.ppx_tool) ->
-        ("ppx " ^ tool.name)
-        :: command_fingerprint_lines ~workspace_root tool.argv)
-      pipeline.ppx_tools
+        let* dependency_lines =
+          tool_dependency_fingerprint_lines ~workspace_root
+            ~line_prefix:"ppx-dep" ~error_label:"ppx" tool.name tool.deps
+        in
+        Ok
+          (("ppx " ^ tool.name)
+          :: command_fingerprint_lines ~workspace_root tool.argv
+          @ dependency_lines))
   in
   let action_lines =
     List.map
@@ -818,7 +891,7 @@ let target_extra_lines ~workspace_root ~profile pipeline action_results =
         ^ Digest.to_hex (Digest.string action_result.fingerprint))
       action_results
   in
-  option_lines @ preprocessor_lines @ ppx_lines @ action_lines
+  Ok (option_lines @ preprocessor_lines @ ppx_lines @ action_lines)
 
 let backend_selection_note ~session request backend =
   match request with
@@ -959,7 +1032,7 @@ let describe_library ~session ~workspace_root ~verbose ~manifest_path
   let* package_resolution =
     Toolchain.resolve_packages ~session effective_packages
   in
-  let* pipeline = resolve_pipeline workspace ~profile target in
+  let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
   let* action_results = run_actions ~workspace_root ~out_dir ~target ~pipeline in
   let* sources =
     source_descriptors ~workspace_root ~generated_root:(generated_root out_dir)
@@ -975,7 +1048,7 @@ let describe_library ~session ~workspace_root ~verbose ~manifest_path
       ~target_kind:"library" ~target_name:library.name package_resolution
       prepared_sources
   in
-  let extra_lines =
+  let* extra_lines =
     target_extra_lines ~workspace_root ~profile pipeline action_results
   in
   let fingerprint =
@@ -1175,7 +1248,7 @@ let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
   let* package_resolution =
     Toolchain.resolve_packages ~session effective_packages
   in
-  let* pipeline = resolve_pipeline workspace ~profile target in
+  let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
   let* action_results = run_actions ~workspace_root ~out_dir ~target ~pipeline in
   let* module_sources =
     source_descriptors ~workspace_root ~generated_root:(generated_root out_dir)
@@ -1202,7 +1275,7 @@ let describe_runnable ~session ~workspace_root ~verbose ~manifest_path
   in
   let sources = module_sources @ [ main_source ] in
   let source_order = ordered_modules @ [ runnable.main ] in
-  let extra_lines =
+  let* extra_lines =
     target_extra_lines ~workspace_root ~profile pipeline action_results
   in
   let fingerprint =

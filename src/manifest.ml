@@ -47,11 +47,13 @@ type command_tool = {
   argv : string list;
   cwd : string option;
   env : env_binding list;
+  deps : string list;
 }
 
 type ppx_tool = {
   name : string;
   argv : string list;
+  deps : string list;
 }
 
 type action = {
@@ -601,11 +603,13 @@ let parse_action path section name =
   Ok { name; argv; cwd; deps; outputs; env; stdin; sandbox }
 
 let parse_command_tool label path section name =
-  let* () = allowed_fields path section [ "argv"; "cwd"; "env" ] in
+  let* () = allowed_fields path section [ "argv"; "cwd"; "env"; "deps" ] in
   let* argv = required_strings path section "argv" in
   let* cwd = optional_string path section "cwd" in
   let* env = optional_env_bindings path section "env" in
+  let* deps = optional_strings path section "deps" in
   let* () = validate_string_list path section.line "argv" argv in
+  let* () = validate_relative_paths path section.line "deps" deps in
   let* () =
     if argv = [] then
       error path section.line (Printf.sprintf "%s argv cannot be empty" label)
@@ -616,16 +620,18 @@ let parse_command_tool label path section name =
     | None -> Ok ()
     | Some cwd -> validate_relative_path ~allow_dot:true path section.line "cwd" cwd
   in
-  Ok { name; argv; cwd; env }
+  Ok { name; argv; cwd; env; deps }
 
 let parse_ppx_tool path section name =
-  let* () = allowed_fields path section [ "argv" ] in
+  let* () = allowed_fields path section [ "argv"; "deps" ] in
   let* argv = required_strings path section "argv" in
+  let* deps = optional_strings path section "deps" in
   let* () = validate_string_list path section.line "argv" argv in
+  let* () = validate_relative_paths path section.line "deps" deps in
   let* () =
     if argv = [] then error path section.line "ppx argv cannot be empty" else Ok ()
   in
-  Ok { name; argv }
+  Ok { name; argv; deps }
 
 let parse_defaults path section =
   let* () =

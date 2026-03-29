@@ -1,14 +1,22 @@
+type selection_kind =
+  | Requested
+  | Dependency
+
 type installed_library = {
   name : string;
   dir : string;
   files : string list;
   meta : string;
   requires : string list;
+  selection : selection_kind;
+  requested_by : string list;
 }
 
 type installed_executable = {
   name : string;
   path : string;
+  selection : selection_kind;
+  requested_by : string list;
 }
 
 type install_layout = {
@@ -31,6 +39,10 @@ let ( let* ) = Result.bind
 
 let report_detail ~verbose message =
   if verbose then prerr_endline message
+
+let selection_kind_name = function
+  | Requested -> "requested"
+  | Dependency -> "dependency"
 
 let workspace_label (workspace : Manifest.workspace) =
   match workspace.name with
@@ -173,7 +185,7 @@ let expand_install_names workspace targets =
           in
           Ok (name :: acc))
   in
-  let* names =
+let* names =
     List.fold_left
       (fun result target ->
         let* acc = result in
@@ -181,6 +193,32 @@ let expand_install_names workspace targets =
       (Ok []) targets
   in
   Ok (List.rev names)
+
+let requested_roots_by_target workspace requested_names =
+  let index = target_index workspace in
+  let owners = Hashtbl.create (List.length workspace.targets) in
+  let add_owner name owner =
+    let existing =
+      match Hashtbl.find_opt owners name with
+      | Some roots -> roots
+      | None -> []
+    in
+    Hashtbl.replace owners name (String_util.dedup_preserve (existing @ [ owner ]))
+  in
+  let rec visit owner name =
+    add_owner name owner;
+    match Hashtbl.find_opt index name with
+    | None -> ()
+    | Some target ->
+        List.iter
+          (fun dependency ->
+            match Hashtbl.find_opt index dependency with
+            | Some (Manifest.Library _) -> visit owner dependency
+            | Some _ | None -> ())
+          (Manifest.target_deps target)
+  in
+  List.iter (fun owner -> visit owner owner) requested_names;
+  owners
 
 let library_install_filenames out_dir =
   Sys.readdir out_dir
@@ -240,7 +278,8 @@ let render_meta ~(workspace : Manifest.workspace) (library : Manifest.library)
   (String.concat "\n" lines ^ "\n", requires)
 
 let install_library ~verbose ~(layout : install_layout)
-    ~(workspace : Manifest.workspace) (library : Manifest.library)
+    ~(workspace : Manifest.workspace) ~selection ~requested_by
+    (library : Manifest.library)
     (artifact : Builder.built_artifact) =
   match artifact with
   | Builder.Built_library built_library ->
@@ -277,11 +316,13 @@ let install_library ~verbose ~(layout : install_layout)
               filenames;
           meta = Layout.relative_install_library_meta_path built_library.name;
           requires;
+          selection;
+          requested_by;
         }
   | Builder.Built_executable _ | Builder.Built_test _ ->
       Error "internal error: expected a built library artifact"
 
-let install_executable ~verbose ~(layout : install_layout)
+let install_executable ~verbose ~(layout : install_layout) ~selection ~requested_by
     (artifact : Builder.built_artifact) =
   match artifact with
   | Builder.Built_executable executable ->
@@ -297,11 +338,13 @@ let install_executable ~verbose ~(layout : install_layout)
         {
           name = executable.name;
           path = Layout.relative_install_executable_path executable.name;
+          selection;
+          requested_by;
         }
   | Builder.Built_library _ | Builder.Built_test _ ->
       Error "internal error: expected a built executable artifact"
 
-let render_install_metadata ~workspace_name ~profile ~prefix
+let render_install_metadata ~workspace_name ~profile ~prefix ~requested_targets
     ~(layout : install_layout)
     ~(libraries : installed_library list) ~(executables : installed_executable list)
     =
@@ -315,6 +358,12 @@ let render_install_metadata ~workspace_name ~profile ~prefix
         "      \"requires\": "
         ^ json_array (List.map json_string library.requires)
         ^ ",";
+        "      \"selection\": "
+        ^ json_string (selection_kind_name library.selection)
+        ^ ",";
+        "      \"requested_by\": "
+        ^ json_array (List.map json_string library.requested_by)
+        ^ ",";
         "      \"files\": "
         ^ json_array (List.map json_string library.files);
         "    }";
@@ -325,7 +374,12 @@ let render_install_metadata ~workspace_name ~profile ~prefix
       [
         "    {";
         "      \"name\": " ^ json_string executable.name ^ ",";
-        "      \"path\": " ^ json_string executable.path;
+        "      \"path\": " ^ json_string executable.path ^ ",";
+        "      \"selection\": "
+        ^ json_string (selection_kind_name executable.selection)
+        ^ ",";
+        "      \"requested_by\": "
+        ^ json_array (List.map json_string executable.requested_by);
         "    }";
       ]
   in
@@ -335,6 +389,9 @@ let render_install_metadata ~workspace_name ~profile ~prefix
       "  \"workspace\": " ^ json_string workspace_name ^ ",";
       "  \"profile\": " ^ json_string profile ^ ",";
       "  \"prefix\": " ^ json_string prefix ^ ",";
+      "  \"requested_targets\": "
+      ^ json_array (List.map json_string requested_targets)
+      ^ ",";
       "  \"stage_root\": " ^ json_string layout.stage_root ^ ",";
       "  \"destdir\": " ^ json_optional_string layout.destdir ^ ",";
       "  \"layout\": {";
@@ -381,6 +438,9 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
   Fs.ensure_dir layout.stage_root;
   let selected_index = Hashtbl.create (List.length selected_names) in
   List.iter (fun name -> Hashtbl.replace selected_index name ()) selected_names;
+  let requested_index = Hashtbl.create (List.length requested_names) in
+  List.iter (fun name -> Hashtbl.replace requested_index name ()) requested_names;
+  let requested_roots = requested_roots_by_target workspace requested_names in
   let library_index = Hashtbl.create (List.length workspace.targets) in
   List.iter
     (function
@@ -408,12 +468,33 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
                    "internal error: missing manifest library '%s' during install"
                    built_library.name)
         in
+        let selection =
+          if Hashtbl.mem requested_index built_library.name then Requested
+          else Dependency
+        in
+        let requested_by =
+          match Hashtbl.find_opt requested_roots built_library.name with
+          | Some roots -> roots
+          | None -> []
+        in
         let* library =
-          install_library ~verbose ~layout ~workspace manifest_library artifact
+          install_library ~verbose ~layout ~workspace ~selection ~requested_by
+            manifest_library artifact
         in
         collect (library :: libraries) executables rest
-    | Builder.Built_executable _ as artifact :: rest ->
-        let* executable = install_executable ~verbose ~layout artifact in
+    | Builder.Built_executable built_executable as artifact :: rest ->
+        let selection =
+          if Hashtbl.mem requested_index built_executable.name then Requested
+          else Dependency
+        in
+        let requested_by =
+          match Hashtbl.find_opt requested_roots built_executable.name with
+          | Some roots -> roots
+          | None -> []
+        in
+        let* executable =
+          install_executable ~verbose ~layout ~selection ~requested_by artifact
+        in
         collect libraries (executable :: executables) rest
     | Builder.Built_test _ :: rest -> collect libraries executables rest
   in
@@ -421,6 +502,7 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
   let _manifest_copy = copy_manifest ~workspace_root ~layout workspace_name in
   let metadata =
     render_install_metadata ~workspace_name ~profile ~prefix:layout.prefix
+      ~requested_targets:requested_names
       ~layout ~libraries
       ~executables
   in

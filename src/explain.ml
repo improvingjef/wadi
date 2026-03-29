@@ -77,7 +77,15 @@ let reason_of_fingerprint_line line =
   | "preprocess-cwd" :: _ -> Some "preprocessor working directory changed"
   | "preprocess-env" :: tool_name :: _ ->
       Some ("preprocessor environment changed: " ^ tool_name)
+  | "preprocess-dep" :: tool_name :: relative_path :: _ ->
+      Some
+        (Printf.sprintf "preprocessor auxiliary input changed: %s (%s)"
+           relative_path tool_name)
   | "ppx" :: tool_name :: _ -> Some ("ppx pipeline changed: " ^ tool_name)
+  | "ppx-dep" :: tool_name :: relative_path :: _ ->
+      Some
+        (Printf.sprintf "ppx auxiliary input changed: %s (%s)" relative_path
+           tool_name)
   | "action" :: action_name :: _ -> Some ("action changed: " ^ action_name)
   | "sandbox" :: _ -> Some "sandbox mode changed"
   | "argv" :: _ | "arg" :: _ | "prog-digest" :: _ ->
