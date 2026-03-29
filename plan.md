@@ -65,7 +65,7 @@
 64. [x] Add direct runtime execution tests for zsh and fish completion scripts so path-mode and described completions are exercised beyond string snapshots.
 65. [x] Replace the ad hoc completion marker line with a structured or versioned completion-query response so future shell integrations are not coupled to one magic string.
 66. [x] Decouple release-artifact generation from unrelated bootstrap test-source scans so refreshing `docs/cli.md` and packaged completions never depends on the whole test tree parsing cleanly.
-67. [ ] Replace the toplevel `#mod_use` bootstrap generator with a compiled or self-hosted planner path so root-library preprocessors and PPX can apply to the generator implementation itself, not just the binaries it emits rules for.
+67. [x] Replace the toplevel `#mod_use` bootstrap generator with a compiled or self-hosted planner path so root-library preprocessors and PPX can apply to the generator implementation itself, not just the binaries it emits rules for.
 67. [ ] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
 68. [ ] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
 69. [ ] Publish an `oasis.opam` package to the opam repository so OCaml developers can install oasis through their existing toolchain with `opam install oasis`.
@@ -75,7 +75,10 @@
 73. [x] Implement `oasis graph` so target build order, module order, and active action/preprocess/PPX pipelines are visible without compiling.
 74. [x] Implement `oasis deps` so transitive external package requirements and `ocamlfind` search roots are inspectable without reverse-engineering compiler invocations.
 75. [x] Implement `oasis migrate` to scan `dune-project` plus workspace `dune` files and emit a reviewable first-pass `oasis.toml`.
-76. [ ] Extend `oasis migrate` to translate common Dune fields like `preprocess`, `pps`, install/public metadata, and common unsupported stanzas into first-class oasis sections instead of warning comments.
-77. [ ] Add `oasis env` so users can print the exact environment a subtool would run under before executing it.
+76. [x] Extend `oasis migrate` to translate common Dune fields like `preprocess`, `pps`, install/public metadata, and common unsupported stanzas into first-class oasis sections instead of warning comments.
+77. [x] Add `oasis env` so users can print the exact environment a subtool would run under before executing it.
 78. [ ] Add `oasis repl` so workspaces can launch a package-aware OCaml toplevel without manually reconstructing include paths and package flags.
 79. [ ] Add `oasis bench` with stable benchmark target execution and machine-readable summaries so the execution subtool split covers Dune’s benchmarking workflows as well as builds and tests.
+80. [ ] Eliminate the remaining app-only interpreter seed from bootstrap generation so cold-start builds no longer depend on `scripts/generate_bootstrap_makefile.ml` loading source through the toplevel at all.
+81. [ ] Teach `oasis migrate` to infer auxiliary `deps` for translated dune preprocess actions and rules when the source form names concrete file inputs, reducing the remaining review-only warnings in generated manifests.
+82. [ ] Add `oasis env --json` or a changed-only mode so large inherited environments stay inspectable in editors and CI without forcing humans to diff hundreds of ambient variables by eye.

@@ -646,3 +646,63 @@ let render_makefile ?profile ?(scope = Full) ~manifest_path () =
   let workspace_root = Fs.realpath (Filename.dirname manifest_path) in
   let* workspace_plan = plan ~workspace_root ?profile ~scope workspace in
   Ok (render_makefile_from_plan ~workspace_root workspace_plan)
+
+let hidden_command_name = "__bootstrap_makefile"
+
+type command_options = {
+  manifest_path : string;
+  profile : string option;
+  scope : scope;
+}
+
+let parse_scope value =
+  match String.lowercase_ascii (String.trim value) with
+  | "app" | "executable" -> Ok Executable_only
+  | "full" -> Ok Full
+  | value ->
+      Error
+        (Printf.sprintf
+           "unknown scope '%s'; expected app, executable, or full" value)
+
+let parse_command_args args =
+  let rec loop options = function
+    | [] -> Ok options
+    | "--manifest" :: path :: rest ->
+        loop { options with manifest_path = path } rest
+    | "--manifest" :: [] -> Error "--manifest requires a path"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--scope" :: value :: rest ->
+        let* scope = parse_scope value in
+        loop { options with scope } rest
+    | "--scope" :: [] -> Error "--scope requires app, executable, or full"
+    | "--help" :: _ ->
+        Error
+          "usage: oasis __bootstrap_makefile --manifest PATH [--profile NAME] [--scope app|executable|full]"
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ ->
+        Error
+          "oasis __bootstrap_makefile does not accept positional arguments"
+  in
+  loop
+    { manifest_path = Manifest.default_filename; profile = None; scope = Full }
+    args
+
+let run_hidden_command args =
+  match parse_command_args args with
+  | Error message ->
+      prerr_endline ("oasis bootstrap: " ^ message);
+      2
+  | Ok options -> (
+      match
+        render_makefile ?profile:options.profile ~scope:options.scope
+          ~manifest_path:options.manifest_path ()
+      with
+      | Ok text ->
+          print_string text;
+          0
+      | Error message ->
+          prerr_endline ("oasis bootstrap: " ^ message);
+          1)

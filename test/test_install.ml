@@ -219,6 +219,54 @@ let contains_digit text =
             let facade_meta = Fs.read_file (Filename.concat prefix "lib/facade/META") in
             assert_string_contains ~needle:"requires = \"patterns\"" facade_meta
               "dependent libraries should export internal library requires")) );
+    ( "installs public names for libraries and executables",
+      (fun () ->
+        with_temp_dir "oasis-install-public-names" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+public_name = "demo.core"
+
+[library.facade]
+dir = "facade"
+modules = ["facade"]
+deps = ["core"]
+public_name = "demo.facade"
+
+[executable.cli]
+dir = "app"
+main = "main"
+deps = ["facade"]
+public_name = "demo-cli"
+|};
+            write_source workspace "lib/core.ml" {|let message = "public"|};
+            write_source workspace "facade/facade.ml"
+              {|let message = Core.message|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Facade.message|};
+            let prefix = Filename.concat workspace "_stage" in
+            let install =
+              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+            in
+            assert_int_equal 0 install.status
+              "install should stage public names when present";
+            assert_file_exists (Filename.concat prefix "lib/demo.core/META");
+            assert_file_exists (Filename.concat prefix "lib/demo.facade/META");
+            assert_file_exists (Filename.concat prefix "bin/demo-cli");
+            let facade_meta =
+              Fs.read_file (Filename.concat prefix "lib/demo.facade/META")
+            in
+            assert_string_contains ~needle:"requires = \"demo.core\"" facade_meta
+              "META requires should follow staged public library names";
+            let metadata =
+              Fs.read_file (Filename.concat prefix "share/oasis/workspace/install.json")
+            in
+            assert_string_contains ~needle:"\"meta\": \"lib/demo.core/META\"" metadata
+              "install metadata should point at the staged public library path";
+            assert_string_contains ~needle:"\"path\": \"bin/demo-cli\"" metadata
+              "install metadata should point at the staged public executable path")) );
     ( "reports member package paths in install summaries",
       (fun () ->
         with_temp_dir "oasis-install-package-paths" (fun workspace ->

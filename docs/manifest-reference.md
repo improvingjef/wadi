@@ -22,6 +22,7 @@ members = ["packages/core"]     # optional
 [library.core]
 dir = "lib"
 modules = ["alpha", "beta"]
+public_name = "demo.core"
 deps = ["base"]
 packages = ["unix", "str"]
 actions = ["generate_version"]
@@ -39,6 +40,7 @@ sandbox = "target"
 [executable.demo]
 dir = "app"
 main = "main"
+public_name = "demo-cli"
 modules = ["cli"]
 deps = ["core"]
 
@@ -53,6 +55,7 @@ Rules:
 - `main` is a module stem, not a filename.
 - `modules` entries are stems only. No paths. No extensions.
 - `deps` may only reference workspace libraries.
+- `public_name` controls the staged install name for libraries, `META` files, and executables.
 
 ## Actions
 

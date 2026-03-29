@@ -42,6 +42,13 @@ type deps_options = {
   targets : string list;
 }
 
+type env_options = {
+  workspace_dir : string;
+  profile : string option;
+  subtool : Env_report.subtool;
+  targets : string list;
+}
+
 type install_options = {
   workspace_dir : string;
   verbose : bool;
@@ -337,6 +344,23 @@ let deps_doc =
     completion_words = [];
   }
 
+let env_doc =
+  {
+    name = "env";
+    summary =
+      "Print the exact subprocess environment a build, run, test, or install step would inherit.";
+    signature = "oasis env [--workspace DIR] [--profile NAME] SUBTOOL [TARGET ...]";
+    examples =
+      [
+        "oasis env build";
+        "oasis env --profile release build demo";
+        "oasis env run demo";
+        "oasis env test unit";
+      ];
+    options = [ workspace_option; profile_option; help_option ];
+    completion_words = [ "build"; "run"; "test"; "install" ];
+  }
+
 let install_doc =
   {
     name = "install";
@@ -460,6 +484,7 @@ let command_docs =
     test_doc;
     clean_doc;
     deps_doc;
+    env_doc;
     install_doc;
     docs_doc;
     completion_doc;
@@ -882,6 +907,31 @@ let parse_deps_args (args : string list) : (deps_options, string) result =
   in
   loop { workspace_dir = "."; targets = [] } args
 
+let parse_env_args (args : string list) : (env_options, string) result =
+  let rec loop workspace_dir profile subtool targets = function
+    | [] -> (
+        match subtool with
+        | None -> Error "env requires a subtool name"
+        | Some subtool -> Ok { workspace_dir; profile; subtool; targets = List.rev targets })
+    | "--workspace" :: dir :: rest -> loop dir profile subtool targets rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: value :: rest ->
+        loop workspace_dir (Some value) subtool targets rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--help" :: _ -> Error (command_usage env_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | value :: rest -> (
+        match subtool with
+        | None ->
+            let* subtool = Env_report.parse_subtool value in
+            loop workspace_dir profile (Some subtool) targets rest
+        | Some Env_report.Run when targets <> [] ->
+            Error "env run accepts at most one target"
+        | Some _ -> loop workspace_dir profile subtool (value :: targets) rest)
+  in
+  loop "." None None [] args
+
 let parse_toolchain_args args =
   match args with
   | [] -> Ok { verbose = false }
@@ -1147,12 +1197,23 @@ let rec positional_argument_count = function
       positional_argument_count rest
   | _value :: rest -> 1 + positional_argument_count rest
 
+let rec positional_arguments acc = function
+  | [] -> List.rev acc
+  | "--" :: rest -> List.rev_append acc rest
+  | option :: _ :: rest when option_expects_value option ->
+      positional_arguments acc rest
+  | option :: rest when String_util.starts_with ~prefix:"-" option ->
+      positional_arguments acc rest
+  | value :: rest -> positional_arguments (value :: acc) rest
+
 let positional_completion_candidates ?workspace command_name rest =
   match workspace with
   | None -> (
       match command_name with
       | "completion" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) completion_doc.completion_words
+      | "env" when positional_argument_count rest = 0 ->
+          List.map (fun word -> candidate word) env_doc.completion_words
       | _ -> [] )
   | Some workspace -> (
       match command_name with
@@ -1163,6 +1224,14 @@ let positional_completion_candidates ?workspace command_name rest =
             executable_target_candidates workspace
           else []
       | "test" -> test_target_candidates workspace
+      | "env" -> (
+          match positional_arguments [] rest with
+          | [] -> List.map (fun word -> candidate word) env_doc.completion_words
+          | [ "build" ] -> List.map target_candidate workspace.Manifest.targets
+          | [ "run" ] -> executable_target_candidates workspace
+          | [ "test" ] -> test_target_candidates workspace
+          | [ "install" ] -> installable_target_candidates workspace
+          | _ -> [] )
       | "install" -> installable_target_candidates workspace
       | "completion" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) completion_doc.completion_words
@@ -1413,6 +1482,19 @@ let run_deps (options : deps_options) =
           Exit_code 0
       | Error message -> report_error message)
 
+let run_env (options : env_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Env_report.report ~workspace_root:options.workspace_dir
+          ?profile:options.profile workspace options.subtool options.targets
+      with
+      | Ok report ->
+          print_string (Env_report.render_report report);
+          Exit_code 0
+      | Error message -> report_error message)
+
 let run_install (options : install_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
@@ -1566,6 +1648,7 @@ let commands =
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
     Command { doc = deps_doc; parse = parse_deps_args; run = run_deps };
+    Command { doc = env_doc; parse = parse_env_args; run = run_env };
     Command { doc = install_doc; parse = parse_install_args; run = run_install };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
     Command

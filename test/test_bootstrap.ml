@@ -15,6 +15,24 @@ let write_executable workspace relative_path contents =
 let run_bootstrap_loader ?(env = []) () =
   Process.run_capture ~env "ocaml" [ "scripts/render_bootstrap_mod_use.ml" ]
 
+let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full) workspace =
+  let args =
+    [
+      Bootstrap.hidden_command_name;
+      "--manifest";
+      manifest_path workspace;
+      "--scope";
+      (match scope with
+      | Bootstrap.Executable_only -> "app"
+      | Bootstrap.Full -> "full");
+    ]
+    @
+    match profile with
+    | Some profile -> [ "--profile"; profile ]
+    | None -> []
+  in
+  run_binary (oasis_bin ()) args
+
 let write_bootstrap_driver workspace generated_makefile =
   write_workspace_file workspace "scripts/render_bootstrap_mod_use.ml" "";
   write_workspace_file workspace "scripts/generate_bootstrap_makefile.ml" "";
@@ -159,6 +177,36 @@ deps = ["core"]
               ~needle:"$(BIN_DIR)/suite: $(BOOTSTRAP_MK) $(TEST_OBJS) | $(BIN_DIR)"
               makefile
               "bootstrap generation should make test links depend on bootstrap metadata")) );
+    ( "renders the full bootstrap makefile through the compiled oasis binary",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-compiled" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "src"
+modules = ["alpha"]
+
+[executable.demo]
+dir = "src"
+main = "main"
+deps = ["core"]
+
+[test.suite]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+|};
+            write_source workspace "src/alpha.ml" {|let value = "alpha"|};
+            write_source workspace "src/main.ml"
+              {|let () = print_endline Alpha.value|};
+            write_source workspace "test/test_main.ml"
+              {|let () = print_endline Alpha.value|};
+            let expected = expect_ok (render_bootstrap workspace) in
+            let compiled = run_compiled_bootstrap workspace in
+            assert_int_equal 0 compiled.status
+              "the hidden compiled bootstrap command should render successfully";
+            assert_string_equal expected compiled.output
+              "the compiled bootstrap planner should match Bootstrap.render_makefile")) );
     ( "emits interface-aware and package-aware bootstrap rules",
       (fun () ->
         with_temp_dir "oasis-bootstrap-packages" (fun workspace ->

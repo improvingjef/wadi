@@ -38,14 +38,27 @@ $(BUILD_DIR) $(OBJ_DIR) $(BIN_DIR):
 BOOTSTRAP_PROFILE_ARG = $(if $(strip $(BOOTSTRAP_PROFILE)),--profile $(BOOTSTRAP_PROFILE),)
 
 $(BOOTSTRAP_APP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_HELPERS) | $(BUILD_DIR)
-	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) --scope app $(BOOTSTRAP_PROFILE_ARG) > $@
+	tmp=$@.tmp; \
+	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) --scope app $(BOOTSTRAP_PROFILE_ARG) > $$tmp && mv $$tmp $@
 
 $(BOOTSTRAP_FULL_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_HELPERS) | $(BUILD_DIR)
-	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) --scope full $(BOOTSTRAP_PROFILE_ARG) > $@
+	$(MAKE) BOOTSTRAP_SCOPE=app $(BIN_DIR)/oasis
+	tmp=$@.tmp; \
+	$(BIN_DIR)/oasis $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --scope full $(BOOTSTRAP_PROFILE_ARG) > $$tmp && mv $$tmp $@
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),)
+BOOTSTRAP_INTERNAL_COMMAND := __bootstrap_makefile
+BOOTSTRAP_SCOPE ?= auto
 BOOTSTRAP_NEEDS_FULL := $(filter test bootstrap-smoke $(BIN_DIR)/test_runner,$(MAKECMDGOALS))
+
+ifeq ($(BOOTSTRAP_SCOPE),app)
+BOOTSTRAP_MK := $(BOOTSTRAP_APP_MK)
+else ifeq ($(BOOTSTRAP_SCOPE),full)
+BOOTSTRAP_MK := $(BOOTSTRAP_FULL_MK)
+else
 BOOTSTRAP_MK := $(if $(BOOTSTRAP_NEEDS_FULL),$(BOOTSTRAP_FULL_MK),$(BOOTSTRAP_APP_MK))
+endif
+
 BOOTSTRAP_BACKEND ?= $(or $(OASIS_BACKEND),auto)
 BOOTSTRAP_NATIVE_OK := $(shell $(OCAMLOPT) -version >/dev/null 2>&1 && printf yes)
 BOOTSTRAP_BYTECODE_OK := $(shell $(OCAMLC) -version >/dev/null 2>&1 && printf yes)

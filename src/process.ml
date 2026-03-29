@@ -145,6 +145,14 @@ let merged_environment env =
          | None -> None)
   |> Array.of_list
 
+let merged_environment_bindings env =
+  merged_environment env
+  |> Array.to_list
+  |> List.filter_map (fun binding ->
+         match String_util.split_once ~on:'=' binding with
+         | Some (name, value) -> Some (name, value)
+         | None -> None)
+
 let spawn ?cwd ?(env = []) ?stdin_fd ?stdout_fd ?stderr_fd ?(extra_closes = [])
     prog args =
   match Unix.fork () with

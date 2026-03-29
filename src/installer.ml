@@ -52,6 +52,23 @@ let workspace_label (workspace : Manifest.workspace) =
 let display_name name package_path =
   name ^ Manifest.package_suffix package_path
 
+let library_install_name (library : Manifest.library) =
+  Manifest.install_name library.name library.public_name
+
+let executable_install_name (executable : Manifest.executable) =
+  Manifest.install_name executable.name executable.public_name
+
+let dependency_install_name (workspace : Manifest.workspace) dependency_name =
+  match
+    List.find_opt
+      (function
+        | Manifest.Library library -> library.name = dependency_name
+        | Manifest.Executable _ | Manifest.Test _ -> false)
+      workspace.targets
+  with
+  | Some (Manifest.Library library) -> library_install_name library
+  | Some (Manifest.Executable _) | Some (Manifest.Test _) | None -> dependency_name
+
 let resolve_prefix ~workspace_root ~profile = function
   | Some prefix when Filename.is_relative prefix ->
       {
@@ -250,7 +267,8 @@ let json_optional_string = function
 let render_meta ~(workspace : Manifest.workspace) (library : Manifest.library)
     filenames =
   let requires =
-    String_util.dedup_preserve (library.deps @ library.packages)
+    String_util.dedup_preserve
+      (List.map (dependency_install_name workspace) library.deps @ library.packages)
   in
   let find_archive suffix =
     List.find_opt (fun name -> String_util.ends_with ~suffix name) filenames
@@ -286,8 +304,9 @@ let install_library ~verbose ~(layout : install_layout)
     (artifact : Builder.built_artifact) =
   match artifact with
   | Builder.Built_library built_library ->
+      let install_name = library_install_name library in
       let install_dir =
-        Layout.install_library_dir layout.stage_root built_library.name
+        Layout.install_library_dir layout.stage_root install_name
       in
       let filenames = library_install_filenames built_library.out_dir in
       if Fs.exists install_dir then Fs.remove_tree install_dir;
@@ -301,7 +320,7 @@ let install_library ~verbose ~(layout : install_layout)
         filenames;
       let meta, requires = render_meta ~workspace library filenames in
       let meta_path =
-        Layout.install_library_meta_path layout.stage_root built_library.name
+        Layout.install_library_meta_path layout.stage_root install_name
       in
       Fs.write_file meta_path meta;
       print_endline
@@ -311,15 +330,14 @@ let install_library ~verbose ~(layout : install_layout)
       Ok
         {
           name = built_library.name;
-          dir = Layout.relative_install_library_dir built_library.name;
+          dir = Layout.relative_install_library_dir install_name;
           files =
             List.map
               (fun name ->
                 Filename.concat
-                  (Layout.relative_install_library_dir built_library.name)
-                  name)
+                  (Layout.relative_install_library_dir install_name) name)
               filenames;
-          meta = Layout.relative_install_library_meta_path built_library.name;
+          meta = Layout.relative_install_library_meta_path install_name;
           requires;
           selection;
           requested_by;
@@ -332,8 +350,9 @@ let install_executable ~verbose ~(layout : install_layout)
     (artifact : Builder.built_artifact) =
   match artifact with
   | Builder.Built_executable built_executable ->
+      let install_name = executable_install_name executable in
       let install_path =
-        Layout.install_executable_path layout.stage_root built_executable.name
+        Layout.install_executable_path layout.stage_root install_name
       in
       report_detail ~verbose
         (Printf.sprintf "Installing %s -> %s" built_executable.binary install_path);
@@ -345,7 +364,7 @@ let install_executable ~verbose ~(layout : install_layout)
       Ok
         {
           name = built_executable.name;
-          path = Layout.relative_install_executable_path built_executable.name;
+          path = Layout.relative_install_executable_path install_name;
           selection;
           requested_by;
         }

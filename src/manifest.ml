@@ -21,6 +21,7 @@ type target_options = {
 
 type library = {
   name : string;
+  public_name : string option;
   dir : string;
   package_path : string option;
   modules : string list;
@@ -31,6 +32,7 @@ type library = {
 
 type runnable = {
   name : string;
+  public_name : string option;
   dir : string;
   package_path : string option;
   main : string;
@@ -148,6 +150,20 @@ let target_name = function
   | Library library -> library.name
   | Executable executable -> executable.name
   | Test test -> test.name
+
+let target_public_name = function
+  | Library library -> library.public_name
+  | Executable executable -> executable.public_name
+  | Test test -> test.public_name
+
+let install_name name = function
+  | Some public_name when String.trim public_name <> "" -> public_name
+  | Some _ | None -> name
+
+let target_install_name = function
+  | Library library -> install_name library.name library.public_name
+  | Executable executable -> install_name executable.name executable.public_name
+  | Test test -> install_name test.name test.public_name
 
 let target_deps = function
   | Library library -> library.deps
@@ -535,6 +551,7 @@ let parse_library path section name =
   let* () =
     allowed_fields path section
       [
+        "public_name";
         "dir";
         "modules";
         "deps";
@@ -548,6 +565,7 @@ let parse_library path section name =
         "sandbox";
       ]
   in
+  let* public_name = optional_string path section "public_name" in
   let* dir = required_string path section "dir" in
   let* modules = required_strings path section "modules" in
   let* deps = optional_strings path section "deps" in
@@ -560,12 +578,23 @@ let parse_library path section name =
   let* () = validate_identifier_list ~allow_empty:true path section.line "deps" deps in
   let* () = validate_package_list path section.line packages in
   Ok
-    (Library { name; dir; package_path = None; modules; deps; packages; options })
+    (Library
+       {
+         name;
+         public_name;
+         dir;
+         package_path = None;
+         modules;
+         deps;
+         packages;
+         options;
+       })
 
 let parse_runnable path section name =
   let* () =
     allowed_fields path section
       [
+        "public_name";
         "dir";
         "main";
         "modules";
@@ -580,6 +609,7 @@ let parse_runnable path section name =
         "sandbox";
       ]
   in
+  let* public_name = optional_string path section "public_name" in
   let* dir = required_string path section "dir" in
   let* main = required_string path section "main" in
   let* modules = optional_strings path section "modules" in
@@ -597,7 +627,19 @@ let parse_runnable path section name =
     error path section.line "main must be a file stem without path or extension"
   else if List.mem main modules then
     error path section.line "main should not be repeated in modules"
-  else Ok { name; dir; package_path = None; main; modules; deps; packages; options }
+  else
+    Ok
+      {
+        name;
+        public_name;
+        dir;
+        package_path = None;
+        main;
+        modules;
+        deps;
+        packages;
+        options;
+      }
 
 let parse_executable path section name =
   let* executable = parse_runnable path section name in

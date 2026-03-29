@@ -120,6 +120,25 @@ Examples:
 - `oasis deps hello`
 - `oasis deps --workspace examples/hello greeting hello`
 
+## env
+
+Print the exact subprocess environment a build, run, test, or install step would inherit.
+
+Usage:
+
+`oasis env [--workspace DIR] [--profile NAME] SUBTOOL [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis env build`
+- `oasis env --profile release build demo`
+- `oasis env run demo`
+- `oasis env test unit`
+
 ## install
 
 Stage installable libraries, executables, and metadata under a prefix.

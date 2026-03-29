@@ -1,7 +1,7 @@
 let cases =
   Test_manifest.cases @ Test_layout.cases @ Test_build.cases @ Test_clean.cases
   @ Test_process.cases @ Test_run.cases @ Test_graph.cases @ Test_deps.cases
-  @ Test_migrate.cases @ Test_test.cases @ Test_install.cases
+  @ Test_env.cases @ Test_migrate.cases @ Test_test.cases @ Test_install.cases
   @ Test_toolchain.cases @ Test_explain.cases @ Test_bootstrap.cases
 
 let () =

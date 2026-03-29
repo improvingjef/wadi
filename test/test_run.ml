@@ -184,6 +184,9 @@ main = "main"
               ~needle:"oasis deps [--workspace DIR] [TARGET ...]"
               run.output "top-level usage should include the deps command";
             assert_string_contains
+              ~needle:"oasis env [--workspace DIR] [--profile NAME] SUBTOOL [TARGET ...]"
+              run.output "top-level usage should include the env command";
+            assert_string_contains
               ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the install command";
             assert_string_contains ~needle:"oasis docs" run.output
@@ -238,6 +241,8 @@ main = "main"
               "docs output should include the graph command";
             assert_string_contains ~needle:"## deps" docs.output
               "docs output should include the deps command";
+            assert_string_contains ~needle:"## env" docs.output
+              "docs output should include the env command";
             assert_string_contains ~needle:"## install" docs.output
               "docs output should include the install command";
             assert_string_contains ~needle:"## migrate" docs.output
@@ -267,7 +272,11 @@ main = "main"
             assert_string_contains
               ~needle:"- `--stdout`: Print the generated manifest instead of writing a file."
               docs.output
-              "docs output should include the migrate stdout description")) );
+              "docs output should include the migrate stdout description";
+            assert_string_contains
+              ~needle:"- `oasis env run demo`"
+              docs.output
+              "docs output should include env examples from the command table")) );
     ( "generates release docs and completion artifacts from the live binary",
       (fun () ->
         with_temp_dir "oasis-cli-release-artifacts" (fun output_dir ->
@@ -403,6 +412,59 @@ main = "main"
                   "completion queries should suggest the default profile name";
                 assert_string_contains ~needle:"candidate\tdev\n" profile_query.output
                   "completion queries should suggest additional profile names")) ));
+    ( "completes env subtools and workspace-local targets",
+      (fun () ->
+        with_temp_dir "oasis-cli-env-completion" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+
+[test.unit]
+dir = "test"
+main = "main"
+|};
+            write_source workspace "lib/core.ml" {|let value = "core"|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            write_source workspace "test/main.ml" {|let () = print_endline "unit"|};
+            let subtools =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; ""; "--"; "env" ]
+            in
+            assert_int_equal 0 subtools.status
+              "env completion should suggest subtools before a target";
+            assert_string_contains ~needle:"candidate\tbuild\n" subtools.output
+              "env completion should suggest build";
+            assert_string_contains ~needle:"candidate\trun\n" subtools.output
+              "env completion should suggest run";
+            let run_targets =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; ""; "--"; "env"; "run" ]
+            in
+            assert_int_equal 0 run_targets.status
+              "env run completion should suggest executable targets";
+            assert_string_contains ~needle:"candidate\tdemo\n" run_targets.output
+              "env run completion should suggest executables";
+            assert_string_not_contains ~needle:"candidate\tcore\n" run_targets.output
+              "env run completion should not suggest libraries";
+            let install_targets =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; ""; "--"; "env"; "install" ]
+            in
+            assert_int_equal 0 install_targets.status
+              "env install completion should suggest installable targets";
+            assert_string_contains ~needle:"candidate\tcore\n" install_targets.output
+              "env install completion should include libraries";
+            assert_string_contains ~needle:"candidate\tdemo\n" install_targets.output
+              "env install completion should include executables";
+            assert_string_not_contains ~needle:"candidate\tunit\n"
+              install_targets.output
+              "env install completion should not include tests")) );
     ( "returns a versioned directory-completion protocol header for path flags",
       (fun () ->
         with_temp_dir "oasis-cli-path-query" (fun workspace ->

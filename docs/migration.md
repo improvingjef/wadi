@@ -11,8 +11,9 @@ oasis migrate --stdout
 ```
 
 That command scans `dune-project` plus every `dune` file it can find, emits a
-reviewable `oasis.toml`, and leaves review comments in the output for anything
-it could not translate cleanly.
+reviewable `oasis.toml`, translates common `preprocess`, `pps`, `public_name`,
+and `rule` forms into real oasis sections, and leaves review comments only for
+the pieces it still cannot translate cleanly.
 
 ## Command Mapping
 
@@ -41,6 +42,7 @@ Oasis:
 ```toml
 [library.core]
 dir = "lib"
+public_name = "demo.core"
 modules = ["alpha", "beta"]
 packages = ["unix", "str"]
 ```
@@ -62,6 +64,7 @@ Oasis:
 [executable.demo]
 dir = "app"
 main = "main"
+public_name = "demo-cli"
 deps = ["core"]
 ```
 
@@ -116,6 +119,10 @@ Important rules:
 - `action.outputs` are relative to the target directory, not the workspace root.
 - `preprocess.deps` and `ppx.deps` are explicit auxiliary inputs and participate
   in rebuild detection and `oasis explain`.
+- `oasis migrate` resolves common dune `pps` forms through `ocamlfind printppx`
+  and emits `ppx.*` sections with explicit argv.
+- common dune `rule` stanzas become `action.*` sections when oasis can map the
+  targets, deps, and command form directly
 - Generated `.ml` or `.mli` files may not collide with checked-in source files
   in the target directory. Oasis fails fast instead of silently choosing one.
 
