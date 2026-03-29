@@ -30,8 +30,8 @@ let rec prune_empty_directories ~stop_at path =
     Unix.rmdir path;
     prune_empty_directories ~stop_at (Filename.dirname path))
 
-let clean_target ~workspace_root ~verbose target =
-  let artifact_dir = Layout.target_out_dir workspace_root target in
+let clean_target ~workspace_root ~profile ~verbose target =
+  let artifact_dir = Layout.target_out_dir ?profile workspace_root target in
   if Fs.exists artifact_dir then (
     report_detail ~verbose ("Cleaning " ^ artifact_dir);
     Fs.remove_tree artifact_dir;
@@ -44,23 +44,36 @@ let clean_target ~workspace_root ~verbose target =
     print_endline (Printf.sprintf "No artifacts for %s" (describe_target target));
     false)
 
-let clean_workspace ~workspace_root ~verbose =
+let clean_workspace ~workspace_root ~profile ~verbose =
   let workspace_root = Fs.realpath workspace_root in
-  let path = oasis_root workspace_root in
+  let path =
+    match profile with
+    | Some profile -> Layout.build_root_for_profile workspace_root profile
+    | None -> oasis_root workspace_root
+  in
   if Fs.exists path then (
     report_detail ~verbose ("Cleaning " ^ path);
     Fs.remove_tree path;
-    print_endline (Printf.sprintf "Removed workspace artifacts -> %s" path))
-  else print_endline (Printf.sprintf "Nothing to clean in %s" path);
+    print_endline
+      (match profile with
+      | Some profile ->
+          Printf.sprintf "Removed profile %s artifacts -> %s" profile path
+      | None -> Printf.sprintf "Removed workspace artifacts -> %s" path))
+  else
+    print_endline
+      (match profile with
+      | Some profile -> Printf.sprintf "Nothing to clean in profile %s (%s)" profile path
+      | None -> Printf.sprintf "Nothing to clean in %s" path);
   Ok ()
 
-let clean_targets ~workspace_root ~verbose ~requested_targets workspace =
+let clean_targets ~workspace_root ~profile ~verbose ~requested_targets workspace =
   let workspace_root = Fs.realpath workspace_root in
   let* targets = resolve_targets workspace requested_targets in
   let removed_count =
     List.fold_left
       (fun count target ->
-        if clean_target ~workspace_root ~verbose target then count + 1 else count)
+        if clean_target ~workspace_root ~profile ~verbose target then count + 1
+        else count)
       0 targets
   in
   if removed_count = 0 then

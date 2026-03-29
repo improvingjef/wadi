@@ -3,6 +3,7 @@ type build_options = {
   verbose : bool;
   targets : string list;
   backend_request : Toolchain.backend_request;
+  profile : string option;
 }
 
 type run_options = {
@@ -11,6 +12,7 @@ type run_options = {
   target : string option;
   args : string list;
   backend_request : Toolchain.backend_request;
+  profile : string option;
 }
 
 type test_options = {
@@ -18,12 +20,14 @@ type test_options = {
   verbose : bool;
   targets : string list;
   backend_request : Toolchain.backend_request;
+  profile : string option;
 }
 
 type clean_options = {
   workspace_dir : string;
   verbose : bool;
   targets : string list;
+  profile : string option;
 }
 
 type toolchain_options = { verbose : bool }
@@ -52,12 +56,12 @@ let build_doc =
   {
     name = "build";
     signature =
-      "oasis build [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
+      "oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis build";
         "oasis build hello";
-        "oasis build --workspace examples/hello --verbose";
+        "oasis build --workspace examples/hello --profile release --verbose";
       ];
   }
 
@@ -65,12 +69,12 @@ let run_doc =
   {
     name = "run";
     signature =
-      "oasis run [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
+      "oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
     examples =
       [
         "oasis run";
         "oasis run hello";
-        "oasis run hello -- --loud";
+        "oasis run --profile release hello -- --loud";
         "oasis run -- --port 8080";
       ];
   }
@@ -79,26 +83,26 @@ let test_doc =
   {
     name = "test";
     signature =
-      "oasis test [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
+      "oasis test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis test";
         "oasis test unit";
         "oasis test unit integration";
-        "oasis test --workspace examples/hello --verbose";
+        "oasis test --workspace examples/hello --profile ci --verbose";
       ];
   }
 
 let clean_doc =
   {
     name = "clean";
-    signature = "oasis clean [--workspace DIR] [--verbose] [TARGET ...]";
+    signature = "oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis clean";
         "oasis clean hello";
         "oasis clean hello greeting";
-        "oasis clean --workspace examples/hello --verbose";
+        "oasis clean --workspace examples/hello --profile release --verbose";
       ];
   }
 
@@ -142,6 +146,9 @@ let parse_build_args (args : string list) : (build_options, string) result =
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
@@ -160,6 +167,7 @@ let parse_build_args (args : string list) : (build_options, string) result =
       verbose = false;
       targets = [];
       backend_request = default_backend_request;
+      profile = None;
     }
     args
 
@@ -171,6 +179,9 @@ let parse_run_args args =
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
@@ -196,6 +207,7 @@ let parse_run_args args =
       target = None;
       args = [];
       backend_request = default_backend_request;
+      profile = None;
     }
     args
 
@@ -206,6 +218,9 @@ let parse_test_args (args : string list) : (test_options, string) result =
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
@@ -224,6 +239,7 @@ let parse_test_args (args : string list) : (test_options, string) result =
       verbose = false;
       targets = [];
       backend_request = default_backend_request;
+      profile = None;
     }
     args
 
@@ -233,6 +249,9 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage clean_doc)
@@ -240,7 +259,7 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
-  loop { workspace_dir = "."; verbose = false; targets = [] } args
+  loop { workspace_dir = "."; verbose = false; targets = []; profile = None } args
 
 let parse_toolchain_args args =
   match args with
@@ -311,7 +330,8 @@ let run_build (options : build_options) =
       match
         Builder.build ~workspace_root:options.workspace_dir
           ~verbose:options.verbose ~requested_targets:options.targets
-          ~backend_request:options.backend_request workspace
+          ~backend_request:options.backend_request ?profile:options.profile
+          workspace
       with
       | Ok _ -> Exit_code 0
       | Error message -> report_error message)
@@ -326,7 +346,8 @@ let run_executable (options : run_options) =
           match
             Builder.build ~workspace_root:options.workspace_dir
               ~verbose:options.verbose ~requested_targets:[ target_name ]
-              ~backend_request:options.backend_request workspace
+              ~backend_request:options.backend_request ?profile:options.profile
+              workspace
           with
           | Error message -> report_error message
           | Ok result -> (
@@ -349,7 +370,7 @@ let run_tests (options : test_options) =
       match
         Tester.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
           ~backend_request:options.backend_request
-          ~requested_targets:options.targets workspace
+          ?profile:options.profile ~requested_targets:options.targets workspace
       with
       | Ok status -> Exit_code status
       | Error message -> report_error message)
@@ -362,7 +383,7 @@ let run_clean (options : clean_options) =
   else if options.targets = [] then (
     match
       Cleaner.clean_workspace ~workspace_root:options.workspace_dir
-        ~verbose:options.verbose
+        ~profile:options.profile ~verbose:options.verbose
     with
     | Ok () -> Exit_code 0
     | Error message -> report_error message)
@@ -372,7 +393,8 @@ let run_clean (options : clean_options) =
     | Ok workspace -> (
         match
           Cleaner.clean_targets ~workspace_root:options.workspace_dir
-            ~verbose:options.verbose ~requested_targets:options.targets
+            ~profile:options.profile ~verbose:options.verbose
+            ~requested_targets:options.targets
             workspace
         with
         | Ok () -> Exit_code 0

@@ -243,24 +243,26 @@ let link_args resolution =
   | [] -> []
   | _ -> [ "-linkpkg" ]
 
-let ensure_success_compiler ~verbose backend resolution args =
+let ensure_success_compiler ?(env = []) ~verbose backend resolution args =
   match resolution.packages with
-  | [] -> Process.ensure_success ~verbose (compiler_cmd backend) args
+  | [] -> Process.ensure_success ~verbose ~env (compiler_cmd backend) args
   | _ ->
       let* ocamlfind = ensure_ocamlfind () in
-      Process.ensure_success ~verbose ocamlfind
+      Process.ensure_success ~verbose ~env ocamlfind
         ((compiler_kind backend :: package_args resolution) @ args)
 
-let ensure_success_ocamldep ~verbose resolution args =
+let ensure_success_ocamldep ?(env = []) ~verbose resolution args =
   match resolution.packages with
-  | [] -> Process.ensure_success ~verbose (ocamldep_cmd ()) args
+  | [] -> Process.ensure_success ~verbose ~env (ocamldep_cmd ()) args
   | _ ->
       let* ocamlfind = ensure_ocamlfind () in
-      Process.ensure_success ~verbose ocamlfind
+      Process.ensure_success ~verbose ~env ocamlfind
         (("ocamldep" :: package_args resolution) @ args)
 
-let sort_sources ~verbose resolution source_files =
-  let* outcome = ensure_success_ocamldep ~verbose resolution ("-sort" :: source_files) in
+let sort_sources ?(env = []) ~verbose resolution source_files =
+  let* outcome =
+    ensure_success_ocamldep ~env ~verbose resolution ("-sort" :: source_files)
+  in
   Ok (String_util.split_whitespace outcome.Process.output)
 
 let fingerprint_lines resolution =

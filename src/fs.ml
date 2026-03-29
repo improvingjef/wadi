@@ -45,6 +45,7 @@ let write_file path contents =
 
 let copy_file ~src ~dst =
   ensure_dir (Filename.dirname dst);
+  let permissions = (Unix.stat src).Unix.st_perm in
   let input_channel = open_in_bin src in
   let output_channel = open_out_bin dst in
   Fun.protect
@@ -60,7 +61,8 @@ let copy_file ~src ~dst =
             output output_channel buffer 0 bytes_read;
             loop ()
       in
-      loop ())
+      loop ();
+      Unix.chmod dst permissions)
 
 let rec remove_tree path =
   if exists path then

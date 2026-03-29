@@ -15,3 +15,8 @@
 - Generic bootstrap pattern rules looked simple, but they were hiding two real correctness gaps: `.mli` files need their own build edges, and package flags belong to specific target groups rather than a global `unix` escape hatch.
 - Rebuilding `_bootstrap` from scratch on every `make test` is cheap insurance; self-hosting claims are not credible if the fast path never proves that generation, compilation, and linking still compose from an empty directory.
 - Generating explicit bootstrap compile rules exposed a remaining sharp edge: a shared object directory means duplicate module stems across app/test/library slices should be rejected early instead of producing confusing overwrites.
+- Generated files only feel civilized when they stay under `_oasis`; copying back only declared action outputs keeps sandboxes useful and avoids dirtying the source tree with codegen fallout.
+- Sandbox execution immediately exposed a boring but critical filesystem detail: copied helper scripts have to preserve executable bits or the whole “declarative action” story collapses on first use.
+- Profiles need to change artifact roots, not just flags. Reusing one build directory across `release` and `dev` would turn “profile” into a cache-corruption feature.
+- Text preprocessors fit naturally as stdin/stdout transforms, while PPX support is cleaner when the builder treats rewriters as named tools and lets the compiler own the AST pipeline.
+- Growing the manifest model triggered a wave of OCaml record-label ambiguity; explicit type annotations are a small price to pay for keeping a richer configuration format readable and type-safe.

@@ -58,11 +58,12 @@ let report_failures failures total =
     (Printf.sprintf "%d/%d tests failed" (List.length failures) total);
   prerr_endline ("Failed tests: " ^ String.concat ", " failed_names)
 
-let run ~workspace_root ~verbose ~backend_request ~requested_targets workspace =
+let run ~workspace_root ~verbose ~backend_request ?profile ~requested_targets
+    workspace =
   let* target_names = resolve_requested_targets workspace requested_targets in
   let* build_result =
     Builder.build ~workspace_root ~verbose ~requested_targets:target_names
-      ~backend_request workspace
+      ~backend_request ?profile workspace
   in
   let rec loop failures = function
     | [] -> List.rev failures

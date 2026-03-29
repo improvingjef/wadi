@@ -3,6 +3,9 @@ open Test_support
 let executable_path workspace name =
   Layout.executable_binary workspace name
 
+let profile_executable_path workspace profile name =
+  Layout.executable_binary ~profile workspace name
+
 let library_archive_path workspace name =
   Layout.library_archive workspace name
 
@@ -28,6 +31,34 @@ let write_wrapper workspace relative_path label log_path command_path =
   write_executable workspace relative_path
     (Printf.sprintf "#!/bin/sh\nprintf '%s\\n' >> %s\nexec %s \"$@\"\n" label
        (Filename.quote log_path) (Filename.quote command_path))
+
+let write_logging_wrapper workspace relative_path log_path command_path =
+  write_executable workspace relative_path
+    (Printf.sprintf
+       "#!/bin/sh\nprintf 'BUILD_PROFILE=%%s\\n' \"${BUILD_PROFILE-}\" >> %s\nprintf \
+        'ARGS=%%s\\n' \"$*\" >> %s\nexec %s \"$@\"\n"
+       (Filename.quote log_path) (Filename.quote log_path)
+       (Filename.quote command_path))
+
+let compile_ppx workspace relative_path contents output_relative_path =
+  let source_path = Filename.concat workspace relative_path in
+  Fs.write_file source_path contents;
+  let output_path = Filename.concat workspace output_relative_path in
+  let outcome =
+    Process.run_capture "ocamlfind"
+      [
+        "ocamlopt";
+        "-package";
+        "compiler-libs.common";
+        "-linkpkg";
+        "-o";
+        output_path;
+        source_path;
+      ]
+  in
+  assert_int_equal 0 outcome.status
+    "expected the helper ppx binary to compile successfully";
+  output_path
 
 let cases =
   [
@@ -352,4 +383,187 @@ modules = ["alpha", "beta"]
                 assert_string_equal stdlib_dir resolved
                   "unix lookup should fall back to the stdlib root layout"
             | None -> fail "expected unix library resolution to succeed")) );
+    ( "runs sandboxed actions to generate modules without leaking undeclared files",
+      (fun () ->
+        with_temp_dir "oasis-action-generate" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+deps = ["scripts/template.txt"]
+outputs = ["version.ml"]
+stdin = "from-stdin"
+sandbox = "target"
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nset -eu\ntemplate=$(cat ../scripts/template.txt)\nstdin_value=$(cat)\nprintf 'let message = \"%s %s\"\\n' \"$template\" \"$stdin_value\" > version.ml\nprintf 'should-not-leak\\n' > leak.txt\n");
+            write_source workspace "scripts/template.txt" "from-template\n";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "sandboxed actions should run before source discovery";
+            assert_true (not (Fs.exists (Filename.concat workspace "app/version.ml")))
+              "generated modules should stay in the build root instead of the workspace";
+            assert_true (not (Fs.exists (Filename.concat workspace "app/leak.txt")))
+              "undeclared sandbox writes should not leak back into the workspace";
+            assert_file_exists
+              (Filename.concat (Layout.executable_out_dir workspace "demo")
+                 "generated/version.ml");
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "generated-module executables should still run successfully";
+            assert_string_equal "from-template from-stdin\n" run.output
+              "generated modules should compile from declared action outputs")) );
+    ( "applies named preprocessors in pipeline order",
+      (fun () ->
+        with_temp_dir "oasis-preprocess" (fun workspace ->
+            write_manifest workspace
+              {|
+[preprocess.first]
+argv = ["./scripts/first.sh"]
+
+[preprocess.second]
+argv = ["./scripts/second.sh"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+preprocess = ["first", "second"]
+|};
+            ignore
+              (write_executable workspace "scripts/first.sh"
+                 "#!/bin/sh\nsed 's/__TOKEN__/stage_one/'\n");
+            ignore
+              (write_executable workspace "scripts/second.sh"
+                 "#!/bin/sh\nsed 's/stage_one/pipeline/'\n");
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__TOKEN__"|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "preprocessed builds should compile successfully";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "preprocessed executables should run successfully";
+            assert_string_equal "pipeline\n" run.output
+              "preprocessors should be applied in manifest order")) );
+    ( "runs configured ppx rewriters during compilation",
+      (fun () ->
+        with_temp_dir "oasis-ppx" (fun workspace ->
+            let _ppx_binary =
+              compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("__PPX__", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string ("rewritten by ppx", loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            write_manifest workspace
+              {|
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+ppx = ["rewrite"]
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "__PPX__"|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "ppx-backed builds should compile successfully";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "ppx-backed executables should run successfully";
+            assert_string_equal "rewritten by ppx\n" run.output
+              "configured ppx rewriters should affect compiled output")) );
+    ( "resolves default profiles and target overrides into separate build roots",
+      (fun () ->
+        with_temp_dir "oasis-profiles" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+compile_flags = ["-principal"]
+env = ["BUILD_PROFILE=default"]
+
+[profile.release]
+compile_flags = ["-strict-sequence"]
+env = ["BUILD_PROFILE=release"]
+
+[profile.release.executable.demo]
+compile_flags = ["-rectypes"]
+env = ["BUILD_PROFILE=demo"]
+
+[profile.dev]
+compile_flags = ["-annot"]
+env = ["BUILD_PROFILE=dev"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "profiled"|};
+            let log_path = Filename.concat workspace "compiler.log" in
+            let ocamlopt_wrapper =
+              write_logging_wrapper workspace "bin/ocamlopt-wrapper" log_path
+                (resolve_command "ocamlopt")
+            in
+            let release_build =
+              with_env "OCAMLOPT" ocamlopt_wrapper (fun () ->
+                  run_oasis ~cwd:workspace [ "build" ])
+            in
+            assert_int_equal 0 release_build.status
+              "the default profile should build successfully";
+            assert_file_exists (profile_executable_path workspace "release" "demo");
+            let release_log = Fs.read_file log_path in
+            assert_string_contains ~needle:"BUILD_PROFILE=demo\n" release_log
+              "target-specific env overrides should reach compiler invocations";
+            assert_string_contains ~needle:"-principal" release_log
+              "default compile flags should reach the compiler";
+            assert_string_contains ~needle:"-strict-sequence" release_log
+              "profile compile flags should reach the compiler";
+            assert_string_contains ~needle:"-rectypes" release_log
+              "profile target compile flags should reach the compiler";
+            Fs.write_file log_path "";
+            let dev_build =
+              with_env "OCAMLOPT" ocamlopt_wrapper (fun () ->
+                  run_oasis ~cwd:workspace [ "build"; "--profile"; "dev" ])
+            in
+            assert_int_equal 0 dev_build.status
+              "explicit alternate profiles should build successfully";
+            assert_file_exists (profile_executable_path workspace "dev" "demo");
+            let dev_log = Fs.read_file log_path in
+            assert_string_contains ~needle:"BUILD_PROFILE=dev\n" dev_log
+              "selected profile env should reach compiler invocations";
+            assert_string_contains ~needle:"-annot" dev_log
+              "alternate profile flags should reach the compiler";
+            assert_string_not_contains ~needle:"-rectypes" dev_log
+              "target overrides from other profiles should not leak into dev")) );
   ]

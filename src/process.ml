@@ -1,3 +1,5 @@
+type env_binding = string * string
+
 type outcome = {
   command : string;
   status : int;
@@ -11,9 +13,21 @@ type exit_status = {
   unix_status : Unix.process_status;
 }
 
-let render ?cwd prog args =
+let render ?cwd ?(env = []) prog args =
+  let env_prefix =
+    match env with
+    | [] -> ""
+    | env ->
+        String.concat " "
+          (List.map
+             (fun (name, value) ->
+               String_util.shell_quote (name ^ "=" ^ value))
+             env)
+        ^ " "
+  in
   let base =
-    String.concat " " (List.map String_util.shell_quote (prog :: args))
+    env_prefix
+    ^ String.concat " " (List.map String_util.shell_quote (prog :: args))
   in
   match cwd with
   | None -> base
@@ -48,6 +62,19 @@ let write_stderr message =
         loop (offset + written)
       with
       | Unix.Unix_error (Unix.EINTR, _, _) -> loop offset
+  in
+  loop 0
+
+let write_all fd text =
+  let bytes = Bytes.of_string text in
+  let rec loop offset =
+    if offset < Bytes.length bytes then
+      try
+        let written = Unix.write fd bytes offset (Bytes.length bytes - offset) in
+        loop (offset + written)
+      with
+      | Unix.Unix_error (Unix.EINTR, _, _) -> loop offset
+      | Unix.Unix_error (Unix.EPIPE, _, _) -> ()
   in
   loop 0
 
@@ -88,17 +115,52 @@ let close_child_fds fds =
          if fd <> Unix.stdin && fd <> Unix.stdout && fd <> Unix.stderr then
            close_noerr fd)
 
-let spawn ?cwd ?stdout_fd ?stderr_fd ?(extra_closes = []) prog args =
+let environment_table () =
+  let table = Hashtbl.create 64 in
+  Unix.environment ()
+  |> Array.iter (fun binding ->
+         match String_util.split_once ~on:'=' binding with
+         | Some (name, value) -> Hashtbl.replace table name value
+         | None -> ());
+  table
+
+let merged_environment env =
+  let current = Unix.environment () in
+  let table = environment_table () in
+  let names =
+    Array.to_list current
+    |> List.filter_map (fun binding ->
+           match String_util.split_once ~on:'=' binding with
+           | Some (name, _) -> Some name
+           | None -> None)
+  in
+  let ordered_names =
+    String_util.dedup_preserve (names @ List.map fst env)
+  in
+  List.iter (fun (name, value) -> Hashtbl.replace table name value) env;
+  ordered_names
+  |> List.filter_map (fun name ->
+         match Hashtbl.find_opt table name with
+         | Some value -> Some (name ^ "=" ^ value)
+         | None -> None)
+  |> Array.of_list
+
+let spawn ?cwd ?(env = []) ?stdin_fd ?stdout_fd ?stderr_fd ?(extra_closes = [])
+    prog args =
   match Unix.fork () with
   | 0 -> (
       try
         (match cwd with
         | None -> ()
         | Some dir -> Unix.chdir dir);
+        setup_child_fd Unix.stdin stdin_fd;
         setup_child_fd Unix.stdout stdout_fd;
         setup_child_fd Unix.stderr stderr_fd;
-        close_child_fds (extra_closes @ List.filter_map Fun.id [ stdout_fd; stderr_fd ]);
-        Unix.execvp prog (Array.of_list (prog :: args))
+        close_child_fds
+          (extra_closes
+          @ List.filter_map Fun.id [ stdin_fd; stdout_fd; stderr_fd ]);
+        if env = [] then Unix.execvp prog (Array.of_list (prog :: args))
+        else Unix.execvpe prog (Array.of_list (prog :: args)) (merged_environment env)
       with
       | Unix.Unix_error (error, _, _) ->
           write_stderr
@@ -112,27 +174,66 @@ let spawn ?cwd ?stdout_fd ?stderr_fd ?(extra_closes = []) prog args =
           Unix._exit 127)
   | pid -> pid
 
-let run_capture ?cwd ?(verbose = false) prog args =
-  let command = render ?cwd prog args in
+let run_capture ?cwd ?(verbose = false) ?(env = []) ?stdin prog args =
+  let command = render ?cwd ~env prog args in
   if verbose then prerr_endline command;
   let read_fd, write_fd = Unix.pipe () in
+  let stdin_read_fd, stdin_write_fd =
+    match stdin with
+    | Some _ ->
+        let read_fd, write_fd = Unix.pipe () in
+        (Some read_fd, Some write_fd)
+    | None -> (None, None)
+  in
   let pid =
-    spawn ?cwd ~stdout_fd:write_fd ~stderr_fd:write_fd ~extra_closes:[ read_fd ]
+    spawn ?cwd ~env ?stdin_fd:stdin_read_fd ~stdout_fd:write_fd ~stderr_fd:write_fd
+      ~extra_closes:
+        (read_fd
+        :: List.filter_map Fun.id [ stdin_write_fd ])
       prog args
   in
   close_noerr write_fd;
+  (match stdin_read_fd with
+  | Some fd -> close_noerr fd
+  | None -> ());
+  (match stdin_write_fd, stdin with
+  | Some write_fd, Some text ->
+      Fun.protect ~finally:(fun () -> close_noerr write_fd) (fun () ->
+          write_all write_fd text)
+  | Some write_fd, None -> close_noerr write_fd
+  | None, _ -> ());
   let output = read_all read_fd in
   let unix_status = waitpid pid in
   { command; status = status_to_code unix_status; unix_status; output }
 
-let run_status ?cwd ?(verbose = false) prog args =
-  let command = render ?cwd prog args in
+let run_status ?cwd ?(verbose = false) ?(env = []) ?stdin prog args =
+  let command = render ?cwd ~env prog args in
   if verbose then prerr_endline command;
-  let unix_status = waitpid (spawn ?cwd prog args) in
+  let stdin_read_fd, stdin_write_fd =
+    match stdin with
+    | Some _ ->
+        let read_fd, write_fd = Unix.pipe () in
+        (Some read_fd, Some write_fd)
+    | None -> (None, None)
+  in
+  let pid =
+    spawn ?cwd ~env ?stdin_fd:stdin_read_fd
+      ~extra_closes:(List.filter_map Fun.id [ stdin_write_fd ]) prog args
+  in
+  (match stdin_read_fd with
+  | Some fd -> close_noerr fd
+  | None -> ());
+  (match stdin_write_fd, stdin with
+  | Some write_fd, Some text ->
+      Fun.protect ~finally:(fun () -> close_noerr write_fd) (fun () ->
+          write_all write_fd text)
+  | Some write_fd, None -> close_noerr write_fd
+  | None, _ -> ());
+  let unix_status = waitpid pid in
   { command; status = status_to_code unix_status; unix_status }
 
-let ensure_success ?cwd ?verbose prog args =
-  let outcome = run_capture ?cwd ?verbose prog args in
+let ensure_success ?cwd ?verbose ?(env = []) ?stdin prog args =
+  let outcome = run_capture ?cwd ?verbose ~env ?stdin prog args in
   if is_success outcome.unix_status then Ok outcome
   else
     Error

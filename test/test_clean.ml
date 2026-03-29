@@ -3,6 +3,9 @@ open Test_support
 let executable_path workspace name =
   Layout.executable_binary workspace name
 
+let profile_executable_path workspace profile name =
+  Layout.executable_binary ~profile workspace name
+
 let library_archive_path workspace name =
   Layout.library_archive workspace name
 
@@ -63,4 +66,41 @@ let cases =
             assert_string_contains
               ~needle:"Nothing to clean for the requested targets" clean.output
               "clean should summarize when no requested targets were removed")) );
+    ( "cleans only the requested profile root",
+      (fun () ->
+        with_temp_dir "oasis-clean-profile" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+
+[profile.dev]
+compile_flags = ["-annot"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_workspace_file workspace "app/main.ml"
+              {|let () = print_endline "profile-clean"|};
+            let release_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 release_build.status
+              "the default profile should build before profile-specific cleaning";
+            let dev_build =
+              run_oasis ~cwd:workspace [ "build"; "--profile"; "dev" ]
+            in
+            assert_int_equal 0 dev_build.status
+              "an alternate profile should build before selective cleaning";
+            assert_file_exists (profile_executable_path workspace "release" "demo");
+            assert_file_exists (profile_executable_path workspace "dev" "demo");
+            let clean = run_oasis ~cwd:workspace [ "clean"; "--profile"; "dev" ] in
+            assert_int_equal 0 clean.status
+              "profile-specific cleaning should succeed";
+            assert_true
+              (not (Fs.exists (profile_executable_path workspace "dev" "demo")))
+              "clean --profile should remove only the selected profile root";
+            assert_file_exists (profile_executable_path workspace "release" "demo");
+            assert_string_contains ~needle:"Removed profile dev artifacts"
+              clean.output
+              "profile-specific cleaning should report the removed profile root")) );
   ]

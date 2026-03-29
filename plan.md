@@ -10,9 +10,9 @@
 10. [x] Implement `oasis clean` with selective cache and artifact removal.
 11. [x] Add package and library resolution beyond the OCaml standard library.
 12. [x] Implement incremental rebuilds based on source and config changes.
-13. [ ] Implement sandboxed action execution for generated files and codegen steps.
-14. [ ] Add support for preprocessors, PPX pipelines, and generated modules.
-15. [ ] Implement workspace-wide defaults, profiles, and per-target overrides.
+13. [x] Implement sandboxed action execution for generated files and codegen steps.
+14. [x] Add support for preprocessors, PPX pipelines, and generated modules.
+15. [x] Implement workspace-wide defaults, profiles, and per-target overrides.
 16. [ ] Add developer-facing diagnostics explaining compiler invocations and resolution decisions.
 17. [ ] Implement installable binaries, libraries, and metadata export.
 18. [ ] Add multi-package workspace support with shared dependency analysis.
@@ -23,7 +23,7 @@
 23. [x] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
 24. [x] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.
 25. [x] Eliminate the hand-maintained bootstrap `Makefile` object lists and rules by deriving bootstrap compilation from the workspace model or a tiny generator.
-26. [ ] Extend the direct process driver with explicit environment and stdin plumbing so future action/codegen subtools never need shell fallbacks.
+26. [x] Extend the direct process driver with explicit environment and stdin plumbing so future action/codegen subtools never need shell fallbacks.
 27. [x] Extract `_oasis` artifact-layout path rules into a dedicated module shared by build, clean, install, and diagnostics subtools.
 28. [x] Drive CLI help, argument parsing, and command dispatch from a single command table so new subtools do not require parallel edits across `cli.ml`, tests, and bootstrap rules.
 29. [x] Add an `oasis toolchain` subtool that prints the resolved compiler, `ocamlfind`, stdlib, and package search roots so switch/path problems are debuggable without guesswork.
@@ -35,3 +35,7 @@
 35. [x] Add a bootstrap smoke target or CI step that removes `_bootstrap`, regenerates the make fragment, and rebuilds from scratch to catch self-hosting regressions immediately.
 36. [ ] Detect duplicate module stems across bootstrap library/executable/test groups before writing rules so the shared `_bootstrap/obj` directory never hides collisions behind overwritten artifacts.
 37. [ ] Add CI coverage for both native and bytecode bootstrap smoke lanes so backend portability stays enforced outside local development.
+38. [ ] Teach the bootstrap/self-hosted path about profiles, actions, preprocessors, and PPX so the manifest surface does not diverge between `oasis build` and `make test`.
+39. [ ] Detect and explain collisions between generated outputs and checked-in source files before a build silently overrides one with the other.
+40. [ ] Replace copy-heavy action sandboxes with a cheaper file-materialization strategy so workspace sandboxes stay fast on larger trees.
+41. [ ] Track preprocessor/PPX auxiliary inputs and settings in rebuild diagnostics so transformed-source invalidations are explainable instead of implicit.

@@ -82,10 +82,19 @@ let effective_packages index target =
 let ordered_module_plans ~workspace_root ~target_kind ~target_name ~dir ~modules
     ~packages =
   let* package_resolution = Toolchain.resolve_packages packages in
-  let* sources = Builder.source_descriptors ~workspace_root ~dir modules in
+  let* sources =
+    Builder.source_descriptors ~workspace_root
+      ~generated_root:(Filename.concat workspace_root "_oasis-bootstrap-generated")
+      ~dir modules
+  in
+  let* prepared_sources =
+    Builder.prepare_sources ~workspace_root
+      ~out_dir:(Filename.concat workspace_root "_oasis-bootstrap-preprocessed")
+      ~target_env:[] [] sources
+  in
   let* ordered =
-    Builder.infer_module_order ~verbose:false ~target_kind ~target_name
-      package_resolution sources
+    Builder.infer_module_order ~verbose:false ~env:[] ~target_kind ~target_name
+      package_resolution prepared_sources
   in
   let source_table : (string, Builder.source_descriptor) Hashtbl.t =
     Hashtbl.create (List.length sources)
@@ -110,7 +119,9 @@ let ordered_module_plans ~workspace_root ~target_kind ~target_name ~dir ~modules
 let append_main_module ~workspace_root (runnable : Manifest.runnable)
     ordered_modules =
   let* main_source =
-    Builder.source_descriptor ~workspace_root ~dir:runnable.dir
+    Builder.source_descriptor ~workspace_root
+      ~generated_root:(Filename.concat workspace_root "_oasis-bootstrap-generated")
+      ~dir:runnable.dir
       runnable.main
   in
   Ok

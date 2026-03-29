@@ -102,16 +102,16 @@ main = "main"
             assert_true (run.status <> 0)
               "invoking oasis without a command should print usage";
             assert_string_contains
-              ~needle:"oasis build [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
-              ~needle:"oasis run [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
+              ~needle:"oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               run.output "top-level usage should include the run command";
             assert_string_contains
-              ~needle:"oasis test [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the test command";
             assert_string_contains
-              ~needle:"oasis clean [--workspace DIR] [--verbose] [TARGET ...]"
+              ~needle:"oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the clean command";
             assert_string_contains ~needle:"oasis toolchain" run.output
               "top-level usage should include the toolchain command")) );
@@ -122,10 +122,10 @@ main = "main"
             assert_true (help.status <> 0)
               "build --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"oasis build [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
               help.output "build help should include the build signature";
             assert_string_not_contains
-              ~needle:"oasis run [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
+              ~needle:"oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               help.output
               "command-specific help should not include unrelated commands")) );
   ]

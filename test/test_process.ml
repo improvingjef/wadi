@@ -33,4 +33,15 @@ let cases =
           "run_status should map signaled exits to shell-compatible status codes";
         assert_wait_status_signaled Sys.sigterm outcome.unix_status
           "run_status should retain the raw signaled wait status");
+    ( "run_capture supports env overrides and stdin",
+      fun () ->
+        let outcome =
+          Process.run_capture ~env:[ ("OASIS_COLOR", "blue") ] ~stdin:"stdin-value"
+            "/bin/sh"
+            [ "-c"; "printf '%s:' \"$OASIS_COLOR\"; cat" ]
+        in
+        assert_int_equal 0 outcome.status
+          "run_capture should allow stdin text and environment overlays";
+        assert_string_equal "blue:stdin-value" outcome.output
+          "run_capture should pass stdin and env through to the child");
   ]
