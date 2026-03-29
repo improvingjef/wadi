@@ -45,7 +45,7 @@ else \
 fi
 endef
 
-BOOTSTRAP_SKIP_SEED_METADATA_GOALS := clean refresh-bootstrap-seed-metadata
+BOOTSTRAP_SKIP_SEED_METADATA_GOALS := clean refresh-bootstrap-seed-metadata release-manifests release-cut update-homebrew-tap
 
 ifeq ($(filter $(BOOTSTRAP_SKIP_SEED_METADATA_GOALS),$(MAKECMDGOALS)),)
 -include $(BOOTSTRAP_SEED_METADATA)
@@ -69,12 +69,12 @@ release-artifacts: $(BIN_DIR)/oasis
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
 
 release-manifests:
-	./scripts/generate_packaging_manifests.sh
+	./scripts/generate_packaging_manifests.sh --source-archive-dir dist
 
 sync-generated: $(BIN_DIR)/oasis
 	$(MAKE) refresh-bootstrap-seed-metadata
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
-	./scripts/generate_packaging_manifests.sh
+	./scripts/generate_packaging_manifests.sh --source-archive-dir dist
 
 release-cut:
 	@if [ -z "$(VERSION)" ]; then \
@@ -103,7 +103,7 @@ $(BUILD_DIR) $(OBJ_DIR) $(SEED_OBJ_DIR) $(BIN_DIR):
 
 BOOTSTRAP_PROFILE_ARG = $(if $(strip $(BOOTSTRAP_PROFILE)),--profile $(BOOTSTRAP_PROFILE),)
 
-BOOTSTRAP_SKIP_INCLUDE_GOALS := clean test bootstrap-smoke benchmark-bootstrap refresh-bootstrap-seed-metadata
+BOOTSTRAP_SKIP_INCLUDE_GOALS := clean test bootstrap-smoke benchmark-bootstrap refresh-bootstrap-seed-metadata release-manifests release-cut update-homebrew-tap
 BOOTSTRAP_SKIP_GENERATED_MK ?=
 
 ifeq ($(filter $(BOOTSTRAP_SKIP_INCLUDE_GOALS),$(MAKECMDGOALS)),)

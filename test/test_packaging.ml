@@ -128,6 +128,97 @@ let cases =
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
               "the committed Homebrew formula should be generated from the shared release metadata"));
+    ( "can refresh a retained source archive while generating packaging manifests",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let manifest_script =
+          Filename.concat repo_root "scripts/generate_packaging_manifests.sh"
+        in
+        with_temp_dir "oasis-packaging-manifests-retained" (fun workspace ->
+            let output_dir = Filename.concat workspace "out" in
+            let archive_dir = Filename.concat workspace "dist" in
+            let generated =
+              Process.run_capture ~cwd:repo_root manifest_script
+                [
+                  "--output-dir";
+                  output_dir;
+                  "--source-archive-dir";
+                  archive_dir;
+                ]
+            in
+            assert_int_equal 0 generated.status
+              "packaging manifest generation should support retained source archives";
+            assert_file_exists
+              (Filename.concat archive_dir "oasis-0.1.0-source.tar.gz");
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
+              (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
+              "retained-archive manifest generation should match the committed Homebrew formula"));
+    ( "can reuse an explicit source archive when generating packaging manifests",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let manifest_script =
+          Filename.concat repo_root "scripts/generate_packaging_manifests.sh"
+        in
+        let archive_script =
+          Filename.concat repo_root "scripts/build_release_archives.sh"
+        in
+        with_temp_dir "oasis-packaging-manifests-archive" (fun workspace ->
+            let archive_dir = Filename.concat workspace "dist" in
+            let output_dir = Filename.concat workspace "out" in
+            let archived =
+              Process.run_capture ~cwd:repo_root archive_script
+                [ "--source-only"; "--output-dir"; archive_dir ]
+            in
+            assert_int_equal 0 archived.status
+              "source archive generation should succeed before manifest reuse";
+            let generated =
+              Process.run_capture ~cwd:repo_root manifest_script
+                [
+                  "--output-dir";
+                  output_dir;
+                  "--source-archive";
+                  Filename.concat archive_dir "oasis-0.1.0-source.tar.gz";
+                ]
+            in
+            assert_int_equal 0 generated.status
+              "packaging manifest generation should reuse explicit source archives";
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "oasis.opam"))
+              (Fs.read_file (Filename.concat repo_root "oasis.opam"))
+              "explicit-archive manifest generation should still render oasis.opam from shared metadata";
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
+              (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
+              "explicit-archive manifest generation should match the committed Homebrew formula"));
+    ( "release-manifests refreshes a local source archive alongside packaging manifests",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-release-manifests" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init"; "-q" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed before release-manifests\n" ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed before release-manifests\n" ^ add.output);
+            List.iter
+              (fun relative_path ->
+                let path = Filename.concat workspace relative_path in
+                if Fs.exists path then Sys.remove path)
+              [ "oasis.opam"; "Formula/oasis.rb" ];
+            let dist_dir = Filename.concat workspace "dist" in
+            if Fs.exists dist_dir then Fs.remove_tree dist_dir;
+            let generated = run_make ~cwd:workspace [ "release-manifests" ] in
+            assert_int_equal 0 generated.status
+              ("make release-manifests should succeed\n" ^ generated.output);
+            assert_true
+              (not (Fs.exists (Filename.concat workspace "_bootstrap")))
+              "make release-manifests should not detour through bootstrap generation";
+            assert_file_exists (Filename.concat workspace "oasis.opam");
+            assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists
+              (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz")));
     ( "sync-generated refreshes bootstrap metadata and release artifacts in one pass",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -167,6 +258,8 @@ let cases =
             assert_file_exists (Filename.concat workspace "completions/oasis.fish");
             assert_file_exists (Filename.concat workspace "oasis.opam");
             assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists
+              (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz");
             assert_file_exists
               (Filename.concat workspace "package/share/doc/oasis/cli.md");
             assert_file_exists
@@ -519,6 +612,9 @@ let cases =
               ("release-cut should succeed\n" ^ cut.output);
             assert_string_not_contains ~needle:"setlocale" cut.output
               "release-cut should not leak shell locale warnings";
+            assert_string_contains ~needle:"dist/oasis-0.1.1-source.tar.gz"
+              cut.output
+              "release-cut should report the refreshed local source archive";
             let metadata =
               Fs.read_file (Filename.concat workspace "release/metadata.sh")
             in
@@ -532,6 +628,8 @@ let cases =
               ~needle:"/releases/download/v0.1.1/oasis-0.1.1-source.tar.gz"
               formula
               "release-cut should refresh the Homebrew formula from the new source archive";
+            assert_file_exists
+              (Filename.concat workspace "dist/oasis-0.1.1-source.tar.gz");
             let tags =
               Process.run_capture ~cwd:workspace "git" [ "tag"; "--list" ]
             in

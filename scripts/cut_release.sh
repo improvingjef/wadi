@@ -76,7 +76,7 @@ fi
 
 mv "$tmp_metadata" "$METADATA_PATH"
 
-"$ROOT_DIR/scripts/generate_packaging_manifests.sh"
+"$ROOT_DIR/scripts/generate_packaging_manifests.sh" --source-archive-dir "$ROOT_DIR/dist"
 
 ruby -c "$ROOT_DIR/Formula/oasis.rb" >/dev/null
 opam lint "$ROOT_DIR/oasis.opam" >/dev/null
@@ -95,5 +95,5 @@ if [ "$CREATE_TAG" -eq 1 ]; then
     tag -a "$EXPECTED_TAG" -m "$OASIS_PACKAGE_NAME $VERSION"
 fi
 
-printf 'Release cut for %s refreshed release/metadata.sh, oasis.opam, and Formula/oasis.rb\n' \
-  "$EXPECTED_TAG"
+printf 'Release cut for %s refreshed release/metadata.sh, oasis.opam, Formula/oasis.rb, and dist/%s\n' \
+  "$EXPECTED_TAG" "$(oasis_release_source_archive_name)"
