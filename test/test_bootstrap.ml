@@ -1,12 +1,63 @@
 open Test_support
 
-let render_bootstrap workspace =
-  Bootstrap.render_makefile ~manifest_path:(manifest_path workspace)
+let render_bootstrap ?profile ?(scope = Bootstrap.Full) workspace =
+  Bootstrap.render_makefile ?profile ~scope ~manifest_path:(manifest_path workspace)
+    ()
 
 let write_source = write_workspace_file
 
+let write_executable workspace relative_path contents =
+  let path = Filename.concat workspace relative_path in
+  Fs.write_file path contents;
+  Unix.chmod path 0o755;
+  path
+
 let run_bootstrap_loader ?(env = []) () =
   Process.run_capture ~env "ocaml" [ "scripts/render_bootstrap_mod_use.ml" ]
+
+let write_bootstrap_driver workspace generated_makefile =
+  write_workspace_file workspace "scripts/render_bootstrap_mod_use.ml" "";
+  write_workspace_file workspace "scripts/generate_bootstrap_makefile.ml" "";
+  write_workspace_file workspace "Makefile"
+    {|
+OCAMLFIND ?= ocamlfind
+OCAMLOPT ?= ocamlopt
+OCAMLFLAGS ?= -g
+
+BUILD_DIR := _bootstrap
+OBJ_DIR := $(BUILD_DIR)/obj
+BIN_DIR := $(BUILD_DIR)/bin
+BOOTSTRAP_MANIFEST := oasis.toml
+BOOTSTRAP_GENERATOR := scripts/generate_bootstrap_makefile.ml
+BOOTSTRAP_MK := $(BUILD_DIR)/bootstrap.generated.mk
+BOOTSTRAP_COMPILER_KIND := ocamlopt
+BOOTSTRAP_COMPILER := $(OCAMLOPT)
+OBJ_EXT := cmx
+
+$(BUILD_DIR) $(OBJ_DIR) $(BIN_DIR):
+	mkdir -p $@
+
+define BOOTSTRAP_TOOL_CMD
+$(if $(strip $(1)),$(OCAMLFIND) $(BOOTSTRAP_COMPILER_KIND) $(1),$(BOOTSTRAP_COMPILER))
+endef
+
+-include $(BOOTSTRAP_MK)
+|};
+  write_workspace_file workspace "_bootstrap/bootstrap.generated.mk"
+    generated_makefile
+
+let run_make ~cwd goals =
+  Process.run_capture ~cwd
+    ~env:
+      [
+        ("MAKEFLAGS", "");
+        ("MFLAGS", "");
+        ("MAKELEVEL", "0");
+        ("OCAMLOPT", "ocamlopt");
+        ("OCAMLFIND", "ocamlfind");
+        ("OCAMLFLAGS", "-g");
+      ]
+    "make" goals
 
 let cases =
   [
@@ -46,7 +97,7 @@ modules = ["alpha", "beta", "gamma"]
               ~needle:(beta_line ^ "\n" ^ alpha_line ^ "\n" ^ gamma_line)
               loader.output
               "bootstrap loader directives should be ordered from source dependencies")) );
-    ( "derives bootstrap object lists and ordered rules from the workspace model",
+    ( "derives bootstrap object lists, self-dependencies, and ordered rules from the workspace model",
       (fun () ->
         with_temp_dir "oasis-bootstrap" (fun workspace ->
             write_manifest workspace
@@ -77,6 +128,10 @@ deps = ["core"]
               {|let () = Test_helper.run ()|};
             let makefile = expect_ok (render_bootstrap workspace) in
             assert_string_contains
+              ~needle:"$(BOOTSTRAP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) scripts/render_bootstrap_mod_use.ml src/alpha.ml src/beta.ml src/cli.ml src/main.ml test/test_helper.ml test/test_main.ml"
+              makefile
+              "bootstrap generation should track the manifest-driven inputs that require a regenerated makefile";
+            assert_string_contains
               ~needle:"COMMON_OBJS := $(OBJ_DIR)/beta.$(OBJ_EXT) $(OBJ_DIR)/alpha.$(OBJ_EXT)"
               makefile
               "bootstrap generation should sort common modules by dependencies";
@@ -89,21 +144,21 @@ deps = ["core"]
               makefile
               "bootstrap generation should derive test object lists";
             assert_string_contains
-              ~needle:"$(OBJ_DIR)/alpha.$(OBJ_EXT): src/alpha.ml $(OBJ_DIR)/beta.$(OBJ_EXT) | $(OBJ_DIR)"
+              ~needle:"$(OBJ_DIR)/alpha.$(OBJ_EXT): src/alpha.ml $(BOOTSTRAP_MK) $(OBJ_DIR)/beta.$(OBJ_EXT) | $(OBJ_DIR)"
               makefile
-              "bootstrap generation should emit ordered common dependencies";
+              "bootstrap generation should rebuild objects when the generated makefile changes";
             assert_string_contains
-              ~needle:"$(OBJ_DIR)/main.$(OBJ_EXT): src/main.ml $(OBJ_DIR)/cli.$(OBJ_EXT) | $(OBJ_DIR)"
+              ~needle:"$(OBJ_DIR)/main.$(OBJ_EXT): src/main.ml $(BOOTSTRAP_MK) $(OBJ_DIR)/cli.$(OBJ_EXT) | $(OBJ_DIR)"
               makefile
-              "bootstrap generation should chain executable modules";
+              "bootstrap generation should chain executable modules while depending on bootstrap metadata";
             assert_string_contains
-              ~needle:"$(BIN_DIR)/demo: $(APP_OBJS) | $(BIN_DIR)"
+              ~needle:"$(BIN_DIR)/demo: $(BOOTSTRAP_MK) $(APP_OBJS) | $(BIN_DIR)"
               makefile
-              "bootstrap generation should emit the executable link rule";
+              "bootstrap generation should make executable links depend on bootstrap metadata";
             assert_string_contains
-              ~needle:"$(BIN_DIR)/suite: $(TEST_OBJS) | $(BIN_DIR)"
+              ~needle:"$(BIN_DIR)/suite: $(BOOTSTRAP_MK) $(TEST_OBJS) | $(BIN_DIR)"
               makefile
-              "bootstrap generation should emit the test link rule")) );
+              "bootstrap generation should make test links depend on bootstrap metadata")) );
     ( "emits interface-aware and package-aware bootstrap rules",
       (fun () ->
         with_temp_dir "oasis-bootstrap-packages" (fun workspace ->
@@ -146,17 +201,194 @@ deps = ["core"]
             assert_string_contains ~needle:"APP_LINK_FLAGS := -linkpkg" makefile
               "bootstrap generation should derive link flags from executable packages";
             assert_string_contains
-              ~needle:"$(OBJ_DIR)/alpha.cmi: src/alpha.mli $(OBJ_DIR)/beta.$(OBJ_EXT) | $(OBJ_DIR)"
+              ~needle:"$(OBJ_DIR)/alpha.cmi: src/alpha.mli $(BOOTSTRAP_MK) $(OBJ_DIR)/beta.$(OBJ_EXT) | $(OBJ_DIR)"
               makefile
               "bootstrap generation should compile interfaces before dependent modules";
             assert_string_contains
-              ~needle:"$(OBJ_DIR)/alpha.$(OBJ_EXT): src/alpha.ml $(OBJ_DIR)/alpha.cmi $(OBJ_DIR)/beta.$(OBJ_EXT) | $(OBJ_DIR)"
+              ~needle:"$(OBJ_DIR)/alpha.$(OBJ_EXT): src/alpha.ml $(BOOTSTRAP_MK) $(OBJ_DIR)/alpha.cmi $(OBJ_DIR)/beta.$(OBJ_EXT) | $(OBJ_DIR)"
               makefile
               "bootstrap generation should make object files depend on generated interfaces";
             assert_string_contains
               ~needle:"$(call BOOTSTRAP_TOOL_CMD,$(APP_PACKAGE_FLAGS)) $(OCAMLFLAGS) -I $(OBJ_DIR) $(APP_LINK_FLAGS) -o $@ $(APP_OBJS)"
               makefile
               "bootstrap generation should link through the package-aware driver")) );
+    ( "builds profile-aware bootstrap outputs through actions, preprocessors, and ppx",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-transforms" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+
+[profile.release]
+compile_flags = ["-w", "+a"]
+env = ["BUILD_PROFILE=release"]
+
+[action.generate_version]
+argv = ["./tools/generate.sh"]
+cwd = "."
+deps = ["config/version.txt"]
+outputs = ["version.ml"]
+sandbox = "target"
+
+[preprocess.expand]
+argv = ["./tools/expand.sh"]
+deps = ["config/banner.txt"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/message.txt"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate_version"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+
+[test.suite]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            write_source workspace "config/version.txt" "action";
+            write_source workspace "config/banner.txt" "banner";
+            write_source workspace "ppx/message.txt" "ppx";
+            ignore
+              (write_executable workspace "tools/generate.sh"
+                 "#!/bin/sh\nset -eu\nversion=$(cat config/version.txt)\nprintf 'let value = \"%s\"\\n' \"$version\" > lib/version.ml\n");
+            ignore
+              (write_executable workspace "tools/expand.sh"
+                 "#!/bin/sh\nset -eu\nbanner=$(cat config/banner.txt)\nsed \"s/@@PROFILE@@/${BUILD_PROFILE}/g; s/@@BANNER@@/${banner}/g\"\n");
+            let _ppx_binary =
+              Test_build.compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let replacement () =
+  let channel = open_in "ppx/message.txt" in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr channel)
+    (fun () -> input_line channel)
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string (replacement (), loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            write_source workspace "lib/core.ml"
+              {|let message = "@@PROFILE@@:@@BANNER@@:" ^ Version.value ^ ":" ^ "ppx-marker"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            write_source workspace "test/test_main.ml"
+              {|let () = print_endline Core.message|};
+            let makefile =
+              expect_ok (render_bootstrap ~profile:"release" workspace)
+            in
+            assert_string_contains
+              ~needle:"# Bootstrap profile: release"
+              makefile
+              "bootstrap generation should record the resolved profile";
+            assert_string_contains
+              ~needle:"COMMON_COMPILE_FLAGS := -w +a"
+              makefile
+              "bootstrap generation should surface profile compile flags in compile rules";
+            assert_string_contains
+              ~needle:"BUILD_PROFILE='release'"
+              makefile
+              "bootstrap generation should surface profile environment bindings in compile rules";
+            assert_string_contains ~needle:"-ppx" makefile
+              "bootstrap generation should include ppx invocations in compile flags";
+            assert_string_contains
+              ~needle:"ppx/rewrite.exe"
+              makefile
+              "bootstrap generation should resolve ppx tool paths into the makefile";
+            assert_string_contains
+              ~needle:"_bootstrap/materialized/release/library-core/preprocessed/version.ml"
+              makefile
+              "bootstrap generation should compile transformed action outputs from the materialized bootstrap tree";
+            write_bootstrap_driver workspace makefile;
+            let build =
+              run_make ~cwd:workspace [ "_bootstrap/bin/demo"; "_bootstrap/bin/suite" ]
+            in
+            assert_int_equal 0 build.status
+              ("bootstrap makefiles should build transformed executables and tests\n"
+             ^ build.output);
+            assert_file_exists (Filename.concat workspace "_bootstrap/bin/demo");
+            assert_file_exists (Filename.concat workspace "_bootstrap/bin/suite");
+            let demo =
+              Process.run_capture ~cwd:workspace "./_bootstrap/bin/demo" []
+            in
+            let suite =
+              Process.run_capture ~cwd:workspace "./_bootstrap/bin/suite" []
+            in
+            assert_int_equal 0 demo.status
+              "the bootstrap-built executable should run successfully";
+            assert_int_equal 0 suite.status
+              "the bootstrap-built test should run successfully";
+            assert_string_equal "release:banner:action:ppx\n" demo.output
+              "actions, preprocessors, ppx, and profile env should affect bootstrap-built executables";
+            assert_string_equal "release:banner:action:ppx\n" suite.output
+              "actions, preprocessors, ppx, and profile env should affect bootstrap-built tests")) );
+    ( "allows executable-only bootstrap generation without scanning broken tests",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-app-only" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+
+[test.broken]
+dir = "test"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let message = "app-scope"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            write_source workspace "test/main.ml" {|let () = this is broken|};
+            let makefile =
+              expect_ok
+                (render_bootstrap ~scope:Bootstrap.Executable_only workspace)
+            in
+            assert_string_not_contains ~needle:"TEST_OBJS" makefile
+              "app-only bootstrap generation should not emit test object lists";
+            assert_string_not_contains ~needle:"test/main.ml" makefile
+              "app-only bootstrap generation should ignore broken test sources";
+            write_bootstrap_driver workspace makefile;
+            let build = run_make ~cwd:workspace [ "_bootstrap/bin/demo" ] in
+            assert_int_equal 0 build.status
+              "app-only bootstrap generation should still build the executable";
+            assert_string_not_contains ~needle:"test/main.ml" build.output
+              "app-only bootstrap builds should not compile broken test sources")) );
     ( "rejects bootstrap manifests without exactly one executable and test",
       (fun () ->
         with_temp_dir "oasis-bootstrap-missing" (fun workspace ->

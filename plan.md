@@ -36,9 +36,9 @@
 32. [x] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.
 36. [x] Detect duplicate module stems across bootstrap library/executable/test groups before writing rules so the shared `_bootstrap/obj` directory never hides collisions behind overwritten artifacts.
 37. [x] Add CI coverage for both native and bytecode bootstrap smoke lanes so backend portability stays enforced outside local development.
-38. [ ] Teach the bootstrap/self-hosted path about profiles, actions, preprocessors, and PPX so the manifest surface does not diverge between `oasis build` and `make test`.
+38. [x] Teach the bootstrap/self-hosted path about profiles, actions, preprocessors, and PPX so the manifest surface does not diverge between `oasis build` and `make test`.
 39. [x] Detect and explain collisions between generated outputs and checked-in source files before a build silently overrides one with the other.
-40. [ ] Replace copy-heavy action sandboxes with a cheaper file-materialization strategy so workspace sandboxes stay fast on larger trees.
+40. [x] Replace copy-heavy action sandboxes with a cheaper file-materialization strategy so workspace sandboxes stay fast on larger trees.
 41. [x] Track preprocessor/PPX auxiliary inputs and settings in rebuild diagnostics so transformed-source invalidations are explainable instead of implicit.
 42. [x] Drive `scripts/generate_bootstrap_makefile.ml` from the workspace model or generated metadata so adding a core module never requires editing a second hard-coded module list.
 43. [x] Persist a machine-readable sibling to `.oasis-explain` so editors and CI can consume rebuild reasons without scraping human-formatted text.
@@ -64,4 +64,11 @@
 63. [x] Extend package-path annotations to `oasis run`, `oasis test`, and `oasis install` summaries so every user-facing subtool reports large-workspace target origin consistently.
 64. [x] Add direct runtime execution tests for zsh and fish completion scripts so path-mode and described completions are exercised beyond string snapshots.
 65. [x] Replace the ad hoc completion marker line with a structured or versioned completion-query response so future shell integrations are not coupled to one magic string.
-66. [ ] Decouple release-artifact generation from unrelated bootstrap test-source scans so refreshing `docs/cli.md` and packaged completions never depends on the whole test tree parsing cleanly.
+66. [x] Decouple release-artifact generation from unrelated bootstrap test-source scans so refreshing `docs/cli.md` and packaged completions never depends on the whole test tree parsing cleanly.
+67. [ ] Replace the toplevel `#mod_use` bootstrap generator with a compiled or self-hosted planner path so root-library preprocessors and PPX can apply to the generator implementation itself, not just the binaries it emits rules for.
+67. [ ] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
+68. [ ] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
+69. [ ] Publish an `oasis.opam` package to the opam repository so OCaml developers can install oasis through their existing toolchain with `opam install oasis`.
+70. [ ] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
+71. [ ] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
+72. [ ] Add a `flake.nix` so Nix users can run oasis directly or add it to their development shells.

@@ -9,8 +9,11 @@ OBJ_DIR := $(BUILD_DIR)/obj
 BIN_DIR := $(BUILD_DIR)/bin
 BOOTSTRAP_MANIFEST := oasis.toml
 BOOTSTRAP_GENERATOR := scripts/generate_bootstrap_makefile.ml
-BOOTSTRAP_MK := $(BUILD_DIR)/bootstrap.generated.mk
-BOOTSTRAP_SOURCES := $(wildcard src/*.ml src/*.mli test/*.ml test/*.mli)
+BOOTSTRAP_HELPERS := scripts/render_bootstrap_mod_use.ml
+BOOTSTRAP_PROFILE ?=
+BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE),workspace-default)
+BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
+BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
 .PHONY: all test clean bootstrap-smoke release-artifacts
 
@@ -32,10 +35,17 @@ clean:
 $(BUILD_DIR) $(OBJ_DIR) $(BIN_DIR):
 	mkdir -p $@
 
-$(BOOTSTRAP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_SOURCES) | $(BUILD_DIR)
-	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) > $@
+BOOTSTRAP_PROFILE_ARG = $(if $(strip $(BOOTSTRAP_PROFILE)),--profile $(BOOTSTRAP_PROFILE),)
+
+$(BOOTSTRAP_APP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_HELPERS) | $(BUILD_DIR)
+	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) --scope app $(BOOTSTRAP_PROFILE_ARG) > $@
+
+$(BOOTSTRAP_FULL_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_HELPERS) | $(BUILD_DIR)
+	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) --scope full $(BOOTSTRAP_PROFILE_ARG) > $@
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),)
+BOOTSTRAP_NEEDS_FULL := $(filter test bootstrap-smoke $(BIN_DIR)/test_runner,$(MAKECMDGOALS))
+BOOTSTRAP_MK := $(if $(BOOTSTRAP_NEEDS_FULL),$(BOOTSTRAP_FULL_MK),$(BOOTSTRAP_APP_MK))
 BOOTSTRAP_BACKEND ?= $(or $(OASIS_BACKEND),auto)
 BOOTSTRAP_NATIVE_OK := $(shell $(OCAMLOPT) -version >/dev/null 2>&1 && printf yes)
 BOOTSTRAP_BYTECODE_OK := $(shell $(OCAMLC) -version >/dev/null 2>&1 && printf yes)

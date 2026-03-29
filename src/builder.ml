@@ -461,6 +461,10 @@ let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
 let copy_path ~src ~dst =
   if Sys.is_directory src then Fs.copy_tree ~src ~dst else Fs.copy_file ~src ~dst
 
+let materialize_path ~src ~dst =
+  if Sys.is_directory src then Fs.materialize_tree ~src ~dst
+  else Fs.materialize_file ~src ~dst
+
 let copy_relative_path ~workspace_root ~sandbox_root ~label relative_path =
   let src = Filename.concat workspace_root relative_path in
   if not (Fs.exists src) then
@@ -479,7 +483,7 @@ let with_temp_dir prefix f =
 let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandbox =
   match sandbox with
   | Manifest.Workspace ->
-      Fs.copy_tree ~src:workspace_root ~dst:sandbox_root;
+      Fs.materialize_tree ~src:workspace_root ~dst:sandbox_root;
       let artifact_root = Filename.concat sandbox_root "_oasis" in
       if Fs.exists artifact_root then Fs.remove_tree artifact_root;
       Ok ()
@@ -489,7 +493,7 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
       let* () =
         if Fs.exists workspace_target_dir then
           if Sys.is_directory workspace_target_dir then (
-            Fs.copy_tree ~src:workspace_target_dir ~dst:sandbox_target_dir;
+            Fs.materialize_tree ~src:workspace_target_dir ~dst:sandbox_target_dir;
             Ok ())
           else
             Error
@@ -504,7 +508,14 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
         if Hashtbl.mem copied relative_path then Ok ()
         else (
           Hashtbl.add copied relative_path ();
-          copy_relative_path ~workspace_root ~sandbox_root ~label relative_path)
+          let src = Filename.concat workspace_root relative_path in
+          if not (Fs.exists src) then
+            Error
+              (Printf.sprintf "%s path does not exist: %s" label relative_path)
+          else (
+            materialize_path ~src
+              ~dst:(Filename.concat sandbox_root relative_path);
+            Ok ()))
       in
       let* () =
         match action.Manifest.cwd with

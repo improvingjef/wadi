@@ -566,6 +566,42 @@ modules = ["version"]
               "generated-module executables should still run successfully";
             assert_string_equal "from-template from-stdin\n" run.output
               "generated modules should compile from declared action outputs")) );
+    ( "runs workspace sandboxes from cloned materializations without leaking writes",
+      (fun () ->
+        with_temp_dir "oasis-action-workspace-sandbox" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["snapshot"]
+
+[action.snapshot]
+argv = ["./scripts/snapshot.sh"]
+deps = ["shared/message.txt"]
+outputs = ["snapshot.ml"]
+sandbox = "workspace"
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["snapshot"]
+|};
+            ignore
+              (write_executable workspace "scripts/snapshot.sh"
+                 "#!/bin/sh\nset -eu\nmessage=$(cat ../shared/message.txt)\nprintf 'let value = \"%s\"\\n' \"$message\" > snapshot.ml\nprintf 'should-not-leak\\n' > ../shared/extra.txt\n");
+            write_source workspace "shared/message.txt" "workspace-sandbox";
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Snapshot.value|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "workspace sandboxes should still build successfully";
+            assert_true
+              (not (Fs.exists (Filename.concat workspace "shared/extra.txt")))
+              "workspace sandbox writes should stay isolated from the source tree";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "workspace-sandbox executables should still run successfully";
+            assert_string_equal "workspace-sandbox\n" run.output
+              "workspace sandboxes should still expose declared workspace inputs")) );
     ( "regenerates missing action outputs without rebuilding unchanged targets",
       (fun () ->
         with_temp_dir "oasis-action-regenerate" (fun workspace ->
