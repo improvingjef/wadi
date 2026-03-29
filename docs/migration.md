@@ -4,6 +4,16 @@
 work is mostly mechanical once you stop translating one dune stanza at a time
 and instead map each concern to a dedicated subtool or manifest section.
 
+If you want a first pass before doing anything by hand, start with:
+
+```sh
+oasis migrate --stdout
+```
+
+That command scans `dune-project` plus every `dune` file it can find, emits a
+reviewable `oasis.toml`, and leaves review comments in the output for anything
+it could not translate cleanly.
+
 ## Command Mapping
 
 - `dune build` -> `oasis build`
@@ -153,12 +163,16 @@ Lookup rules are intentionally simple:
 ## A Pragmatic Migration Sequence
 
 1. Convert libraries, executables, and tests first.
-2. Get `oasis build`, `oasis run`, and `oasis test` green.
-3. Translate generated-file actions, preprocessors, and PPX with explicit
+2. Use `oasis migrate` for a first-pass manifest, then clean up the generated
+   comments.
+3. Get `oasis build`, `oasis run`, and `oasis test` green.
+4. Translate generated-file actions, preprocessors, and PPX with explicit
    `deps`.
-4. Run `oasis explain --current TARGET` until rebuild reasons are boring.
-5. Move shared defaults and profiles into the root manifest.
-6. Push package-local helpers down into member manifests where they belong.
+5. Run `oasis explain --current TARGET` until rebuild reasons are boring.
+6. Use `oasis graph TARGET` and `oasis deps TARGET` to verify build order and
+   external package closure before deleting dune files.
+7. Move shared defaults and profiles into the root manifest.
+8. Push package-local helpers down into member manifests where they belong.
 
 ## What Usually Feels Different
 

@@ -72,3 +72,10 @@
 70. [ ] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
 71. [ ] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
 72. [ ] Add a `flake.nix` so Nix users can run oasis directly or add it to their development shells.
+73. [x] Implement `oasis graph` so target build order, module order, and active action/preprocess/PPX pipelines are visible without compiling.
+74. [x] Implement `oasis deps` so transitive external package requirements and `ocamlfind` search roots are inspectable without reverse-engineering compiler invocations.
+75. [x] Implement `oasis migrate` to scan `dune-project` plus workspace `dune` files and emit a reviewable first-pass `oasis.toml`.
+76. [ ] Extend `oasis migrate` to translate common Dune fields like `preprocess`, `pps`, install/public metadata, and common unsupported stanzas into first-class oasis sections instead of warning comments.
+77. [ ] Add `oasis env` so users can print the exact environment a subtool would run under before executing it.
+78. [ ] Add `oasis repl` so workspaces can launch a package-aware OCaml toplevel without manually reconstructing include paths and package flags.
+79. [ ] Add `oasis bench` with stable benchmark target execution and machine-readable summaries so the execution subtool split covers Dune’s benchmarking workflows as well as builds and tests.

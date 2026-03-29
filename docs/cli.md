@@ -22,6 +22,25 @@ Examples:
 - `oasis build hello`
 - `oasis build --workspace examples/hello --profile release --verbose`
 
+## graph
+
+Show target build order, module order, and pipeline shape without compiling.
+
+Usage:
+
+`oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis graph`
+- `oasis graph hello`
+- `oasis graph --profile release --backend bytecode hello`
+
 ## run
 
 Build and launch an executable target with exact argv forwarding.
@@ -83,6 +102,23 @@ Examples:
 - `oasis clean hello`
 - `oasis clean hello greeting`
 - `oasis clean --workspace examples/hello --profile release --verbose`
+
+## deps
+
+Resolve transitive external package requirements for selected targets.
+
+Usage:
+
+`oasis deps [--workspace DIR] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis deps`
+- `oasis deps hello`
+- `oasis deps --workspace examples/hello greeting hello`
 
 ## install
 
@@ -175,3 +211,23 @@ Examples:
 - `oasis explain --current --backend bytecode hello`
 - `oasis explain --json hello`
 - `oasis explain --profile release greeting hello`
+
+## migrate
+
+Scan dune files and emit a first-pass oasis.toml manifest with review comments.
+
+Usage:
+
+`oasis migrate [--workspace DIR] [--output PATH] [--stdout] [--force]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--output PATH`: Write the generated manifest to PATH instead of oasis.toml.
+- `--stdout`: Print the generated manifest instead of writing a file.
+- `--force`: Overwrite an existing output path.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis migrate --stdout`
+- `oasis migrate --workspace ../old-project`
+- `oasis migrate --output converted.oasis.toml --force`

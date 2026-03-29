@@ -178,6 +178,12 @@ main = "main"
               ~needle:"oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the clean command";
             assert_string_contains
+              ~needle:"oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]"
+              run.output "top-level usage should include the graph command";
+            assert_string_contains
+              ~needle:"oasis deps [--workspace DIR] [TARGET ...]"
+              run.output "top-level usage should include the deps command";
+            assert_string_contains
               ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the install command";
             assert_string_contains ~needle:"oasis docs" run.output
@@ -190,7 +196,10 @@ main = "main"
               "top-level usage should include the toolchain command";
             assert_string_contains
               ~needle:"oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
-              run.output "top-level usage should include the explain command")) );
+              run.output "top-level usage should include the explain command";
+            assert_string_contains
+              ~needle:"oasis migrate [--workspace DIR] [--output PATH] [--stdout] [--force]"
+              run.output "top-level usage should include the migrate command")) );
     ( "prints command-specific help for explain from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-explain-help" (fun workspace ->
@@ -225,8 +234,14 @@ main = "main"
               "docs should render markdown successfully";
             assert_string_contains ~needle:"# Oasis CLI" docs.output
               "docs output should start with the markdown title";
+            assert_string_contains ~needle:"## graph" docs.output
+              "docs output should include the graph command";
+            assert_string_contains ~needle:"## deps" docs.output
+              "docs output should include the deps command";
             assert_string_contains ~needle:"## install" docs.output
               "docs output should include the install command";
+            assert_string_contains ~needle:"## migrate" docs.output
+              "docs output should include the migrate command";
             assert_string_contains ~needle:"## completion" docs.output
               "docs output should include the completion command";
             assert_string_contains
@@ -244,7 +259,15 @@ main = "main"
             assert_string_contains
               ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources."
               docs.output
-              "docs output should include the current explain description")) );
+              "docs output should include the current explain description";
+            assert_string_contains
+              ~needle:"- `--output PATH`: Write the generated manifest to PATH instead of oasis.toml."
+              docs.output
+              "docs output should include the migrate output-path description";
+            assert_string_contains
+              ~needle:"- `--stdout`: Print the generated manifest instead of writing a file."
+              docs.output
+              "docs output should include the migrate stdout description")) );
     ( "generates release docs and completion artifacts from the live binary",
       (fun () ->
         with_temp_dir "oasis-cli-release-artifacts" (fun output_dir ->

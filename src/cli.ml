@@ -30,6 +30,18 @@ type clean_options = {
   profile : string option;
 }
 
+type graph_options = {
+  workspace_dir : string;
+  targets : string list;
+  backend_request : Toolchain.backend_request;
+  profile : string option;
+}
+
+type deps_options = {
+  workspace_dir : string;
+  targets : string list;
+}
+
 type install_options = {
   workspace_dir : string;
   verbose : bool;
@@ -66,6 +78,13 @@ type completion_options = {
 type docs_options = unit
 
 type toolchain_options = { verbose : bool }
+
+type migrate_options = {
+  workspace_dir : string;
+  output_path : string option;
+  stdout : bool;
+  force : bool;
+}
 
 type command_result =
   | Exit_code of int
@@ -153,6 +172,27 @@ let destdir_option =
     flags = [ "--destdir" ];
     description =
       "Prepend DIR to the resolved install prefix for packaging-style staging.";
+  }
+
+let output_option =
+  {
+    usage = "--output PATH";
+    flags = [ "--output" ];
+    description = "Write the generated manifest to PATH instead of oasis.toml.";
+  }
+
+let stdout_option =
+  {
+    usage = "--stdout";
+    flags = [ "--stdout" ];
+    description = "Print the generated manifest instead of writing a file.";
+  }
+
+let force_option =
+  {
+    usage = "--force";
+    flags = [ "--force" ];
+    description = "Overwrite an existing output path.";
   }
 
 let json_option =
@@ -266,6 +306,37 @@ let clean_doc =
     completion_words = [];
   }
 
+let graph_doc =
+  {
+    name = "graph";
+    summary = "Show target build order, module order, and pipeline shape without compiling.";
+    signature =
+      "oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]";
+    examples =
+      [
+        "oasis graph";
+        "oasis graph hello";
+        "oasis graph --profile release --backend bytecode hello";
+      ];
+    options = [ workspace_option; profile_option; backend_option; help_option ];
+    completion_words = [];
+  }
+
+let deps_doc =
+  {
+    name = "deps";
+    summary = "Resolve transitive external package requirements for selected targets.";
+    signature = "oasis deps [--workspace DIR] [TARGET ...]";
+    examples =
+      [
+        "oasis deps";
+        "oasis deps hello";
+        "oasis deps --workspace examples/hello greeting hello";
+      ];
+    options = [ workspace_option; help_option ];
+    completion_words = [];
+  }
+
 let install_doc =
   {
     name = "install";
@@ -349,6 +420,24 @@ let explain_doc =
     completion_words = [];
   }
 
+let migrate_doc =
+  {
+    name = "migrate";
+    summary =
+      "Scan dune files and emit a first-pass oasis.toml manifest with review comments.";
+    signature =
+      "oasis migrate [--workspace DIR] [--output PATH] [--stdout] [--force]";
+    examples =
+      [
+        "oasis migrate --stdout";
+        "oasis migrate --workspace ../old-project";
+        "oasis migrate --output converted.oasis.toml --force";
+      ];
+    options =
+      [ workspace_option; output_option; stdout_option; force_option; help_option ];
+    completion_words = [];
+  }
+
 let render_usage docs =
   String.concat "\n"
     ([
@@ -366,14 +455,17 @@ let render_usage docs =
 let command_docs =
   [
     build_doc;
+    graph_doc;
     run_doc;
     test_doc;
     clean_doc;
+    deps_doc;
     install_doc;
     docs_doc;
     completion_doc;
     toolchain_doc;
     explain_doc;
+    migrate_doc;
   ]
 
 let usage () = render_usage command_docs
@@ -748,6 +840,48 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
   in
   loop { workspace_dir = "."; verbose = false; targets = []; profile = None } args
 
+let parse_graph_args (args : string list) : (graph_options, string) result =
+  let* default_backend_request = default_backend_request () in
+  let rec loop (options : graph_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
+    | "--help" :: _ -> Error (command_usage graph_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop
+    {
+      workspace_dir = ".";
+      targets = [];
+      backend_request = default_backend_request;
+      profile = None;
+    }
+    args
+
+let parse_deps_args (args : string list) : (deps_options, string) result =
+  let rec loop (options : deps_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--help" :: _ -> Error (command_usage deps_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; targets = [] } args
+
 let parse_toolchain_args args =
   match args with
   | [] -> Ok { verbose = false }
@@ -814,6 +948,29 @@ let parse_completion_args args =
           | Some _ -> Error "completion accepts exactly one shell name"
   in
   loop "." None false false "" [] args
+
+let parse_migrate_args args =
+  let rec loop options = function
+    | [] ->
+        if options.stdout && Option.is_some options.output_path then
+          Error "--stdout cannot be combined with --output"
+        else Ok options
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--output" :: path :: rest ->
+        loop { options with output_path = Some path } rest
+    | "--output" :: [] -> Error "--output requires a path"
+    | "--stdout" :: rest -> loop { options with stdout = true } rest
+    | "--force" :: rest -> loop { options with force = true } rest
+    | "--help" :: _ -> Error (command_usage migrate_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ -> Error "migrate does not accept positional arguments"
+  in
+  loop
+    { workspace_dir = "."; output_path = None; stdout = false; force = false }
+    args
 
 let parse_install_args (args : string list) : (install_options, string) result =
   let* default_backend_request = default_backend_request () in
@@ -976,7 +1133,9 @@ let find_command_doc name =
   List.find_opt (fun (doc : command_doc) -> doc.name = name) command_docs
 
 let option_expects_value = function
-  | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir" -> true
+  | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
+  | "--output" ->
+      true
   | _ -> false
 
 let rec positional_argument_count = function
@@ -997,7 +1156,7 @@ let positional_completion_candidates ?workspace command_name rest =
       | _ -> [] )
   | Some workspace -> (
       match command_name with
-      | "build" | "clean" | "explain" ->
+      | "build" | "clean" | "graph" | "deps" | "explain" ->
           List.map target_candidate workspace.Manifest.targets
       | "run" ->
           if positional_argument_count rest = 0 then
@@ -1007,7 +1166,7 @@ let positional_completion_candidates ?workspace command_name rest =
       | "install" -> installable_target_candidates workspace
       | "completion" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) completion_doc.completion_words
-      | "docs" | "toolchain" -> []
+      | "docs" | "toolchain" | "migrate" -> []
       | _ -> [])
 
 let value_completion_candidates ?workspace = function
@@ -1017,11 +1176,12 @@ let value_completion_candidates ?workspace = function
           List.map (fun word -> candidate word) (profile_names workspace)
       | None -> [])
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
-  | "--workspace" | "--prefix" | "--destdir" -> []
+  | "--workspace" | "--prefix" | "--destdir" | "--output" -> []
   | _ -> []
 
 let value_completion_response ?workspace = function
-  | "--workspace" | "--prefix" | "--destdir" -> Complete_directories
+  | "--workspace" | "--prefix" | "--destdir" | "--output" ->
+      Complete_directories
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
 
@@ -1159,6 +1319,21 @@ let run_build (options : build_options) =
       | Ok _ -> Exit_code 0
       | Error message -> report_error message)
 
+let run_graph (options : graph_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Graph.plan ~workspace_root:options.workspace_dir
+          ~requested_targets:options.targets
+          ~backend_request:options.backend_request ?profile:options.profile
+          workspace
+      with
+      | Ok report ->
+          print_endline (Graph.render_report report);
+          Exit_code 0
+      | Error message -> report_error message)
+
 let run_executable (options : run_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
@@ -1227,6 +1402,17 @@ let run_clean (options : clean_options) =
         | Ok () -> Exit_code 0
         | Error message -> report_error message)
 
+let run_deps (options : deps_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      let session = Toolchain.create_session () in
+      match Deps.report_for_targets ~session workspace options.targets with
+      | Ok report ->
+          print_endline (Deps.render_report report);
+          Exit_code 0
+      | Error message -> report_error message)
+
 let run_install (options : install_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
@@ -1278,6 +1464,39 @@ let run_completion (options : completion_options) =
 let run_toolchain (_options : toolchain_options) =
   Toolchain.inspect () |> Toolchain.render_report |> print_endline;
   Exit_code 0
+
+let run_migrate (options : migrate_options) =
+  if not (Fs.is_directory options.workspace_dir) then
+    report_error
+      (Printf.sprintf "workspace directory does not exist: %s"
+         options.workspace_dir)
+  else
+    match Migrate.run ~workspace_root:options.workspace_dir with
+    | Error message -> report_error message
+    | Ok migration ->
+        if options.stdout then (
+          print_string migration.Migrate.manifest;
+          Exit_code 0)
+        else
+          let output_path =
+            match options.output_path with
+            | Some path -> path
+            | None ->
+                Filename.concat options.workspace_dir Manifest.default_filename
+          in
+          if Fs.exists output_path && not options.force then
+            report_error
+              (Printf.sprintf
+                 "refusing to overwrite existing file %s; rerun with --force or \
+                  use --stdout"
+                 output_path)
+          else if Fs.is_directory output_path then
+            report_error
+              (Printf.sprintf "output path is a directory: %s" output_path)
+          else (
+            Fs.write_file output_path migration.manifest;
+            print_endline ("Wrote migration manifest " ^ output_path);
+            Exit_code 0)
 
 let run_explain (options : explain_options) =
   match load_workspace options.workspace_dir with
@@ -1342,9 +1561,11 @@ let run_explain (options : explain_options) =
 let commands =
   [
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
+    Command { doc = graph_doc; parse = parse_graph_args; run = run_graph };
     Command { doc = run_doc; parse = parse_run_args; run = run_executable };
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
+    Command { doc = deps_doc; parse = parse_deps_args; run = run_deps };
     Command { doc = install_doc; parse = parse_install_args; run = run_install };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
     Command
@@ -1352,6 +1573,7 @@ let commands =
     Command
       { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
     Command { doc = explain_doc; parse = parse_explain_args; run = run_explain };
+    Command { doc = migrate_doc; parse = parse_migrate_args; run = run_migrate };
   ]
 
 let dispatch_command command args =

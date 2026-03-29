@@ -36,6 +36,8 @@ exit codes rather than hidden global state.
 - `oasis docs`: render markdown CLI reference from the live command table.
 - `oasis completion`: generate shell completion scripts from the live command
   table.
+- `oasis migrate`: scan `dune` and `dune-project` files and emit a reviewable
+  `oasis.toml` starting point.
 
 ### Toolchain and environment
 
