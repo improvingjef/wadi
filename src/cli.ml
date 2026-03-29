@@ -76,6 +76,10 @@ type completion_candidate = {
   hint : string option;
 }
 
+type completion_response =
+  | Completion_candidates of completion_candidate list
+  | Complete_directories
+
 type option_doc = {
   usage : string;
   flags : string list;
@@ -167,6 +171,8 @@ let current_option =
   }
 
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
+
+let directory_completion_marker = "__oasis_complete_directories__"
 
 let build_doc =
   {
@@ -400,18 +406,45 @@ let completion_query_command ?workspace_dir ?(describe = false) () =
   ^ if describe then " --describe" else ""
 
 let render_bash_completion ?workspace_dir () =
-  let query = completion_query_command ?workspace_dir () in
+  let query = completion_query_command ?workspace_dir ~describe:true () in
   String.concat "\n"
     [
       "_oasis_query() {";
       "  " ^ query ^ " --current \"$1\" -- \"${@:2}\" 2>/dev/null";
       "}";
+      "_oasis_show_descriptions() {";
+      "  local line";
+      "  while IFS= read -r line; do";
+      "    [[ -n \"$line\" ]] || continue";
+      "    [[ \"$line\" == *$'\\t'* ]] || continue";
+      "    printf '%s\\n' \"$line\" >&2";
+      "  done";
+      "}";
       "_oasis() {";
-      "  local cur";
-      "  local -a previous";
+      "  local cur response first_line value description";
+      "  local -a previous values described";
       "  cur=\"${COMP_WORDS[COMP_CWORD]}\"";
       "  previous=(\"${COMP_WORDS[@]:1:$((COMP_CWORD-1))}\")";
-      "  COMPREPLY=( $(compgen -W \"$(_oasis_query \"$cur\" \"${previous[@]}\")\" -- \"$cur\") )";
+      "  response=\"$(_oasis_query \"$cur\" \"${previous[@]}\")\"";
+      "  first_line=\"${response%%$'\\n'*}\"";
+      "  if [[ \"$first_line\" == "
+      ^ String_util.shell_quote directory_completion_marker
+      ^ " ]]; then";
+      "    compopt -o filenames 2>/dev/null";
+      "    compgen -V COMPREPLY -d -- \"$cur\"";
+      "    return";
+      "  fi";
+      "  while IFS=$'\\t' read -r value description; do";
+      "    [[ -n \"$value\" ]] || continue";
+      "    values+=(\"$value\")";
+      "    if [[ -n \"$description\" ]]; then";
+      "      described+=(\"$value\"$'\\t'$description)";
+      "    fi";
+      "  done <<< \"$response\"";
+      "  compgen -V COMPREPLY -W \"$(printf '%s\\n' \"${values[@]}\")\" -- \"$cur\"";
+      "  if [[ ${#described[@]} -gt 0 && ${#COMPREPLY[@]} -gt 1 ]]; then";
+      "    _oasis_show_descriptions <<< \"$(printf '%s\\n' \"${described[@]}\")\"";
+      "  fi";
       "}";
       "complete -F _oasis oasis";
       "";
@@ -427,18 +460,26 @@ let render_zsh_completion ?workspace_dir () =
       "  " ^ query ^ " --current \"$1\" -- \"${@:2}\" 2>/dev/null";
       "}";
       "_oasis() {";
-      "  local current";
+      "  local current response first_line";
       "  local value description";
       "  local -a previous suggestions";
       "  current=\"${words[CURRENT]}\"";
       "  previous=(\"${(@)words[2,CURRENT-1]}\")";
+      "  response=\"$(_oasis_query \"$current\" \"${previous[@]}\")\"";
+      "  first_line=\"${response%%$'\\n'*}\"";
+      "  if [[ \"$first_line\" == "
+      ^ String_util.shell_quote directory_completion_marker
+      ^ " ]]; then";
+      "    _files -/";
+      "    return";
+      "  fi";
       "  while IFS=$'\\t' read -r value description; do";
       "    if [[ -n \"$description\" ]]; then";
       "      suggestions+=(\"${value}:${description}\")";
       "    elif [[ -n \"$value\" ]]; then";
       "      suggestions+=(\"${value}\")";
       "    fi";
-      "  done < <(_oasis_query \"$current\" \"${previous[@]}\")";
+      "  done <<< \"$response\"";
       "  _describe 'value' suggestions";
       "}";
       "compdef _oasis oasis";
@@ -486,7 +527,14 @@ let render_fish_completion ?workspace_dir () =
       "    set previous";
       "  end";
       "  set -l current (commandline -ct)";
-      "  " ^ query ^ " --current \"$current\" -- $previous 2>/dev/null";
+      "  set -l response (" ^ query ^ " --current \"$current\" -- $previous 2>/dev/null)";
+      "  if test (count $response) -gt 0; and test \"$response[1]\" = "
+      ^ String_util.shell_quote directory_completion_marker
+      ^ "";
+      "    __fish_complete_directories \"$current\"";
+      "    return";
+      "  end";
+      "  printf '%s\\n' $response";
       "end";
       "complete -c oasis -f -a '(__oasis_complete)'";
       "";
@@ -901,6 +949,11 @@ let value_completion_candidates ?workspace = function
   | "--workspace" | "--prefix" | "--destdir" -> []
   | _ -> []
 
+let value_completion_response ?workspace = function
+  | "--workspace" | "--prefix" | "--destdir" -> Complete_directories
+  | option_name ->
+      Completion_candidates (value_completion_candidates ?workspace option_name)
+
 let dedup_completion_candidates candidates =
   let seen = Hashtbl.create (List.length candidates) in
   let rec loop acc = function
@@ -918,38 +971,44 @@ let filter_completion_candidates ~current candidates =
   |> List.filter (fun candidate ->
          current = "" || String_util.starts_with ~prefix:current candidate.value)
 
-let completion_candidates workspace ~previous ~current =
+let completion_response workspace ~previous ~current =
   match previous with
   | [] ->
-      filter_completion_candidates ~current
-        (List.map (fun doc -> candidate doc.name) command_docs)
+      Completion_candidates
+        (filter_completion_candidates ~current
+           (List.map (fun doc -> candidate doc.name) command_docs))
   | command_name :: rest -> (
       match find_command_doc command_name with
       | None ->
-          filter_completion_candidates ~current
-            (List.map (fun doc -> candidate doc.name) command_docs)
-      | Some doc ->
-          if List.mem "--" rest then []
-          else
-            match List.rev previous with
-            | option_name :: _ when option_expects_value option_name ->
-                filter_completion_candidates ~current
-                  (value_completion_candidates ?workspace option_name)
-            | _ ->
-                let flags = command_flag_words doc in
+          Completion_candidates
+            (filter_completion_candidates ~current
+               (List.map (fun doc -> candidate doc.name) command_docs))
+      | Some doc when List.mem "--" rest -> Completion_candidates []
+      | Some doc -> (
+          match List.rev previous with
+          | option_name :: _ when option_expects_value option_name -> (
+              match value_completion_response ?workspace option_name with
+              | Complete_directories -> Complete_directories
+              | Completion_candidates candidates ->
+                  Completion_candidates
+                    (filter_completion_candidates ~current candidates))
+          | _ ->
+              let flags = command_flag_words doc in
+              let candidates =
                 if String_util.starts_with ~prefix:"-" current then
-                  filter_completion_candidates ~current
-                    (List.map (fun flag -> candidate flag) flags)
+                  List.map (fun flag -> candidate flag) flags
                 else
-                  filter_completion_candidates ~current
-                    (positional_completion_candidates ?workspace:workspace
-                       command_name rest
-                    @ List.map (fun flag -> candidate flag) flags))
+                  positional_completion_candidates ?workspace:workspace
+                    command_name rest
+                  @ List.map (fun flag -> candidate flag) flags
+              in
+              Completion_candidates
+                (filter_completion_candidates ~current candidates)))
 
-let executable_names workspace =
+let executable_targets (workspace : Manifest.workspace) : Manifest.executable list =
   List.filter_map
     (function
-      | Manifest.Executable executable -> Some executable.name
+      | Manifest.Executable executable -> Some executable
       | Manifest.Library _ | Manifest.Test _ -> None)
     workspace.Manifest.targets
 
@@ -972,15 +1031,18 @@ let resolve_run_target workspace requested_target =
             (Printf.sprintf
                "target '%s' is a test; oasis run only supports executables"
                name)
-      | Some (Manifest.Executable executable) -> Ok executable.name)
+      | Some (Manifest.Executable executable) -> Ok executable)
   | None -> (
-      match executable_names workspace with
+      match executable_targets workspace with
       | [] -> Error "workspace does not define any executables to run"
-      | [ name ] -> Ok name
-      | names ->
+      | [ executable ] -> Ok executable
+      | executables ->
           Error
             (Printf.sprintf "workspace defines multiple executables; choose one: %s"
-               (String.concat ", " names)))
+               (String.concat ", "
+                  (List.map
+                     (fun (executable : Manifest.executable) -> executable.name)
+                     executables))))
 
 let find_built_executable name artifacts =
   List.find_map
@@ -1032,22 +1094,26 @@ let run_executable (options : run_options) =
   | Ok workspace -> (
       match resolve_run_target workspace options.target with
       | Error message -> report_error message
-      | Ok target_name -> (
+      | Ok target -> (
           match
             Builder.build ~workspace_root:options.workspace_dir
-              ~verbose:options.verbose ~requested_targets:[ target_name ]
+              ~verbose:options.verbose ~requested_targets:[ target.name ]
               ~backend_request:options.backend_request ?profile:options.profile
               workspace
           with
           | Error message -> report_error message
           | Ok result -> (
-              match find_built_executable target_name result.Builder.artifacts with
+              match find_built_executable target.name result.Builder.artifacts with
               | None ->
                   report_error
                     (Printf.sprintf
                        "internal error: build completed without executable '%s'"
-                       target_name)
+                       target.name)
               | Some binary ->
+                  print_endline
+                    (Printf.sprintf "Running executable %s -> %s"
+                       (target.name ^ Manifest.package_suffix target.package_path)
+                       binary);
                   let outcome =
                     Process.run_status ~verbose:options.verbose binary options.args
                   in
@@ -1122,13 +1188,19 @@ let run_completion (options : completion_options) =
               Exit_code 0
           | Error message -> report_error message)
       | Query { previous; current; describe } ->
-          completion_candidates workspace ~previous ~current
-          |> List.iter (fun candidate ->
-                 match (describe, candidate.hint) with
-                 | true, Some hint ->
-                     print_endline (candidate.value ^ "\t" ^ hint)
-                 | _ -> print_endline candidate.value);
-          Exit_code 0)
+          (match completion_response workspace ~previous ~current with
+          | Complete_directories ->
+              print_endline directory_completion_marker;
+              Exit_code 0
+          | Completion_candidates candidates ->
+              List.iter
+                (fun candidate ->
+                  match (describe, candidate.hint) with
+                  | true, Some hint ->
+                      print_endline (candidate.value ^ "\t" ^ hint)
+                  | _ -> print_endline candidate.value)
+                candidates;
+              Exit_code 0))
 
 let run_toolchain (_options : toolchain_options) =
   Toolchain.inspect () |> Toolchain.render_report |> print_endline;

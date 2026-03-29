@@ -59,6 +59,8 @@
 58. [x] Show declared auxiliary tool inputs in steady-state `oasis explain` output, not just rebuild reasons, so codegen and transform pipelines stay inspectable before anything changes.
 59. [x] Replace generation-time workspace completion snapshots with a runtime completion query protocol so one sourced script stays accurate as users move between workspaces.
 60. [x] Distinguish fully reused targets from action-only regeneration in build and explain reports so missing generated outputs do not look like a perfect cache hit after the tool repairs them.
-61. [ ] Restore shell-native path completion for `--workspace`, `--prefix`, and `--destdir` in the runtime completion protocol so dynamic queries do not regress directory-flag ergonomics.
-62. [ ] Teach bash completion to surface member package-path descriptions or another shell-appropriate fallback so package-aware target discovery is not limited to zsh and fish.
-63. [ ] Extend package-path annotations to `oasis run`, `oasis test`, and `oasis install` summaries so every user-facing subtool reports large-workspace target origin consistently.
+61. [x] Restore shell-native path completion for `--workspace`, `--prefix`, and `--destdir` in the runtime completion protocol so dynamic queries do not regress directory-flag ergonomics.
+62. [x] Teach bash completion to surface member package-path descriptions or another shell-appropriate fallback so package-aware target discovery is not limited to zsh and fish.
+63. [x] Extend package-path annotations to `oasis run`, `oasis test`, and `oasis install` summaries so every user-facing subtool reports large-workspace target origin consistently.
+64. [ ] Add direct runtime execution tests for zsh and fish completion scripts so path-mode and described completions are exercised beyond string snapshots.
+65. [ ] Replace the ad hoc completion marker line with a structured or versioned completion-query response so future shell integrations are not coupled to one magic string.

@@ -111,6 +111,34 @@ main = "main"
               "failing runs should report the aggregate summary";
             assert_string_contains ~needle:"Failed tests: red" run.output
               "failing runs should list the failing targets")) );
+    ( "reports member package paths in test summaries",
+      (fun () ->
+        with_temp_dir "oasis-test-package-paths" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/app"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[test.member_suite]
+dir = "test"
+main = "main"
+|};
+            write_source workspace "packages/app/test/main.ml"
+              {|let () = failwith "member failure"|};
+            let run = run_oasis ~cwd:workspace [ "test"; "member_suite" ] in
+            assert_true (run.status <> 0)
+              "member test failures should still return a non-zero status";
+            assert_string_contains
+              ~needle:"not ok - member_suite (packages/app)"
+              run.output
+              "test summaries should surface the member package path";
+            assert_string_contains
+              ~needle:"Failed tests: member_suite (packages/app)"
+              run.output
+              "aggregate failure summaries should retain the member package path")) );
     ( "reports when a workspace has no tests",
       (fun () ->
         with_temp_dir "oasis-test-none" (fun workspace ->

@@ -219,6 +219,46 @@ let contains_digit text =
             let facade_meta = Fs.read_file (Filename.concat prefix "lib/facade/META") in
             assert_string_contains ~needle:"requires = \"patterns\"" facade_meta
               "dependent libraries should export internal library requires")) );
+    ( "reports member package paths in install summaries",
+      (fun () ->
+        with_temp_dir "oasis-install-package-paths" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "packages/core/lib/core.ml"
+              {|let message = "installed member"|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline Core.message|};
+            let prefix = Filename.concat workspace "_stage" in
+            let install =
+              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+            in
+            assert_int_equal 0 install.status
+              "member targets should install successfully";
+            assert_string_contains
+              ~needle:"Installed library core (packages/core) ->"
+              install.output
+              "install summaries should surface member library package paths";
+            assert_string_contains
+              ~needle:"Installed executable demo (packages/app) ->"
+              install.output
+              "install summaries should surface member executable package paths")) );
     ( "rejects test targets for install",
       (fun () ->
         with_temp_dir "oasis-install-tests" (fun workspace ->

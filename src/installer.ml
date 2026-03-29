@@ -49,6 +49,9 @@ let workspace_label (workspace : Manifest.workspace) =
   | Some name when String.trim name <> "" -> name
   | Some _ | None -> "workspace"
 
+let display_name name package_path =
+  name ^ Manifest.package_suffix package_path
+
 let resolve_prefix ~workspace_root ~profile = function
   | Some prefix when Filename.is_relative prefix ->
       {
@@ -302,7 +305,9 @@ let install_library ~verbose ~(layout : install_layout)
       in
       Fs.write_file meta_path meta;
       print_endline
-        (Printf.sprintf "Installed library %s -> %s" built_library.name install_dir);
+        (Printf.sprintf "Installed library %s -> %s"
+           (display_name built_library.name library.package_path)
+           install_dir);
       Ok
         {
           name = built_library.name;
@@ -322,22 +327,25 @@ let install_library ~verbose ~(layout : install_layout)
   | Builder.Built_executable _ | Builder.Built_test _ ->
       Error "internal error: expected a built library artifact"
 
-let install_executable ~verbose ~(layout : install_layout) ~selection ~requested_by
+let install_executable ~verbose ~(layout : install_layout)
+    ~(executable : Manifest.executable) ~selection ~requested_by
     (artifact : Builder.built_artifact) =
   match artifact with
-  | Builder.Built_executable executable ->
+  | Builder.Built_executable built_executable ->
       let install_path =
-        Layout.install_executable_path layout.stage_root executable.name
+        Layout.install_executable_path layout.stage_root built_executable.name
       in
       report_detail ~verbose
-        (Printf.sprintf "Installing %s -> %s" executable.binary install_path);
-      Fs.copy_file ~src:executable.binary ~dst:install_path;
+        (Printf.sprintf "Installing %s -> %s" built_executable.binary install_path);
+      Fs.copy_file ~src:built_executable.binary ~dst:install_path;
       print_endline
-        (Printf.sprintf "Installed executable %s -> %s" executable.name install_path);
+        (Printf.sprintf "Installed executable %s -> %s"
+           (display_name executable.name executable.package_path)
+           install_path);
       Ok
         {
-          name = executable.name;
-          path = Layout.relative_install_executable_path executable.name;
+          name = built_executable.name;
+          path = Layout.relative_install_executable_path built_executable.name;
           selection;
           requested_by;
         }
@@ -442,10 +450,13 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
   List.iter (fun name -> Hashtbl.replace requested_index name ()) requested_names;
   let requested_roots = requested_roots_by_target workspace requested_names in
   let library_index = Hashtbl.create (List.length workspace.targets) in
+  let executable_index = Hashtbl.create (List.length workspace.targets) in
   List.iter
     (function
       | Manifest.Library library -> Hashtbl.replace library_index library.name library
-      | Manifest.Executable _ | Manifest.Test _ -> ())
+      | Manifest.Executable executable ->
+          Hashtbl.replace executable_index executable.name executable
+      | Manifest.Test _ -> ())
     workspace.targets;
   let selected_artifacts =
     List.filter
@@ -483,6 +494,15 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
         in
         collect (library :: libraries) executables rest
     | Builder.Built_executable built_executable as artifact :: rest ->
+        let* manifest_executable =
+          match Hashtbl.find_opt executable_index built_executable.name with
+          | Some executable -> Ok executable
+          | None ->
+              Error
+                (Printf.sprintf
+                   "internal error: missing manifest executable '%s' during install"
+                   built_executable.name)
+        in
         let selection =
           if Hashtbl.mem requested_index built_executable.name then Requested
           else Dependency
@@ -493,7 +513,8 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
           | None -> []
         in
         let* executable =
-          install_executable ~verbose ~layout ~selection ~requested_by artifact
+          install_executable ~verbose ~layout ~executable:manifest_executable
+            ~selection ~requested_by artifact
         in
         collect libraries (executable :: executables) rest
     | Builder.Built_test _ :: rest -> collect libraries executables rest
