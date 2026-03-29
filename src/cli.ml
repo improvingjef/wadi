@@ -23,6 +23,8 @@ type clean_options = {
   targets : string list;
 }
 
+type toolchain_options = { verbose : bool }
+
 type command_result =
   | Exit_code of int
   | Forward_status of Unix.process_status
@@ -92,6 +94,13 @@ let clean_doc =
       ];
   }
 
+let toolchain_doc =
+  {
+    name = "toolchain";
+    signature = "oasis toolchain";
+    examples = [ "oasis toolchain" ];
+  }
+
 let render_usage docs =
   String.concat "\n"
     ([
@@ -106,7 +115,7 @@ let render_usage docs =
         (fun doc -> List.map (fun example -> "  " ^ example) doc.examples)
         docs)
 
-let command_docs = [ build_doc; run_doc; test_doc; clean_doc ]
+let command_docs = [ build_doc; run_doc; test_doc; clean_doc; toolchain_doc ]
 
 let usage () = render_usage command_docs
 
@@ -182,6 +191,14 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
   loop { workspace_dir = "."; verbose = false; targets = [] } args
+
+let parse_toolchain_args args =
+  match args with
+  | [] -> Ok { verbose = false }
+  | [ "--help" ] -> Error (command_usage toolchain_doc)
+  | option :: _ when String_util.starts_with ~prefix:"-" option ->
+      Error (Printf.sprintf "unknown option '%s'" option)
+  | _ -> Error "toolchain does not accept positional arguments"
 
 let load_workspace workspace_dir =
   if not (Fs.is_directory workspace_dir) then
@@ -309,12 +326,18 @@ let run_clean (options : clean_options) =
         | Ok () -> Exit_code 0
         | Error message -> report_error message)
 
+let run_toolchain (_options : toolchain_options) =
+  Toolchain.inspect () |> Toolchain.render_report |> print_endline;
+  Exit_code 0
+
 let commands =
   [
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
     Command { doc = run_doc; parse = parse_run_args; run = run_executable };
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
+    Command
+      { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
   ]
 
 let dispatch_command command args =

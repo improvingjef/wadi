@@ -7,3 +7,7 @@
 - Every new source module still requires touching the bootstrap `Makefile`, which reinforces that task 25 is not cleanup vanity work; it is active friction on the project.
 - Resolving `ocamlc -where` and then locating `unix.cmi` in either the stdlib root or a `unix/` subdirectory removes one more ambient toolchain assumption from the bootstrap path.
 - A single command table is not just a cleanup refactor; it gives the CLI one source of truth for help text, parsing entry points, and dispatch, which is the prerequisite for generated docs and completions later.
+- A dedicated layout module removes `_oasis` path drift across build, clean, tests, and future install/diagnostic subtools; the path scheme only counts as simple if it lives in one place.
+- `oasis toolchain` is much more useful when it reports resolved executable paths and package roots, not just the configured command tokens; debugging switch issues starts with concrete paths.
+- Driving bootstrap compilation from a real root `oasis.toml` removes the duplicated object graph, but it also exposed that the self-hosting path still lags the main builder on `.mli` handling and package-derived flags.
+- A clean target that regenerates build metadata before deleting it is the exact kind of pointless friction that gives build tools a bad name; bootstrap plumbing has to respect lifecycle semantics too.

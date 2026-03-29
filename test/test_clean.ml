@@ -1,13 +1,12 @@
 open Test_support
 
 let executable_path workspace name =
-  Filename.concat workspace ("_oasis/build/default/exe/" ^ name ^ "/" ^ name)
+  Layout.executable_binary workspace name
 
 let library_archive_path workspace name =
-  Filename.concat workspace
-    ("_oasis/build/default/lib/" ^ name ^ "/lib" ^ name ^ ".cmxa")
+  Layout.library_archive workspace name
 
-let oasis_root workspace = Filename.concat workspace "_oasis"
+let oasis_root = Layout.artifact_root
 
 let cases =
   [

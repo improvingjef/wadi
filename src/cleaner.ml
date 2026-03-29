@@ -3,8 +3,7 @@ let ( let* ) = Result.bind
 let report_detail ~verbose message =
   if verbose then prerr_endline message
 
-let oasis_root workspace_root =
-  Builder.build_root workspace_root |> Filename.dirname |> Filename.dirname
+let oasis_root = Layout.artifact_root
 
 let describe_target target =
   Printf.sprintf "%s %s" (Manifest.target_kind_name target)
@@ -32,7 +31,7 @@ let rec prune_empty_directories ~stop_at path =
     prune_empty_directories ~stop_at (Filename.dirname path))
 
 let clean_target ~workspace_root ~verbose target =
-  let artifact_dir = Builder.target_out_dir workspace_root target in
+  let artifact_dir = Layout.target_out_dir workspace_root target in
   if Fs.exists artifact_dir then (
     report_detail ~verbose ("Cleaning " ^ artifact_dir);
     Fs.remove_tree artifact_dir;

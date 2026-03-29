@@ -103,19 +103,9 @@ let resolve_build_order workspace requested_targets =
   in
   Ok (List.rev !order)
 
-let build_root workspace_root =
-  Filename.concat workspace_root "_oasis/build/default"
+let build_root = Layout.build_root
 
-let target_out_dir workspace_root = function
-  | Manifest.Library library ->
-      Filename.concat (Filename.concat (build_root workspace_root) "lib")
-        library.name
-  | Manifest.Executable executable ->
-      Filename.concat (Filename.concat (build_root workspace_root) "exe")
-        executable.name
-  | Manifest.Test test ->
-      Filename.concat (Filename.concat (build_root workspace_root) "test")
-        test.name
+let target_out_dir = Layout.target_out_dir
 
 let source_file workspace_root dir stem extension =
   Filename.concat workspace_root (Filename.concat dir (stem ^ extension))
@@ -123,7 +113,7 @@ let source_file workspace_root dir stem extension =
 let include_args dirs =
   List.concat_map (fun dir -> [ "-I"; dir ]) dirs
 
-let stamp_path out_dir = Filename.concat out_dir ".oasis-stamp"
+let stamp_path = Layout.stamp_path
 
 let static_archive_path archive = Filename.remove_extension archive ^ ".a"
 
@@ -324,7 +314,7 @@ let build_library ~workspace_root ~verbose ~manifest_path ~compiler_version
              (dependency, output.fingerprint))
            library.deps)
   in
-  let archive = Filename.concat out_dir ("lib" ^ library.name ^ ".cmxa") in
+  let archive = Layout.library_archive workspace_root library.name in
   let expected_outputs =
     List.concat_map (expected_module_outputs out_dir) ordered_modules
     @ [ archive; static_archive_path archive; stamp_path out_dir ]
@@ -446,7 +436,11 @@ let build_runnable ~workspace_root ~verbose ~manifest_path ~compiler_version
         | _ -> None)
       order
   in
-  let binary = Filename.concat out_dir runnable.name in
+  let binary =
+    match kind with
+    | Executable_kind -> Layout.executable_binary workspace_root runnable.name
+    | Test_kind -> Layout.test_binary workspace_root runnable.name
+  in
   let expected_outputs =
     List.concat_map (expected_module_outputs out_dir) source_order
     @ [ binary; stamp_path out_dir ]

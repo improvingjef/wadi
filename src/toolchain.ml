@@ -3,6 +3,22 @@ type package_resolution = {
   package_paths : (string * string) list;
 }
 
+type resolved_command = {
+  configured : string;
+  resolved : string option;
+}
+
+type report = {
+  ocamlc : resolved_command;
+  ocamlopt : resolved_command;
+  ocamldep : resolved_command;
+  ocamlfind : resolved_command;
+  compiler_version : (string, string) result;
+  stdlib : (string, string) result;
+  unix_dir : (string option, string) result;
+  package_roots : (string list, string) result;
+}
+
 let ( let* ) = Result.bind
 
 let command_override name default =
@@ -19,6 +35,26 @@ let ocamlopt_cmd () = command_override "OCAMLOPT" "ocamlopt"
 let ocamldep_cmd () = command_override "OCAMLDEP" "ocamldep"
 
 let ocamlfind_cmd () = command_override "OCAMLFIND" "ocamlfind"
+
+let path_entries () =
+  match Sys.getenv_opt "PATH" with
+  | None -> []
+  | Some value ->
+      value |> String.split_on_char ':' |> List.filter (fun entry -> entry <> "")
+
+let executable_candidates command =
+  if String.contains command '/' then [ command ]
+  else List.map (fun dir -> Filename.concat dir command) (path_entries ())
+
+let resolve_executable_path command =
+  executable_candidates command
+  |> List.find_opt (fun path ->
+         try
+           Unix.access path [ Unix.X_OK ];
+           true
+         with
+         | Unix.Unix_error _ -> false)
+  |> Option.map Fs.realpath
 
 let version_of prog =
   let outcome = Process.run_capture prog [ "-version" ] in
@@ -80,6 +116,31 @@ let ensure_ocamlfind () =
           Error
             "external packages require ocamlfind; install it with `opam install \
              ocamlfind`")
+
+let configured_command_report command =
+  { configured = command; resolved = resolve_executable_path command }
+
+let resolved_ocamlfind_report () =
+  let configured = ocamlfind_cmd () in
+  match ensure_ocamlfind () with
+  | Ok command ->
+      {
+        configured;
+        resolved =
+          (match resolve_executable_path command with
+          | Some path -> Some path
+          | None -> Some command);
+      }
+  | Error _ -> configured_command_report configured
+
+let package_search_roots () =
+  let* ocamlfind = ensure_ocamlfind () in
+  let outcome = Process.run_capture ocamlfind [ "printconf"; "path" ] in
+  if outcome.status = 0 then Ok (String_util.split_lines outcome.output)
+  else
+    Error
+      (Printf.sprintf "failed to query %s package roots\n%s" ocamlfind
+         outcome.output)
 
 let resolve_packages packages =
   let packages = String_util.dedup_preserve packages in
@@ -152,3 +213,58 @@ let fingerprint_lines resolution =
       (fun (package_name, package_path) ->
         Printf.sprintf "package %s %s" package_name package_path)
       resolution.package_paths
+
+let inspect () =
+  let stdlib = stdlib_dir () in
+  let unix_dir =
+    match stdlib with
+    | Ok path -> Ok (resolve_library_dir ~exists:Sys.file_exists ~stdlib_dir:path "unix")
+    | Error message -> Error message
+  in
+  {
+    ocamlc = configured_command_report (ocamlc_cmd ());
+    ocamlopt = configured_command_report (ocamlopt_cmd ());
+    ocamldep = configured_command_report (ocamldep_cmd ());
+    ocamlfind = resolved_ocamlfind_report ();
+    compiler_version = compiler_version ();
+    stdlib;
+    unix_dir;
+    package_roots = package_search_roots ();
+  }
+
+let render_command_report name command =
+  match command.resolved with
+  | Some resolved when resolved = command.configured ->
+      Printf.sprintf "%s: %s" name resolved
+  | Some resolved ->
+      Printf.sprintf "%s: %s (configured as %s)" name resolved command.configured
+  | None -> Printf.sprintf "%s: unresolved (%s)" name command.configured
+
+let render_result name = function
+  | Ok value -> Printf.sprintf "%s: %s" name value
+  | Error message ->
+      Printf.sprintf "%s-error: %s" name (String.trim message)
+
+let render_report report =
+  let base_lines =
+    [
+      render_command_report "ocamlc" report.ocamlc;
+      render_command_report "ocamlopt" report.ocamlopt;
+      render_command_report "ocamldep" report.ocamldep;
+      render_command_report "ocamlfind" report.ocamlfind;
+      render_result "compiler-version" report.compiler_version;
+      render_result "stdlib" report.stdlib;
+      (match report.unix_dir with
+      | Ok (Some path) -> "unix-library-dir: " ^ path
+      | Ok None -> "unix-library-dir: unavailable"
+      | Error message ->
+          "unix-library-dir-error: " ^ String.trim message);
+    ]
+  in
+  match report.package_roots with
+  | Ok roots ->
+      String.concat "\n"
+        (base_lines @ ("package-roots:" :: List.map (fun root -> "  " ^ root) roots))
+  | Error message ->
+      String.concat "\n"
+        (base_lines @ [ "package-roots-error: " ^ String.trim message ])

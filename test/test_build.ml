@@ -1,11 +1,10 @@
 open Test_support
 
 let executable_path workspace name =
-  Filename.concat workspace ("_oasis/build/default/exe/" ^ name ^ "/" ^ name)
+  Layout.executable_binary workspace name
 
 let library_archive_path workspace name =
-  Filename.concat workspace
-    ("_oasis/build/default/lib/" ^ name ^ "/lib" ^ name ^ ".cmxa")
+  Layout.library_archive workspace name
 
 let write_source workspace relative_path contents =
   Fs.write_file (Filename.concat workspace relative_path) contents

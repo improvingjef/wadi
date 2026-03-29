@@ -77,3 +77,6 @@ let split_whitespace text =
       loop stop (word :: acc)
   in
   loop 0 []
+
+let split_lines text =
+  text |> String.split_on_char '\n' |> List.filter (fun line -> line <> "")

@@ -112,7 +112,9 @@ main = "main"
               run.output "top-level usage should include the test command";
             assert_string_contains
               ~needle:"oasis clean [--workspace DIR] [--verbose] [TARGET ...]"
-              run.output "top-level usage should include the clean command")) );
+              run.output "top-level usage should include the clean command";
+            assert_string_contains ~needle:"oasis toolchain" run.output
+              "top-level usage should include the toolchain command")) );
     ( "prints command-specific help from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-help" (fun workspace ->
