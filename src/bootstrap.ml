@@ -149,6 +149,13 @@ let workspace_relative_path ~workspace_root path =
       (String.length path - String.length normalized_root)
   else path
 
+let resolve_seed_root ~workspace_root path =
+  if Filename.is_relative path then Filename.concat workspace_root path else path
+
+let seed_snapshot_dir ~seed_root ~profile (library : Manifest.library) =
+  Filename.concat seed_root
+    (Filename.concat profile (Printf.sprintf "library-%s" library.name))
+
 let render_shell_words words =
   String.concat " " (List.map String_util.shell_quote words)
 
@@ -161,6 +168,15 @@ let render_env_prefix env =
            (fun (name, value) -> name ^ "=" ^ String_util.shell_quote value)
            env)
       ^ " "
+
+let render_env_words env =
+  match env with
+  | [] -> ""
+  | env ->
+      String.concat " "
+        (List.map
+           (fun (name, value) -> name ^ "=" ^ String_util.shell_quote value)
+           env)
 
 let package_flags packages =
   let resolution : Toolchain.package_resolution = { packages; package_paths = [] } in
@@ -303,19 +319,8 @@ let ordered_module_plans ~workspace_root ordered_stems prepared_sources =
   in
   loop [] ordered_stems
 
-let module_uses_logical_paths (module_plan : module_plan) =
-  module_plan.ml_path = module_plan.logical_ml_path
-  &&
-  match (module_plan.mli_path, module_plan.logical_mli_path) with
-  | None, None -> true
-  | Some path, Some logical_path -> path = logical_path
-  | Some _, None | None, Some _ -> false
-
-let common_seed_reuse_allowed (target : target_plan) =
-  target.compile_flags = []
-  && target.env = []
-  && target.ppx_tools = []
-  && List.for_all module_uses_logical_paths target.ordered_modules
+let common_seed_reuse_allowed ~seed_profile requested_profile =
+  requested_profile = seed_profile
 
 let ensure_unique_module_stems groups =
   let stems : (string, module_owner list) Hashtbl.t = Hashtbl.create 16 in
@@ -486,6 +491,7 @@ let runnable_plan ~session ~workspace_root ~profile workspace index ~kind runnab
 
 let plan ~workspace_root ?profile ~scope workspace =
   let profile = resolve_profile workspace profile in
+  let seed_profile = Manifest.default_profile workspace in
   let index = index_targets workspace in
   let* library =
     find_single_target "library"
@@ -560,7 +566,8 @@ let plan ~workspace_root ?profile ~scope workspace =
           (List.map
              (workspace_relative_path ~workspace_root)
              (common_inputs @ executable_inputs @ test_inputs));
-      common_seed_reuse = common_seed_reuse_allowed common;
+      common_seed_reuse =
+        common_seed_reuse_allowed ~seed_profile profile;
       common;
       executable = executable_plan;
       test = test_plan;
@@ -745,55 +752,185 @@ let ordered_prepared_sources ordered_stems prepared_sources =
   in
   loop [] ordered_stems
 
-let seed_metadata_lines ~manifest_path workspace =
+let seed_snapshot_file ~workspace_root ~snapshot_dir stem extension source_path =
+  let relative_path = workspace_relative_path ~workspace_root source_path in
+  if relative_path <> source_path
+     && not (String_util.starts_with ~prefix:"_bootstrap/" relative_path)
+  then Ok relative_path
+  else
+    let path = Filename.concat snapshot_dir (stem ^ "." ^ extension) in
+    let contents = Fs.read_file source_path in
+    if Fs.exists path && Fs.read_file path = contents then ()
+    else Fs.write_file path contents;
+    Ok (workspace_relative_path ~workspace_root path)
+
+let seed_compile_paths ~workspace_root ?seed_root ~(profile : string)
+    (library : Manifest.library) ordered_sources =
+  match seed_root with
+  | None ->
+      Ok
+        (List.concat_map
+           (fun (source : Builder.prepared_source) ->
+             (match source.mli_compile_path with
+             | Some mli_path ->
+                 [ workspace_relative_path ~workspace_root mli_path ]
+             | None -> [])
+             @ [ workspace_relative_path ~workspace_root source.ml_compile_path ])
+           ordered_sources)
+  | Some seed_root ->
+      let snapshot_dir = seed_snapshot_dir ~seed_root ~profile library in
+      if Fs.exists snapshot_dir then Fs.remove_tree snapshot_dir;
+      Fs.ensure_dir snapshot_dir;
+      collect_results ordered_sources (fun (source : Builder.prepared_source) ->
+          let* mli_paths =
+            match source.mli_compile_path with
+            | Some mli_path ->
+                let* snapshot_path =
+                  seed_snapshot_file ~workspace_root ~snapshot_dir source.source.stem
+                    "mli" mli_path
+                in
+                Ok [ snapshot_path ]
+            | None -> Ok []
+          in
+          let* ml_path =
+            seed_snapshot_file ~workspace_root ~snapshot_dir source.source.stem "ml"
+              source.ml_compile_path
+          in
+          Ok (mli_paths @ [ ml_path ]))
+      |> Result.map List.concat
+
+let enriched_seed_metadata_lines ?seed_root ~manifest_path workspace =
   let workspace_root = Fs.realpath (Filename.dirname manifest_path) in
+  let seed_root = Option.map (resolve_seed_root ~workspace_root) seed_root in
   let* library = choose_bootstrap_library ~manifest_path workspace in
   let target = Manifest.Library library in
   let index = index_targets workspace in
   let* packages = effective_packages index target in
+  let profile = Manifest.default_profile workspace in
   let out_dir =
     bootstrap_target_out_dir ~workspace_root
-      ~profile:(Manifest.default_profile workspace)
+      ~profile
       target
+  in
+  let* pipeline = Builder.resolve_pipeline ~workspace_root workspace ~profile target in
+  let* () =
+    Builder.validate_wrapped_library_source_conflicts ~workspace_root library
+      pipeline.actions
+  in
+  let* _action_results =
+    Builder.run_actions ~mode:Builder.Materialize ~workspace_root ~out_dir ~target
+      ~pipeline
+  in
+  let* () =
+    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize
+      ~workspace_root ~out_dir library
   in
   let* sources =
     Builder.library_source_descriptors ~workspace_root ~out_dir
-      ~planned_generated_outputs:[] library
+      ~planned_generated_outputs:
+        (Builder.wrapped_library_generated_outputs ~workspace_root library
+        @ Builder.planned_generated_output_names pipeline.actions)
+      library
   in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Plan_only ~workspace_root ~out_dir
-      ~target_env:[] [] sources
+    Builder.prepare_sources ~mode:Builder.Materialize ~workspace_root ~out_dir
+      ~target_env:pipeline.options.env pipeline.preprocessors sources
   in
   let session = Toolchain.create_session () in
   let* package_resolution = Toolchain.resolve_packages ~session packages in
   let* ordered_stems =
-    Builder.infer_module_order ~session ~verbose:false ~env:[]
+    Builder.infer_module_order ~session ~verbose:false ~env:pipeline.options.env
       ~target_kind:"library" ~target_name:library.name package_resolution
       prepared_sources
   in
   let* ordered_sources =
     ordered_prepared_sources ordered_stems prepared_sources
   in
-  let compile_paths =
-    List.concat_map
-      (fun (source : Builder.prepared_source) ->
-        (if source.source.mli_exists then [ source.source.mli_relative ] else [])
-        @ [ source.source.ml_relative ])
-      ordered_sources
+  let* compile_paths =
+    seed_compile_paths ~workspace_root ?seed_root ~profile library ordered_sources
+  in
+  let target_for_flags =
+    {
+      name = library.name;
+      packages;
+      compile_flags = pipeline.options.compile_flags;
+      link_flags = [];
+      env = pipeline.options.env;
+      ppx_tools = pipeline.ppx_tools;
+      ordered_modules = [];
+    }
   in
   Ok
     [
       "# Generated by oasis __bootstrap_makefile --format seed-metadata.";
       "# Edit oasis.toml instead of this file.";
       "# Refresh with: make refresh-bootstrap-seed-metadata";
+      "BOOTSTRAP_LIBRARY_PROFILE := " ^ profile;
       "BOOTSTRAP_LIBRARY_COMPILE_SOURCES := " ^ String.concat " " compile_paths;
       "BOOTSTRAP_LIBRARY_MODULE_STEMS := " ^ String.concat " " ordered_stems;
       "BOOTSTRAP_LIBRARY_PACKAGES := " ^ String.concat " " packages;
+      "BOOTSTRAP_LIBRARY_ENV_PREFIX := " ^ render_env_words pipeline.options.env;
+      "BOOTSTRAP_LIBRARY_COMPILE_FLAGS := "
+      ^ compile_flags_value ~workspace_root target_for_flags;
     ]
 
-let render_seed_metadata ~manifest_path () =
+let seed_metadata_lines ?seed_root ~manifest_path workspace =
+  match seed_root with
+  | Some _ -> enriched_seed_metadata_lines ?seed_root ~manifest_path workspace
+  | None ->
+      let workspace_root = Fs.realpath (Filename.dirname manifest_path) in
+      let* library = choose_bootstrap_library ~manifest_path workspace in
+      let target = Manifest.Library library in
+      let index = index_targets workspace in
+      let* packages = effective_packages index target in
+      let out_dir =
+        bootstrap_target_out_dir ~workspace_root
+          ~profile:(Manifest.default_profile workspace)
+          target
+      in
+      let* sources =
+        Builder.library_source_descriptors ~workspace_root ~out_dir
+          ~planned_generated_outputs:[] library
+      in
+      let* prepared_sources =
+        Builder.prepare_sources ~mode:Builder.Plan_only ~workspace_root ~out_dir
+          ~target_env:[] [] sources
+      in
+      let session = Toolchain.create_session () in
+      let* package_resolution = Toolchain.resolve_packages ~session packages in
+      let* ordered_stems =
+        Builder.infer_module_order ~session ~verbose:false ~env:[]
+          ~target_kind:"library" ~target_name:library.name package_resolution
+          prepared_sources
+      in
+      let* ordered_sources =
+        ordered_prepared_sources ordered_stems prepared_sources
+      in
+      let compile_paths =
+        List.concat_map
+          (fun (source : Builder.prepared_source) ->
+            (if source.source.mli_exists then [ source.source.mli_relative ] else [])
+            @ [ source.source.ml_relative ])
+          ordered_sources
+      in
+      Ok
+        [
+          "# Generated by oasis __bootstrap_makefile --format seed-metadata.";
+          "# Edit oasis.toml instead of this file.";
+          "# Refresh with: make refresh-bootstrap-seed-metadata";
+          "BOOTSTRAP_LIBRARY_PROFILE := "
+          ^ Manifest.default_profile workspace;
+          "BOOTSTRAP_LIBRARY_COMPILE_SOURCES := "
+          ^ String.concat " " compile_paths;
+          "BOOTSTRAP_LIBRARY_MODULE_STEMS := " ^ String.concat " " ordered_stems;
+          "BOOTSTRAP_LIBRARY_PACKAGES := " ^ String.concat " " packages;
+          "BOOTSTRAP_LIBRARY_ENV_PREFIX :=";
+          "BOOTSTRAP_LIBRARY_COMPILE_FLAGS :=";
+        ]
+
+let render_seed_metadata ?seed_root ~manifest_path () =
   let* workspace = Manifest.load manifest_path in
-  let* lines = seed_metadata_lines ~manifest_path workspace in
+  let* lines = seed_metadata_lines ?seed_root ~manifest_path workspace in
   Ok (String.concat "\n" lines ^ "\n")
 
 let render_makefile ?profile ?(scope = Full) ~manifest_path () =
@@ -809,6 +946,7 @@ type command_options = {
   profile : string option;
   scope : scope;
   format : render_format;
+  seed_root : string option;
 }
 
 let parse_scope value =
@@ -846,9 +984,12 @@ let parse_command_args args =
         let* format = parse_format value in
         loop { options with format } rest
     | "--format" :: [] -> Error "--format requires makefile or seed-metadata"
+    | "--seed-root" :: path :: rest ->
+        loop { options with seed_root = Some path } rest
+    | "--seed-root" :: [] -> Error "--seed-root requires a path"
     | "--help" :: _ ->
         Error
-          "usage: oasis __bootstrap_makefile --manifest PATH [--profile NAME] [--scope app|executable|full] [--format makefile|seed-metadata]"
+          "usage: oasis __bootstrap_makefile --manifest PATH [--profile NAME] [--scope app|executable|full] [--format makefile|seed-metadata] [--seed-root DIR]"
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | _ :: _ ->
@@ -861,6 +1002,7 @@ let parse_command_args args =
       profile = None;
       scope = Full;
       format = Makefile;
+      seed_root = None;
     }
     args
 
@@ -875,7 +1017,9 @@ let run_hidden_command args =
         | Makefile ->
             render_makefile ?profile:options.profile ~scope:options.scope
               ~manifest_path:options.manifest_path ()
-        | Seed_metadata -> render_seed_metadata ~manifest_path:options.manifest_path ())
+        | Seed_metadata ->
+            render_seed_metadata ?seed_root:options.seed_root
+              ~manifest_path:options.manifest_path ())
       with
       | Ok text ->
           print_string text;

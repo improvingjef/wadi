@@ -20,7 +20,7 @@ let render_format_name = function
   | Bootstrap.Seed_metadata -> "seed-metadata"
 
 let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full)
-    ?(format = Bootstrap.Makefile) workspace =
+    ?(format = Bootstrap.Makefile) ?seed_root workspace =
   let args =
     [
       Bootstrap.hidden_command_name;
@@ -34,9 +34,13 @@ let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full)
       | Bootstrap.Full -> "full");
     ]
     @
-    match profile with
+    (match profile with
     | Some profile -> [ "--profile"; profile ]
-    | None -> []
+    | None -> [])
+    @
+    (match seed_root with
+    | Some seed_root -> [ "--seed-root"; seed_root ]
+    | None -> [])
   in
   run_binary (oasis_bin ()) args
 
@@ -354,7 +358,8 @@ deps = ["core"]
     ( "keeps cached bootstrap seed metadata in sync with the compiled bootstrap planner",
       (fun () ->
         let generated =
-          run_compiled_bootstrap ~format:Bootstrap.Seed_metadata (Sys.getcwd ())
+          run_compiled_bootstrap ~format:Bootstrap.Seed_metadata
+            ~seed_root:"scripts/bootstrap_seed" (Sys.getcwd ())
         in
         assert_int_equal 0 generated.status
           "the compiled bootstrap planner should render seed metadata successfully";
@@ -364,6 +369,137 @@ deps = ["core"]
         in
         assert_string_equal generated.output cached
           "the cached bootstrap seed metadata should stay in sync with the compiled helper")) ;
+    ( "renders transform-aware seed metadata for default-profile bootstrap libraries",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-seed-transforms" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+
+[profile.release]
+compile_flags = ["-w", "+a"]
+env = ["BUILD_PROFILE=release"]
+
+[action.generate_version]
+argv = ["./tools/generate.sh"]
+cwd = "."
+deps = ["config/version.txt"]
+outputs = ["version.ml"]
+sandbox = "target"
+
+[preprocess.expand]
+argv = ["./tools/expand.sh"]
+deps = ["config/banner.txt"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/message.txt"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate_version"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+
+[test.suite]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            write_source workspace "config/version.txt" "action";
+            write_source workspace "config/banner.txt" "banner";
+            write_source workspace "ppx/message.txt" "ppx";
+            ignore
+              (write_executable workspace "tools/generate.sh"
+                 "#!/bin/sh\nset -eu\nversion=$(cat config/version.txt)\nprintf 'let value = \"%s\"\\n' \"$version\" > lib/version.ml\n");
+            ignore
+              (write_executable workspace "tools/expand.sh"
+                 "#!/bin/sh\nset -eu\nbanner=$(cat config/banner.txt)\nsed \"s/@@PROFILE@@/${BUILD_PROFILE}/g; s/@@BANNER@@/${banner}/g\"\n");
+            let _ppx_binary =
+              Test_build.compile_ppx workspace "ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let replacement () =
+  let channel = open_in "ppx/message.txt" in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr channel)
+    (fun () -> input_line channel)
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string (replacement (), loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "ppx/rewrite.exe"
+            in
+            write_source workspace "lib/core.ml"
+              {|let message = "@@PROFILE@@:@@BANNER@@:" ^ Version.value ^ ":" ^ "ppx-marker"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            write_source workspace "test/test_main.ml"
+              {|let () = print_endline Core.message|};
+            let metadata =
+              run_compiled_bootstrap ~format:Bootstrap.Seed_metadata
+                ~seed_root:"scripts/bootstrap_seed" workspace
+            in
+            assert_int_equal 0 metadata.status
+              "the compiled bootstrap planner should render transform-aware seed metadata";
+            write_workspace_file workspace "scripts/bootstrap_seed_metadata.mk"
+              metadata.output;
+            assert_string_contains
+              ~needle:"BOOTSTRAP_LIBRARY_ENV_PREFIX := BUILD_PROFILE='release'"
+              metadata.output
+              "seed metadata should capture profile environment bindings";
+            assert_string_contains
+              ~needle:"BOOTSTRAP_LIBRARY_COMPILE_FLAGS := -w +a"
+              metadata.output
+              "seed metadata should capture compile flags";
+            assert_string_contains
+              ~needle:"ppx/rewrite.exe"
+              metadata.output
+              "seed metadata should capture ppx arguments";
+            assert_string_contains
+              ~needle:"scripts/bootstrap_seed/release/library-core/version.ml"
+              metadata.output
+              "seed metadata should snapshot transformed generated sources";
+            assert_string_contains
+              ~needle:"scripts/bootstrap_seed/release/library-core/core.ml"
+              metadata.output
+              "seed metadata should snapshot transformed preprocessed sources";
+            assert_file_exists
+              (Filename.concat workspace
+                 "scripts/bootstrap_seed/release/library-core/version.ml");
+            assert_file_exists
+              (Filename.concat workspace
+                 "scripts/bootstrap_seed/release/library-core/core.ml");
+            let makefile =
+              expect_ok (render_bootstrap ~profile:"release" workspace)
+            in
+            assert_string_contains ~needle:"COMMON_SEED_REUSE := yes" makefile
+              "the generated bootstrap plan should keep common seed reuse enabled when the requested profile matches the seed metadata profile")) );
     ( "benchmarks bootstrap latency and emits machine-readable summaries",
       (fun () ->
         with_temp_dir "oasis-bootstrap-benchmark" (fun workspace ->
@@ -564,8 +700,8 @@ let () =
               ~needle:"# Bootstrap profile: release"
               makefile
               "bootstrap generation should record the resolved profile";
-            assert_string_contains ~needle:"COMMON_SEED_REUSE := no" makefile
-              "bootstrap generation should disable shared seed reuse when the common target needs profile-sensitive compile inputs";
+            assert_string_contains ~needle:"COMMON_SEED_REUSE := yes" makefile
+              "bootstrap generation should keep shared seed reuse available when the requested bootstrap profile matches the seed profile";
             assert_string_contains
               ~needle:"COMMON_COMPILE_FLAGS := -w +a"
               makefile

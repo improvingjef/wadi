@@ -13,13 +13,14 @@ BOOTSTRAP_MANIFEST := oasis.toml
 BOOTSTRAP_GENERATOR := scripts/bootstrap_seed_main.ml
 BOOTSTRAP_INTERNAL_COMMAND := __bootstrap_makefile
 BOOTSTRAP_SEED_METADATA := scripts/bootstrap_seed_metadata.mk
+BOOTSTRAP_SEED_ROOT := scripts/bootstrap_seed
 BOOTSTRAP_SEED_BIN := $(BIN_DIR)/oasis-seed
 BOOTSTRAP_PROFILE ?=
 BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE),workspace-default)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
 BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
-.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests benchmark-bootstrap refresh-bootstrap-seed-metadata
+.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata
 
 include $(BOOTSTRAP_SEED_METADATA)
 
@@ -38,12 +39,27 @@ release-artifacts: $(BIN_DIR)/oasis
 release-manifests:
 	bash scripts/generate_packaging_manifests.sh
 
+release-cut:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "make release-cut VERSION=X.Y.Z [TAG=1]" >&2; \
+		exit 2; \
+	fi
+	bash scripts/cut_release.sh --version "$(VERSION)" $(if $(TAG),--tag,)
+
+update-homebrew-tap:
+	@if [ -z "$(TAP_DIR)" ]; then \
+		echo "make update-homebrew-tap TAP_DIR=/path/to/homebrew-oasis [SOURCE_ARCHIVE=dist/archive.tar.gz | FORMULA=dist/oasis.rb] [COMMIT=1] [PUSH=1]" >&2; \
+		exit 2; \
+	fi
+	bash scripts/update_homebrew_tap.sh --tap-dir "$(TAP_DIR)" $(if $(SOURCE_ARCHIVE),--source-archive "$(SOURCE_ARCHIVE)",$(if $(FORMULA),--formula "$(FORMULA)",)) $(if $(COMMIT),--commit,) $(if $(PUSH),--push,)
+
 benchmark-bootstrap:
 	scripts/benchmark_bootstrap.sh --workspace .
 
 refresh-bootstrap-seed-metadata:
+	rm -rf $(BOOTSTRAP_SEED_ROOT)
 	tmp=$(BOOTSTRAP_SEED_METADATA).tmp; \
-	$(OASIS_BIN) $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --format seed-metadata > $$tmp && mv $$tmp $(BOOTSTRAP_SEED_METADATA)
+	$(OASIS_BIN) $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --format seed-metadata --seed-root $(BOOTSTRAP_SEED_ROOT) > $$tmp && mv $$tmp $(BOOTSTRAP_SEED_METADATA)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -132,9 +148,9 @@ $(BOOTSTRAP_SEED_BIN): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_
 		stem=$${base%.*}; \
 		ext=$${base##*.}; \
 		if [ "$$ext" = "mli" ]; then \
-			$(call BOOTSTRAP_TOOL_CMD,$(BOOTSTRAP_LIBRARY_PACKAGE_FLAGS)) $(OCAMLFLAGS) -I $(OBJ_DIR) -c "$$src" -o $(OBJ_DIR)/$$stem.cmi; \
+			$(if $(strip $(BOOTSTRAP_LIBRARY_ENV_PREFIX)),$(BOOTSTRAP_LIBRARY_ENV_PREFIX) ,)$(call BOOTSTRAP_TOOL_CMD,$(BOOTSTRAP_LIBRARY_PACKAGE_FLAGS)) $(OCAMLFLAGS) $(BOOTSTRAP_LIBRARY_COMPILE_FLAGS) -I $(OBJ_DIR) -c "$$src" -o $(OBJ_DIR)/$$stem.cmi; \
 		else \
-			$(call BOOTSTRAP_TOOL_CMD,$(BOOTSTRAP_LIBRARY_PACKAGE_FLAGS)) $(OCAMLFLAGS) -I $(OBJ_DIR) -c "$$src" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT); \
+			$(if $(strip $(BOOTSTRAP_LIBRARY_ENV_PREFIX)),$(BOOTSTRAP_LIBRARY_ENV_PREFIX) ,)$(call BOOTSTRAP_TOOL_CMD,$(BOOTSTRAP_LIBRARY_PACKAGE_FLAGS)) $(OCAMLFLAGS) $(BOOTSTRAP_LIBRARY_COMPILE_FLAGS) -I $(OBJ_DIR) -c "$$src" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT); \
 			objs="$$objs $(OBJ_DIR)/$$stem.$(OBJ_EXT)"; \
 		fi; \
 	done; \

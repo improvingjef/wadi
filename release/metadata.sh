@@ -53,3 +53,24 @@ oasis_release_archive_url() {
 oasis_release_source_archive_url() {
   oasis_release_archive_url "$(oasis_release_source_archive_name)"
 }
+
+oasis_homebrew_tap_owner() {
+  printf '%s\n' "${OASIS_HOMEBREW_TAP%%/*}"
+}
+
+oasis_homebrew_tap_name() {
+  printf '%s\n' "${OASIS_HOMEBREW_TAP#*/}"
+}
+
+oasis_homebrew_tap_repository_name() {
+  printf 'homebrew-%s\n' "$(oasis_homebrew_tap_name)"
+}
+
+oasis_homebrew_tap_repository() {
+  printf '%s/%s\n' "$(oasis_homebrew_tap_owner)" \
+    "$(oasis_homebrew_tap_repository_name)"
+}
+
+oasis_homebrew_tap_repository_url() {
+  printf 'https://github.com/%s\n' "$(oasis_homebrew_tap_repository)"
+}

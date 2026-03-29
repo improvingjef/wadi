@@ -106,7 +106,9 @@
 97. [x] Collapse duplicate cold-start compilation between `oasis-seed` and the subsequent app bootstrap build so removing the toplevel planner path does not replace one bootstrap tax with two full compiles of the core modules.
 98. [x] Teach the compiled bootstrap planner to refresh `scripts/bootstrap_seed_metadata.mk` directly so the legacy metadata helper script can disappear instead of surviving as a generator-only maintenance path.
 99. [x] Gate shared `oasis-seed` object reuse on profile-sensitive compile inputs so future bootstrap-profile flags, env, preprocessors, or PPX on the core library cannot silently reuse mismatched seed artifacts.
-100. [ ] Teach the bootstrap seed compiler itself to honor common-library actions, preprocessors, PPX, and profile env so safe shared-object reuse remains available even after `oasis_core` stops compiling from raw checked-in sources.
+100. [x] Teach the bootstrap seed compiler itself to honor common-library actions, preprocessors, PPX, and profile env so safe shared-object reuse remains available even after `oasis_core` stops compiling from raw checked-in sources.
 101. [x] Define one canonical release metadata source for archive URLs, checksums, homepage/bug-report links, and license so opam/Homebrew/GitHub release plumbing stops depending on repo-local placeholders.
-102. [ ] Publish the generated `Formula/oasis.rb` through a dedicated tap update flow so users can get from `brew install oasis` to a working binary without pointing Homebrew at this repo directly.
-103. [ ] Collapse release version bumps, source-archive refresh, and tag validation into one explicit release-cut command so the packaging metadata stops depending on a manually remembered sequence.
+102. [x] Publish the generated `Formula/oasis.rb` through a dedicated tap update flow so users can get from `brew install oasis` to a working binary without pointing Homebrew at this repo directly.
+103. [x] Collapse release version bumps, source-archive refresh, and tag validation into one explicit release-cut command so the packaging metadata stops depending on a manually remembered sequence.
+104. [ ] Replace the hard-coded `LC_ALL=C.UTF-8` release-archive environment with a portable locale fallback so packaging commands stay warning-free on macOS and other hosts that do not ship that locale name.
+105. [ ] Teach `scripts/update_homebrew_tap.sh` to clone the tap repository directly from release metadata when no checkout is present so local release maintenance does not require a separate manual `git clone` step.

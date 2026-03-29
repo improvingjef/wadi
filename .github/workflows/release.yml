@@ -119,3 +119,40 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/oasis.rb
+
+  homebrew_tap:
+    needs:
+      - source
+      - binaries
+    if: ${{ github.ref_type == 'tag' && secrets.HOMEBREW_TAP_TOKEN != '' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load tap metadata
+        id: metadata
+        run: |
+          . release/metadata.sh
+          echo "tap_repo=$(oasis_homebrew_tap_repository)" >> "$GITHUB_OUTPUT"
+          echo "source_archive=$(oasis_release_source_archive_name)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.metadata.outputs.tap_repo }}
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Update Homebrew tap
+        run: |
+          bash scripts/update_homebrew_tap.sh \
+            --tap-dir homebrew-tap \
+            --source-archive "dist/${{ steps.metadata.outputs.source_archive }}" \
+            --commit \
+            --push
