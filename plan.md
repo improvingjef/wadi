@@ -135,4 +135,7 @@
 126. [x] Add shared preprocess-plus-PPX fixture helpers for source-inspection tests so transform expectations follow real rewritten syntax instead of ad hoc test-only assumptions.
 127. [x] Remove the remaining clean-checkout fallback dependency on tracked bootstrap seed metadata by deriving enough seed compile inputs before any compiled `oasis` binary exists.
 128. [x] Move bootstrap seed metadata and transformed seed snapshots under `_bootstrap/` so normal first-build cache generation does not dirty tracked `scripts/` paths.
-129. [ ] Replace the one-time clean-checkout OCaml-toplevel fallback for seed metadata generation with a lighter metadata-only bootstrap path so the first `make` does not need to load the full planner through the interpreter.
+129. [x] Replace the one-time clean-checkout OCaml-toplevel fallback for seed metadata generation with a lighter metadata-only bootstrap path so the first `make` does not need to load the full planner through the interpreter.
+130. [x] Add a single `make sync-generated` target that refreshes bootstrap seed metadata plus committed docs/completions/packaging manifests so generated-asset upkeep is one command instead of a scavenger hunt.
+131. [x] Guard the first clean-checkout `oasis-seed` build with an explicit metadata refresh and recursive re-entry so the bootstrap path never emits a bogus empty-variable compile before the new metadata is loaded.
+132. [ ] Revisit the first clean-checkout bootstrap restart path so the original make process does not briefly generate app/full makefiles with empty shared-output touch lists before the reloaded metadata-driven pass takes over.

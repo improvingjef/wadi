@@ -10,6 +10,7 @@ OBJ_DIR := $(BUILD_DIR)/obj
 SEED_OBJ_DIR := $(BUILD_DIR)/seed-obj
 BIN_DIR := $(BUILD_DIR)/bin
 BOOTSTRAP_MANIFEST := oasis.toml
+BOOTSTRAP_METADATA_HELPER := scripts/render_bootstrap_mod_use.ml
 BOOTSTRAP_GENERATOR := scripts/bootstrap_seed_main.ml
 BOOTSTRAP_LEGACY_PLANNER := scripts/generate_bootstrap_makefile.ml
 BOOTSTRAP_INTERNAL_COMMAND := __bootstrap_makefile
@@ -21,16 +22,20 @@ BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
 BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
-.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
+.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests sync-generated release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
 
 define REFRESH_BOOTSTRAP_SEED_METADATA
 set -eu; \
 tmp="$(BOOTSTRAP_SEED_METADATA).tmp"; \
-rm -rf "$(BOOTSTRAP_SEED_ROOT)"; \
 if [ -x "$(OASIS_BIN)" ]; then \
 	"$(OASIS_BIN)" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; \
 else \
-	"$(OCAML)" "$(BOOTSTRAP_LEGACY_PLANNER)" --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; \
+	if "$(OCAML)" "$(BOOTSTRAP_METADATA_HELPER)" --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; then \
+		:; \
+	else \
+		rm -f "$$tmp"; \
+		"$(OCAML)" "$(BOOTSTRAP_LEGACY_PLANNER)" --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; \
+	fi; \
 fi; \
 if [ -f "$(BOOTSTRAP_SEED_METADATA)" ] && cmp -s "$$tmp" "$(BOOTSTRAP_SEED_METADATA)"; then \
 	rm -f "$$tmp"; \
@@ -42,15 +47,12 @@ endef
 BOOTSTRAP_SKIP_SEED_METADATA_GOALS := clean refresh-bootstrap-seed-metadata
 
 ifeq ($(filter $(BOOTSTRAP_SKIP_SEED_METADATA_GOALS),$(MAKECMDGOALS)),)
-ifeq ($(wildcard $(BOOTSTRAP_SEED_METADATA)),)
-$(shell mkdir -p "$(BUILD_DIR)"; $(call REFRESH_BOOTSTRAP_SEED_METADATA))
-endif
-include $(BOOTSTRAP_SEED_METADATA)
+-include $(BOOTSTRAP_SEED_METADATA)
 endif
 
 FORCE:
 
-$(BOOTSTRAP_SEED_METADATA): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) scripts/render_bootstrap_mod_use.ml FORCE | $(BUILD_DIR)
+$(BOOTSTRAP_SEED_METADATA): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_METADATA_HELPER) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) FORCE | $(BUILD_DIR)
 	@$(call REFRESH_BOOTSTRAP_SEED_METADATA)
 
 all: $(BIN_DIR)/oasis
@@ -66,6 +68,11 @@ release-artifacts: $(BIN_DIR)/oasis
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
 
 release-manifests:
+	./scripts/generate_packaging_manifests.sh
+
+sync-generated: $(BIN_DIR)/oasis
+	$(MAKE) refresh-bootstrap-seed-metadata
+	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
 	./scripts/generate_packaging_manifests.sh
 
 release-cut:
@@ -166,7 +173,12 @@ else \
 fi
 endef
 
-$(BOOTSTRAP_SEED_BIN): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_SEED_METADATA) $(BOOTSTRAP_LIBRARY_COMPILE_SOURCES) | $(OBJ_DIR) $(SEED_OBJ_DIR) $(BIN_DIR)
+$(BOOTSTRAP_SEED_BIN): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_METADATA_HELPER) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) $(BOOTSTRAP_LIBRARY_COMPILE_SOURCES) | $(OBJ_DIR) $(SEED_OBJ_DIR) $(BIN_DIR)
+	@if [ -z "$(strip $(BOOTSTRAP_LIBRARY_COMPILE_SOURCES))" ]; then \
+		$(MAKE) refresh-bootstrap-seed-metadata; \
+		$(MAKE) $@; \
+		exit 0; \
+	fi; \
 	set -eu; \
 	objs=""; \
 	for src in $(BOOTSTRAP_LIBRARY_COMPILE_SOURCES); do \

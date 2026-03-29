@@ -15,6 +15,22 @@ let write_executable workspace relative_path contents =
 let run_bootstrap_loader ?(env = []) () =
   Process.run_capture ~env "ocaml" [ "scripts/render_bootstrap_mod_use.ml" ]
 
+let run_seed_metadata_helper ?seed_root workspace =
+  let args =
+    [
+      "scripts/render_bootstrap_mod_use.ml";
+      "--manifest";
+      manifest_path workspace;
+      "--format";
+      "seed-metadata";
+    ]
+    @
+    match seed_root with
+    | Some seed_root -> [ "--seed-root"; seed_root ]
+    | None -> []
+  in
+  Process.run_capture "ocaml" args
+
 let render_format_name = function
   | Bootstrap.Makefile -> "makefile"
   | Bootstrap.Seed_metadata -> "seed-metadata"
@@ -324,6 +340,46 @@ deps = ["core"]
               "the hidden compiled bootstrap command should render successfully";
             assert_string_equal expected compiled.output
               "the compiled bootstrap planner should match Bootstrap.render_makefile")) );
+    ( "matches compiled seed metadata output for metadata-only bootstrap libraries",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-seed-helper" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+compile_flags = ["-principal"]
+env = ["MODE=default", "SHARED=default"]
+
+[profile.release]
+compile_flags = ["-O3"]
+env = ["MODE=release", "PROFILE=release"]
+
+[profile.release.library.core]
+compile_flags = ["-unsafe"]
+env = ["SHARED=override", "TARGET=core"]
+
+[library.core]
+dir = "src"
+modules = ["alpha", "beta"]
+packages = ["unix"]
+compile_flags = ["-w", "+a"]
+env = ["TARGET=local"]
+|};
+            write_source workspace "src/beta.ml" {|let value = "beta"|};
+            write_source workspace "src/alpha.ml" {|let value = Beta.value|};
+            let helper =
+              run_seed_metadata_helper ~seed_root:"_bootstrap/seed" workspace
+            in
+            assert_int_equal 0 helper.status
+              "the metadata-only bootstrap helper should render seed metadata for simple libraries";
+            let compiled =
+              run_compiled_bootstrap ~format:Bootstrap.Seed_metadata
+                ~seed_root:"_bootstrap/seed" workspace
+            in
+            assert_int_equal 0 compiled.status
+              "the compiled bootstrap planner should still render seed metadata";
+            assert_string_equal compiled.output helper.output
+              "the metadata-only helper should stay byte-for-byte aligned with the compiled seed metadata renderer for supported manifests"))) ;
     ( "uses a compiled seed binary for app-only bootstrap generation",
       (fun () ->
         let makefile = Fs.read_file (Filename.concat (Sys.getcwd ()) "Makefile") in
@@ -334,6 +390,10 @@ deps = ["core"]
           ~needle:"BOOTSTRAP_SEED_METADATA := $(BUILD_DIR)/bootstrap.seed-metadata.mk"
           makefile
           "bootstrap seed metadata should live under the bootstrap artifact root";
+        assert_string_contains
+          ~needle:"BOOTSTRAP_METADATA_HELPER := scripts/render_bootstrap_mod_use.ml"
+          makefile
+          "bootstrap seed metadata fallback should have an explicit metadata helper";
         assert_string_not_contains
           ~needle:"$(shell BOOTSTRAP_MODULE_MANIFEST=$(BOOTSTRAP_MANIFEST) $(OCAML) $(BOOTSTRAP_SOURCE_HELPER)"
           makefile
@@ -343,15 +403,19 @@ deps = ["core"]
           makefile
           "bootstrap seed snapshots should stay under the bootstrap artifact root";
         assert_string_contains
-          ~needle:"include $(BOOTSTRAP_SEED_METADATA)"
+          ~needle:"-include $(BOOTSTRAP_SEED_METADATA)"
           makefile
           "bootstrap should reread cached seed metadata before planning the final app build";
+        assert_string_not_contains
+          ~needle:"$(shell mkdir -p \"$(BUILD_DIR)\"; $(call REFRESH_BOOTSTRAP_SEED_METADATA))"
+          makefile
+          "bootstrap metadata should use normal makefile remake semantics instead of parse-time shell side effects";
         assert_string_contains
           ~needle:"$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope app"
           makefile
           "app-only bootstrap generation should run through the compiled seed binary";
         assert_string_contains
-          ~needle:"$(BOOTSTRAP_SEED_METADATA): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) scripts/render_bootstrap_mod_use.ml FORCE | $(BUILD_DIR)"
+          ~needle:"$(BOOTSTRAP_SEED_METADATA): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_METADATA_HELPER) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) FORCE | $(BUILD_DIR)"
           makefile
           "bootstrap seed metadata should be remade from source inputs instead of relying on a tracked file";
         assert_string_contains
@@ -363,9 +427,13 @@ deps = ["core"]
           makefile
           "bootstrap seed metadata refresh should avoid pointless rewrites when the compiled planner output is unchanged";
         assert_string_contains
+          ~needle:"\"$(OCAML)\" \"$(BOOTSTRAP_METADATA_HELPER)\" --manifest \"$(BOOTSTRAP_MANIFEST)\" --format seed-metadata --seed-root \"$(BOOTSTRAP_SEED_ROOT)\""
+          makefile
+          "clean-checkout metadata generation should use the metadata-only helper before considering the full planner";
+        assert_string_contains
           ~needle:"\"$(OCAML)\" \"$(BOOTSTRAP_LEGACY_PLANNER)\" --manifest \"$(BOOTSTRAP_MANIFEST)\" --format seed-metadata --seed-root \"$(BOOTSTRAP_SEED_ROOT)\""
           makefile
-          "clean-checkout metadata generation should fall back to the toplevel loader only for seed metadata";
+          "clean-checkout metadata generation should keep the full planner as a last-resort fallback for unsupported metadata-only manifests";
         assert_string_contains
           ~needle:"-I $(OBJ_DIR) -c \"$$src\" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT)"
           makefile
@@ -377,10 +445,6 @@ deps = ["core"]
         assert_string_contains ~needle:"rm -f $(BOOTSTRAP_SHARED_OUTPUTS)"
           makefile
           "bootstrap makefile generation should drop incompatible shared seed objects instead of reusing them";
-        assert_string_not_contains
-          ~needle:"render_bootstrap_mod_use.ml --format seed-metadata"
-          makefile
-          "seed metadata refresh should not fall back to the legacy script path";
         assert_string_not_contains
           ~needle:"\"$(OCAML)\" \"$(BOOTSTRAP_LEGACY_PLANNER)\" --manifest \"$(BOOTSTRAP_MANIFEST)\" --scope app"
           makefile

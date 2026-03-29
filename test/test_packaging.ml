@@ -37,6 +37,19 @@ let chmod_plus_x path =
   assert_int_equal 0 chmod.status
     ("chmod +x should succeed for " ^ path ^ "\n" ^ chmod.output)
 
+let run_make ~cwd goals =
+  Process.run_capture ~cwd
+    ~env:
+      [
+        ("MAKEFLAGS", "");
+        ("MFLAGS", "");
+        ("MAKELEVEL", "0");
+        ("OCAMLOPT", "ocamlopt");
+        ("OCAMLFIND", "ocamlfind");
+        ("OCAMLFLAGS", "-g");
+      ]
+    "make" goals
+
 let cases =
   [
     ( "installs the staged release tree under a prefix",
@@ -115,6 +128,61 @@ let cases =
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
               "the committed Homebrew formula should be generated from the shared release metadata"));
+    ( "sync-generated refreshes bootstrap metadata and release artifacts in one pass",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-sync-generated" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init"; "-q" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed before sync-generated\n" ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed before sync-generated\n" ^ add.output);
+            List.iter
+              (fun relative_path ->
+                let path = Filename.concat workspace relative_path in
+                if Fs.exists path then Sys.remove path)
+              [
+                "docs/cli.md";
+                "completions/oasis.bash";
+                "completions/_oasis";
+                "completions/oasis.fish";
+                "oasis.opam";
+                "Formula/oasis.rb";
+              ];
+            List.iter
+              (fun relative_path ->
+                let path = Filename.concat workspace relative_path in
+                if Fs.exists path then Fs.remove_tree path)
+              [ "package"; "_bootstrap" ];
+            let synced = run_make ~cwd:workspace [ "sync-generated" ] in
+            assert_int_equal 0 synced.status
+              ("make sync-generated should succeed\n" ^ synced.output);
+            assert_file_exists
+              (Filename.concat workspace "_bootstrap/bootstrap.seed-metadata.mk");
+            assert_file_exists (Filename.concat workspace "docs/cli.md");
+            assert_file_exists (Filename.concat workspace "completions/oasis.bash");
+            assert_file_exists (Filename.concat workspace "completions/_oasis");
+            assert_file_exists (Filename.concat workspace "completions/oasis.fish");
+            assert_file_exists (Filename.concat workspace "oasis.opam");
+            assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists
+              (Filename.concat workspace "package/share/doc/oasis/cli.md");
+            assert_file_exists
+              (Filename.concat workspace
+                 "package/share/bash-completion/completions/oasis");
+            assert_file_exists
+              (Filename.concat workspace
+                 "package/share/zsh/site-functions/_oasis");
+            assert_file_exists
+              (Filename.concat workspace
+                 "package/share/fish/vendor_completions.d/oasis.fish");
+            assert_string_equal
+              (Fs.read_file (Filename.concat workspace "docs/cli.md"))
+              (Fs.read_file
+                 (Filename.concat workspace "package/share/doc/oasis/cli.md"))
+              "sync-generated should keep the packaged doc copy aligned with oasis docs")) ;
     ( "builds deterministic source and binary release archives",
       fun () ->
         let repo_root = Sys.getcwd () in
