@@ -282,6 +282,67 @@ preprocess = ["trace"]
             assert_string_contains ~needle:"missing generated output:"
               explain.output
               "current explain should report that declared generated sources are absent")) );
+    ( "distinguishes action-only regeneration from a full rebuild in explain reports",
+      (fun () ->
+        with_temp_dir "oasis-explain-action-regeneration" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+outputs = ["version.ml"]
+sandbox = "target"
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nprintf 'let message = \"generated\"\\n' > version.ml\n");
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let first_build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            assert_int_equal 0 first_build.status
+              "the initial action-backed build should succeed";
+            let generated_version =
+              Filename.concat (Layout.executable_out_dir workspace "demo")
+                "generated/version.ml"
+            in
+            let generated_version = Fs.realpath generated_version in
+            Fs.remove_tree generated_version;
+            let current =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+            in
+            assert_int_equal 0 current.status
+              "current explain should succeed after a generated output is removed";
+            assert_string_contains ~needle:"State: regenerated" current.output
+              "current explain should distinguish action-only repair from a full rebuild";
+            assert_string_contains
+              ~needle:("missing generated output: " ^ generated_version ^ " (generate_version)")
+              current.output
+              "current explain should identify the missing generated output";
+            assert_string_contains ~needle:"action generate_version: planned"
+              current.output
+              "current explain should show that the action would rerun";
+            let second_build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            assert_int_equal 0 second_build.status
+              "the follow-up build should repair the missing generated output";
+            let persisted = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            assert_int_equal 0 persisted.status
+              "persisted explain should load after action-only regeneration";
+            assert_string_contains ~needle:"State: regenerated" persisted.output
+              "persisted explain should retain the action-only regeneration state";
+            assert_string_contains ~needle:"action generate_version: ran"
+              persisted.output
+              "persisted explain should report that the action reran";
+            assert_string_contains
+              ~needle:("missing generated output: " ^ generated_version ^ " (generate_version)")
+              persisted.output
+              "persisted explain should preserve the generated-output repair reason")) );
     ( "shows declared action and preprocessor inputs in persisted explain output",
       (fun () ->
         with_temp_dir "oasis-explain-steady-action-inputs" (fun workspace ->

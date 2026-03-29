@@ -40,7 +40,7 @@
 39. [x] Detect and explain collisions between generated outputs and checked-in source files before a build silently overrides one with the other.
 40. [ ] Replace copy-heavy action sandboxes with a cheaper file-materialization strategy so workspace sandboxes stay fast on larger trees.
 41. [x] Track preprocessor/PPX auxiliary inputs and settings in rebuild diagnostics so transformed-source invalidations are explainable instead of implicit.
-42. [ ] Drive `scripts/generate_bootstrap_makefile.ml` from the workspace model or generated metadata so adding a core module never requires editing a second hard-coded module list.
+42. [x] Drive `scripts/generate_bootstrap_makefile.ml` from the workspace model or generated metadata so adding a core module never requires editing a second hard-coded module list.
 43. [x] Persist a machine-readable sibling to `.oasis-explain` so editors and CI can consume rebuild reasons without scraping human-formatted text.
 44. [x] Add `oasis explain --current` or an equivalent dry-run diff so users can inspect why a target would rebuild before paying the build cost.
 45. [x] Export findlib-friendly `META` files and install-layout metadata from `oasis install` so staged libraries can be consumed without bespoke `-I` wiring.
@@ -57,5 +57,6 @@
 56. [ ] Surface member package paths in diagnostics and future dynamic completions so globally unique target names stay navigable in larger workspaces.
 57. [ ] Add manifest reference and migration examples for preprocessor/PPX `deps` plus generated-source collision rules so users do not learn the new constraints by failing builds.
 58. [x] Show declared auxiliary tool inputs in steady-state `oasis explain` output, not just rebuild reasons, so codegen and transform pipelines stay inspectable before anything changes.
-59. [ ] Replace generation-time workspace completion snapshots with a runtime completion query protocol so one sourced script stays accurate as users move between workspaces.
-60. [ ] Distinguish fully reused targets from action-only regeneration in build and explain reports so missing generated outputs do not look like a perfect cache hit after the tool repairs them.
+59. [x] Replace generation-time workspace completion snapshots with a runtime completion query protocol so one sourced script stays accurate as users move between workspaces.
+60. [x] Distinguish fully reused targets from action-only regeneration in build and explain reports so missing generated outputs do not look like a perfect cache hit after the tool repairs them.
+61. [ ] Restore shell-native path completion for `--workspace`, `--prefix`, and `--destdir` in the runtime completion protocol so dynamic queries do not regress directory-flag ergonomics.

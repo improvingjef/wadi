@@ -464,6 +464,56 @@ modules = ["version"]
               "generated-module executables should still run successfully";
             assert_string_equal "from-template from-stdin\n" run.output
               "generated modules should compile from declared action outputs")) );
+    ( "regenerates missing action outputs without rebuilding unchanged targets",
+      (fun () ->
+        with_temp_dir "oasis-action-regenerate" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+outputs = ["version.ml"]
+sandbox = "target"
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nprintf 'let message = \"generated\"\\n' > version.ml\n");
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 first_build.status
+              "the initial action-backed build should succeed";
+            let generated_version =
+              Filename.concat (Layout.executable_out_dir workspace "demo")
+                "generated/version.ml"
+            in
+            Fs.remove_tree generated_version;
+            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 second_build.status
+              "rebuilding after deleting a generated source should still succeed";
+            assert_file_exists generated_version;
+            assert_string_contains
+              ~needle:"Regenerated action outputs for executable demo"
+              second_build.output
+              "action-only repair should be reported distinctly from a full rebuild";
+            assert_string_not_contains ~needle:"Built executable demo"
+              second_build.output
+              "action-only repair should not be reported as a rebuilt executable";
+            assert_string_not_contains ~needle:"Up to date executable demo"
+              second_build.output
+              "action-only repair should not be reported as a perfect cache hit";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables repaired through regenerated action outputs should still run";
+            assert_string_equal "generated\n" run.output
+              "action-only repair should preserve the executable behavior")) );
     ( "rejects generated source outputs that collide with checked-in files",
       (fun () ->
         with_temp_dir "oasis-action-collision" (fun workspace ->

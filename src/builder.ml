@@ -51,10 +51,16 @@ type resolved_pipeline = {
   ppx_tools : Manifest.ppx_tool list;
 }
 
+type action_execution =
+  | Action_cached
+  | Action_regenerated of string list
+  | Action_planned of string list
+
 type action_result = {
   name : string;
   fingerprint : string;
   output_paths : string list;
+  execution : action_execution;
 }
 
 type pipeline_mode =
@@ -576,9 +582,25 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
   let generated_dir = generated_root out_dir in
   let output_paths = action_output_paths out_dir action in
   let stamp_path = action_stamp_path out_dir action.name in
+  let missing_outputs =
+    List.filter (fun path -> not (Fs.exists path)) output_paths
+  in
+  let regeneration_reasons =
+    (if Fs.exists stamp_path then [] else [ "action stamp missing: " ^ action.name ])
+    @ List.map
+        (fun path ->
+          Printf.sprintf "missing generated output: %s (%s)" path action.name)
+        missing_outputs
+  in
   Fs.ensure_dir (Filename.dirname stamp_path);
   if target_is_up_to_date ~stamp_path output_paths fingerprint then
-    Ok { name = action.name; fingerprint; output_paths }
+    Ok
+      {
+        name = action.name;
+        fingerprint;
+        output_paths;
+        execution = Action_cached;
+      }
   else
     let sandbox = effective_sandbox options action in
     let env = Manifest.merge_env_bindings target_env action.env in
@@ -618,14 +640,39 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
             (Ok ()) action.outputs
         in
         Fs.write_file stamp_path fingerprint;
-        Ok { name = action.name; fingerprint; output_paths })
+        Ok
+          {
+            name = action.name;
+            fingerprint;
+            output_paths;
+            execution =
+              Action_regenerated
+                (match String_util.dedup_preserve regeneration_reasons with
+                | [] -> [ "action changed: " ^ action.name ]
+                | reasons -> reasons);
+          })
 
 let plan_action ~workspace_root ~out_dir ~target_dir ~target_env options
     (action : Manifest.action) =
   let* fingerprint =
     action_fingerprint ~workspace_root ~target_env ~target_dir options action
   in
-  Ok { name = action.name; fingerprint; output_paths = action_output_paths out_dir action }
+  let output_paths = action_output_paths out_dir action in
+  let stamp_path = action_stamp_path out_dir action.name in
+  let missing_outputs =
+    List.filter (fun path -> not (Fs.exists path)) output_paths
+  in
+  let execution =
+    if target_is_up_to_date ~stamp_path output_paths fingerprint then Action_cached
+    else
+      Action_planned
+        ((if Fs.exists stamp_path then [] else [ "action stamp missing: " ^ action.name ])
+        @ List.map
+            (fun path ->
+              Printf.sprintf "missing generated output: %s (%s)" path action.name)
+            missing_outputs)
+  in
+  Ok { name = action.name; fingerprint; output_paths; execution }
 
 let resolve_pipeline ~workspace_root workspace ~profile target =
   let* options = Manifest.resolve_target_options workspace profile target in
@@ -925,25 +972,63 @@ let rec collect_dependency_closure index acc = function
             collect_dependency_closure index acc (dependency_names target @ rest)
         | None -> acc)
 
-let missing_action_output_reasons action_results =
-  List.concat_map
-    (fun (action_result : action_result) ->
-      List.filter_map
-        (fun path ->
-          if Fs.exists path then None else Some ("missing generated output: " ^ path))
-        action_result.output_paths)
-    action_results
+let action_execution_reasons = function
+  | Action_cached -> []
+  | Action_regenerated reasons | Action_planned reasons -> reasons
 
-let include_action_output_reasons status action_results =
-  match missing_action_output_reasons action_results with
+let generated_source_reason_overrides ~target_dir (actions : Manifest.action list) =
+  List.concat_map
+    (fun (action : Manifest.action) ->
+      List.concat_map
+        (fun output ->
+          let logical_path = Filename.concat target_dir output in
+          let ml_reasons = [ "source changed: " ^ logical_path ] in
+          if Filename.check_suffix output ".mli" then
+            ml_reasons
+            @
+            [
+              "interface changed: " ^ logical_path;
+              "interface availability changed: " ^ logical_path;
+            ]
+          else ml_reasons)
+        action.outputs)
+    actions
+  |> String_util.dedup_preserve
+
+let include_action_execution_reasons ?(generated_source_reasons = []) status
+    action_results =
+  let action_reasons =
+    action_results
+    |> List.concat_map (fun (action_result : action_result) ->
+           action_execution_reasons action_result.execution)
+    |> String_util.dedup_preserve
+  in
+  match action_reasons with
   | [] -> status
   | reasons ->
-      ({
-         Explain.build_status = Explain.Rebuilt;
-         Explain.reasons =
-           String_util.dedup_preserve (status.Explain.reasons @ reasons);
-       }
-        : Explain.target_status)
+      let remaining_reasons =
+        List.filter
+          (fun reason -> not (List.mem reason generated_source_reasons))
+          status.Explain.reasons
+        |> String_util.dedup_preserve
+      in
+      if
+        status.Explain.build_status = Explain.Reused
+        || (status.Explain.build_status = Explain.Rebuilt
+           && remaining_reasons = [])
+      then
+        ({
+           Explain.build_status = Explain.Regenerated;
+           Explain.reasons = reasons;
+         }
+          : Explain.target_status)
+      else
+        ({
+           Explain.build_status = status.Explain.build_status;
+           Explain.reasons =
+             String_util.dedup_preserve (remaining_reasons @ reasons);
+         }
+          : Explain.target_status)
 
 let target_extra_lines ~workspace_root ~profile pipeline action_results =
   let option_lines =
@@ -1118,7 +1203,12 @@ let target_command_lines ~workspace_root pipeline action_results
     ~module_order_command ~compile_commands ~link_command =
   List.map
     (fun (action_result : action_result) ->
-      "action " ^ action_result.name ^ ": cached")
+      "action " ^ action_result.name ^ ": "
+      ^
+      match action_result.execution with
+      | Action_cached -> "cached"
+      | Action_regenerated _ -> "ran"
+      | Action_planned _ -> "planned")
     action_results
   @ List.map
       (fun (tool : Manifest.command_tool) ->
@@ -1201,6 +1291,9 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   let* extra_lines =
     target_extra_lines ~workspace_root ~profile pipeline action_results
   in
+  let generated_source_reasons =
+    generated_source_reason_overrides ~target_dir:library.dir pipeline.actions
+  in
   let fingerprint =
     target_fingerprint ~session ~manifest_path ~compiler_version
       ~profile_name:profile
@@ -1271,9 +1364,8 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
       ~expected_outputs ~fingerprint
   in
   let status =
-    match mode with
-    | Materialize -> status
-    | Plan_only -> include_action_output_reasons status action_results
+    include_action_execution_reasons ~generated_source_reasons status
+      action_results
   in
   let resolution_lines =
     target_resolution_lines ~session ~backend_request ~backend
@@ -1320,7 +1412,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
       workspace library library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
-  if description.status.Explain.build_status = Explain.Reused then (
+  if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
       description.json_report;
     Hashtbl.replace library_outputs library.name
@@ -1331,8 +1423,12 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
         packages = description.effective_packages;
       };
     print_endline
-      (Printf.sprintf "Up to date library %s -> %s" library.name
-         description.archive);
+      (Printf.sprintf
+         (match description.status.Explain.build_status with
+         | Explain.Reused -> "Up to date library %s -> %s"
+         | Explain.Regenerated -> "Regenerated action outputs for library %s -> %s"
+         | Explain.Rebuilt -> "Built library %s -> %s")
+         library.name description.archive);
     Ok
       (Built_library
          { name = library.name; out_dir = description.out_dir; archive = description.archive }))
@@ -1453,6 +1549,9 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   let* extra_lines =
     target_extra_lines ~workspace_root ~profile pipeline action_results
   in
+  let generated_source_reasons =
+    generated_source_reason_overrides ~target_dir:runnable.dir pipeline.actions
+  in
   let fingerprint =
     target_fingerprint ~session ~manifest_path ~compiler_version
       ~profile_name:profile ~kind_name:(runnable_kind_name kind)
@@ -1537,9 +1636,8 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
       ~expected_outputs ~fingerprint
   in
   let status =
-    match mode with
-    | Materialize -> status
-    | Plan_only -> include_action_output_reasons status action_results
+    include_action_execution_reasons ~generated_source_reasons status
+      action_results
   in
   let resolution_lines =
     target_resolution_lines ~session ~backend_request ~backend
@@ -1586,12 +1684,17 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
       ~kind workspace runnable order index library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
-  if description.status.Explain.build_status = Explain.Reused then (
+  if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
       description.json_report;
     print_endline
-      (Printf.sprintf "Up to date %s %s -> %s" (runnable_kind_name kind)
-         runnable.name description.binary);
+      (Printf.sprintf
+         (match description.status.Explain.build_status with
+         | Explain.Reused -> "Up to date %s %s -> %s"
+         | Explain.Regenerated ->
+             "Regenerated action outputs for %s %s -> %s"
+         | Explain.Rebuilt -> "Built %s %s -> %s")
+         (runnable_kind_name kind) runnable.name description.binary);
     Ok
       (match kind with
       | Executable_kind ->

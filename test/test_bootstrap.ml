@@ -5,8 +5,47 @@ let render_bootstrap workspace =
 
 let write_source = write_workspace_file
 
+let run_bootstrap_loader ?(env = []) () =
+  Process.run_capture ~env "ocaml" [ "scripts/render_bootstrap_mod_use.ml" ]
+
 let cases =
   [
+    ( "derives bootstrap loader directives from the manifest instead of a hard-coded module list",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-loader" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "src"
+modules = ["alpha", "beta", "gamma"]
+|};
+            write_source workspace "src/beta.ml" {|let value = "beta"|};
+            write_source workspace "src/alpha.ml" {|let value = Beta.value|};
+            write_source workspace "src/gamma.ml"
+              {|let value = Alpha.value ^ " + gamma"|};
+            let loader =
+              run_bootstrap_loader
+                ~env:[ ("BOOTSTRAP_MODULE_MANIFEST", manifest_path workspace) ]
+                ()
+            in
+            assert_int_equal 0 loader.status
+              "the bootstrap loader helper should read manifest-driven modules";
+            let beta_line =
+              Printf.sprintf "#mod_use %S;;"
+                (Filename.concat workspace "src/beta.ml")
+            in
+            let alpha_line =
+              Printf.sprintf "#mod_use %S;;"
+                (Filename.concat workspace "src/alpha.ml")
+            in
+            let gamma_line =
+              Printf.sprintf "#mod_use %S;;"
+                (Filename.concat workspace "src/gamma.ml")
+            in
+            assert_string_contains
+              ~needle:(beta_line ^ "\n" ^ alpha_line ^ "\n" ^ gamma_line)
+              loader.output
+              "bootstrap loader directives should be ordered from source dependencies")) );
     ( "derives bootstrap object lists and ordered rules from the workspace model",
       (fun () ->
         with_temp_dir "oasis-bootstrap" (fun workspace ->

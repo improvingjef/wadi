@@ -181,7 +181,7 @@ main = "main"
               ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources."
               docs.output
               "docs output should include the current explain description")) );
-    ( "renders workspace-local targets and profiles into completions",
+    ( "queries workspace-local targets and profiles at completion time",
       (fun () ->
         with_temp_dir "oasis-cli-workspace-completion" (fun workspace ->
             write_manifest workspace
@@ -207,22 +207,51 @@ main = "main"
             write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
             write_source workspace "test/main.ml" {|let () = print_endline "suite"|};
             with_temp_dir "oasis-cli-workspace-completion-cwd" (fun outside ->
-                let completion =
+                let target_query =
                   run_oasis ~cwd:outside
-                    [ "completion"; "--workspace"; workspace; "bash" ]
+                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "build" ]
                 in
-                assert_int_equal 0 completion.status
-                  "completion should load workspace-local words when asked";
-                assert_string_contains ~needle:"release" completion.output
-                  "completion should suggest the default profile name";
-                assert_string_contains ~needle:"dev" completion.output
-                  "completion should suggest additional profile names";
-                assert_string_contains ~needle:"core" completion.output
-                  "completion should suggest library targets";
-                assert_string_contains ~needle:"demo" completion.output
-                  "completion should suggest executable targets";
-                assert_string_contains ~needle:"demo_suite" completion.output
-                  "completion should suggest test targets")) ));
+                assert_int_equal 0 target_query.status
+                  "completion queries should load workspace-local targets when asked";
+                assert_string_contains ~needle:"core\n" target_query.output
+                  "completion queries should suggest library targets";
+                assert_string_contains ~needle:"demo\n" target_query.output
+                  "completion queries should suggest executable targets";
+                assert_string_contains ~needle:"demo_suite\n" target_query.output
+                  "completion queries should suggest test targets";
+                let profile_query =
+                  run_oasis ~cwd:outside
+                    [
+                      "completion";
+                      "--workspace";
+                      workspace;
+                      "--query";
+                      "--current";
+                      "";
+                      "--";
+                      "build";
+                      "--profile";
+                    ]
+                in
+                assert_int_equal 0 profile_query.status
+                  "completion queries should load profile values when asked";
+                assert_string_contains ~needle:"release\n" profile_query.output
+                  "completion queries should suggest the default profile name";
+                assert_string_contains ~needle:"dev\n" profile_query.output
+                  "completion queries should suggest additional profile names")) ));
+    ( "queries top-level command names outside a workspace",
+      (fun () ->
+        with_temp_dir "oasis-cli-query-top-level" (fun workspace ->
+            let query =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; "bu" ]
+            in
+            assert_int_equal 0 query.status
+              "top-level completion queries should succeed without a manifest";
+            assert_string_contains ~needle:"build\n" query.output
+              "top-level completion queries should suggest command names";
+            assert_string_not_contains ~needle:"run\n" query.output
+              "query filtering should preserve the current prefix")) );
     ( "renders bash completions from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-bash-completion" (fun workspace ->
@@ -231,20 +260,15 @@ main = "main"
               "bash completion generation should succeed";
             assert_string_contains ~needle:"_oasis()" completion.output
               "bash completion output should define the completion function";
-            assert_string_contains
-              ~needle:"build run test clean install docs completion toolchain explain"
+            assert_string_contains ~needle:"oasis completion --query"
               completion.output
-              "bash completion should include the command list from the table";
-            assert_string_contains ~needle:"--prefix" completion.output
-              "bash completion should include install flags";
-            assert_string_contains ~needle:"--destdir" completion.output
-              "bash completion should include the install destdir flag";
-            assert_string_contains ~needle:"--json" completion.output
-              "bash completion should include the explain json flag";
-            assert_string_contains ~needle:"--current" completion.output
-              "bash completion should include the explain current flag";
-            assert_string_contains ~needle:"bash zsh fish" completion.output
-              "bash completion should include static shell names for the completion command")) );
+              "bash completion should query the live workspace at runtime";
+            assert_string_contains
+              ~needle:"COMP_WORDS[@]:1:$((COMP_CWORD-1))"
+              completion.output
+              "bash completion should forward the live command line to the query protocol";
+            assert_string_contains ~needle:"_oasis_query" completion.output
+              "bash completion should route through a shared runtime query helper")) );
     ( "renders zsh completions from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-zsh-completion" (fun workspace ->
@@ -253,18 +277,14 @@ main = "main"
               "zsh completion generation should succeed";
             assert_string_contains ~needle:"#compdef oasis" completion.output
               "zsh completion output should declare the compdef";
-            assert_string_contains
-              ~needle:"_values 'command' build run test clean install docs completion toolchain explain"
+            assert_string_contains ~needle:"oasis completion --query"
               completion.output
-              "zsh completion should include the command list from the table";
-            assert_string_contains ~needle:"--destdir" completion.output
-              "zsh completion should include the install destdir flag";
-            assert_string_contains ~needle:"--json" completion.output
-              "zsh completion should include the explain json flag";
-            assert_string_contains ~needle:"--current" completion.output
-              "zsh completion should include the explain current flag";
-            assert_string_contains ~needle:"bash zsh fish" completion.output
-              "zsh completion should include static shell names for the completion command")) );
+              "zsh completion should query the live workspace at runtime";
+            assert_string_contains ~needle:"words[2,CURRENT-1]" completion.output
+              "zsh completion should forward prior words to the query protocol";
+            assert_string_contains ~needle:"_describe 'value' suggestions"
+              completion.output
+              "zsh completion should describe runtime query suggestions")) );
     ( "renders fish completions from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-fish-completion" (fun workspace ->
@@ -272,23 +292,39 @@ main = "main"
             assert_int_equal 0 completion.status
               "fish completion generation should succeed";
             assert_string_contains
-              ~needle:"complete -c oasis -f -n '__fish_use_subcommand' -a 'build run test clean install docs completion toolchain explain'"
+              ~needle:"complete -c oasis -f -a '(__oasis_complete)'"
               completion.output
-              "fish completion should include the command list from the table";
+              "fish completion should delegate to the runtime query helper";
             assert_string_contains
-              ~needle:"__fish_seen_subcommand_from install"
+              ~needle:"commandline -opc"
               completion.output
-              "fish completion should include install-specific options";
-            assert_string_contains ~needle:"-l destdir" completion.output
-              "fish completion should include the install destdir flag";
-            assert_string_contains ~needle:"-l json" completion.output
-              "fish completion should include the explain json flag";
-            assert_string_contains ~needle:"-l current" completion.output
-              "fish completion should include the explain current flag";
-            assert_string_contains
-              ~needle:"__fish_seen_subcommand_from completion"
+              "fish completion should forward committed words to the query protocol";
+            assert_string_contains ~needle:"oasis completion --query"
               completion.output
-              "fish completion should include completion-specific shell names")) );
+              "fish completion should query the live workspace at runtime")) );
+    ( "binds generated completion scripts to an explicit workspace when requested",
+      (fun () ->
+        with_temp_dir "oasis-cli-completion-workspace-script" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let value = 1|};
+            with_temp_dir "oasis-cli-completion-workspace-script-cwd" (fun outside ->
+                let completion =
+                  run_oasis ~cwd:outside
+                    [ "completion"; "--workspace"; workspace; "bash" ]
+                in
+                assert_int_equal 0 completion.status
+                  "workspace-bound completion script generation should succeed";
+                assert_string_contains
+                  ~needle:("--workspace " ^ Filename.quote workspace)
+                  completion.output
+                  "generated completion scripts should preserve the requested workspace binding";
+                assert_string_not_contains ~needle:"core\n" completion.output
+                  "runtime completion scripts should not snapshot workspace nouns into the script body")) ));
     ( "rejects unknown completion shells clearly",
       (fun () ->
         with_temp_dir "oasis-cli-completion-error" (fun workspace ->

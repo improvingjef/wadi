@@ -1,5 +1,6 @@
 type build_status =
   | Rebuilt
+  | Regenerated
   | Reused
 
 type target_status = {
@@ -13,7 +14,12 @@ let json_path out_dir = Filename.concat out_dir ".oasis-explain.json"
 
 let status_name = function
   | Rebuilt -> "rebuilt"
+  | Regenerated -> "regenerated"
   | Reused -> "reused"
+
+let needs_rebuild = function
+  | Rebuilt -> true
+  | Regenerated | Reused -> false
 
 let count_lines lines =
   let counts = Hashtbl.create (List.length lines) in

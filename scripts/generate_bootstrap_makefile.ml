@@ -1,14 +1,6 @@
 #directory "+unix";;
 #load "unix.cma";;
-#mod_use "src/string_util.ml";;
-#mod_use "src/fs.ml";;
-#mod_use "src/process.ml";;
-#mod_use "src/toolchain.ml";;
-#mod_use "src/manifest.ml";;
-#mod_use "src/explain.ml";;
-#mod_use "src/layout.ml";;
-#mod_use "src/builder.ml";;
-#mod_use "src/bootstrap.ml";;
+#use_output "ocaml scripts/render_bootstrap_mod_use.ml";;
 
 let manifest_path =
   let rec loop index =
