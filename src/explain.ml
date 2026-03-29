@@ -67,7 +67,10 @@ let reason_of_fingerprint_line line =
   | "tool" :: tool :: _ -> Some ("toolchain resolution changed: " ^ tool)
   | "package" :: package_name :: _ ->
       Some ("package resolution changed: " ^ package_name)
-  | "ml" :: relative_path :: _ -> Some ("source changed: " ^ relative_path)
+  | "ml" :: relative_path :: rest ->
+      if List.mem "missing" rest then
+        Some ("implementation availability changed: " ^ relative_path)
+      else Some ("source changed: " ^ relative_path)
   | "mli" :: relative_path :: rest ->
       if List.mem "missing" rest then
         Some ("interface availability changed: " ^ relative_path)

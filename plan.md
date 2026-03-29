@@ -113,3 +113,6 @@
 104. [x] Replace the hard-coded `LC_ALL=C.UTF-8` release-archive environment with a portable locale fallback so packaging commands stay warning-free on macOS and other hosts that do not ship that locale name.
 105. [x] Teach `scripts/update_homebrew_tap.sh` to clone the tap repository directly from release metadata when no checkout is present so local release maintenance does not require a separate manual `git clone` step.
 106. [x] Execute packaging entrypoints directly from shipped scripts and emit duplicate-free release archives that preserve helper/installer script presence and execute bits so source-tarball installs behave the same as a repo checkout.
+107. [x] Support interface-only OCaml modules (`.mli` without `.ml`) across build, install, stale-artifact pruning, and rebuild explanations so migrated Dune projects do not need fake implementation files.
+108. [x] Teach the bootstrap planner, generated makefile, and seed metadata path to model interface-only modules the same way as `oasis build`, keeping self-hosting parity for signature-heavy codebases.
+109. [x] Teach `oasis migrate` to preserve Dune `modules_without_implementation` when inferring target module lists so signature-only APIs migrate without hand-editing the generated manifest.

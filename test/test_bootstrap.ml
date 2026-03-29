@@ -601,6 +601,58 @@ deps = ["core"]
               ~needle:"$(call BOOTSTRAP_TOOL_CMD,$(APP_PACKAGE_FLAGS)) $(OCAMLFLAGS) -I $(OBJ_DIR) $(APP_LINK_FLAGS) -o $@ $(APP_OBJS)"
               makefile
               "bootstrap generation should link through the package-aware driver")) );
+    ( "treats interface-only modules as cmi-only bootstrap inputs",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-interface-only" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "src"
+modules = ["api"]
+
+[executable.demo]
+dir = "src"
+main = "main"
+deps = ["core"]
+
+[test.suite]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+|};
+            write_source workspace "src/api.mli" {|val greeting : string|};
+            write_source workspace "src/main.ml" {|let () = print_endline "bootstrap"|};
+            write_source workspace "test/test_main.ml"
+              {|let () = print_endline "bootstrap"|};
+            let makefile = expect_ok (render_bootstrap workspace) in
+            assert_string_contains
+              ~needle:"$(OBJ_DIR)/api.cmi: src/api.mli $(BOOTSTRAP_MK) | $(OBJ_DIR)"
+              makefile
+              "bootstrap generation should emit an interface rule for interface-only modules";
+            assert_string_not_contains
+              ~needle:"$(OBJ_DIR)/api.$(OBJ_EXT):"
+              makefile
+              "bootstrap generation should not emit object rules for interface-only modules";
+            write_bootstrap_driver workspace makefile;
+            let build =
+              run_make ~cwd:workspace [ "_bootstrap/bin/demo"; "_bootstrap/bin/suite" ]
+            in
+            assert_int_equal 0 build.status
+              "bootstrap makefiles should build successfully with interface-only library modules";
+            let demo =
+              Process.run_capture ~cwd:workspace "./_bootstrap/bin/demo" []
+            in
+            let suite =
+              Process.run_capture ~cwd:workspace "./_bootstrap/bin/suite" []
+            in
+            assert_int_equal 0 demo.status
+              "the bootstrap-built executable should run successfully";
+            assert_int_equal 0 suite.status
+              "the bootstrap-built test should run successfully";
+            assert_string_equal "bootstrap\n" demo.output
+              "bootstrap-built executables should remain runnable with interface-only library inputs";
+            assert_string_equal "bootstrap\n" suite.output
+              "bootstrap-built tests should remain runnable with interface-only library inputs")) );
     ( "builds profile-aware bootstrap outputs through actions, preprocessors, and ppx",
       (fun () ->
         with_temp_dir "oasis-bootstrap-transforms" (fun workspace ->

@@ -857,6 +857,9 @@ let relative_dir workspace_root dune_path =
 let rebased_field_paths dir paths =
   List.map (rebase_dune_relative_path dir) paths
 
+let merge_module_lists primary extra =
+  String_util.dedup_preserve (primary @ extra)
+
 let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
   let* acc, preprocess_names, ppx_names =
     match optional_single_value_field "preprocess" fields with
@@ -1048,13 +1051,17 @@ let parse_library ~workspace_root ~dune_path acc fields =
   let dune_dir = Filename.dirname dune_path in
   let inferred_modules = source_stems_in_dir (Filename.dirname dune_path) in
   let* modules = field_atoms "modules" fields in
+  let* modules_without_implementation =
+    optional_atom_list_field "modules_without_implementation" fields
+  in
   let wrapped = Option.value ~default:true wrapped in
   let modules =
     match modules with
-    | Some modules ->
-        maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name modules
-    | None ->
-        maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name inferred_modules
+    | Some modules -> merge_module_lists modules modules_without_implementation
+    | None -> merge_module_lists inferred_modules modules_without_implementation
+  in
+  let modules =
+    maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name modules
   in
   let* libraries = optional_atom_list_field "libraries" fields in
   let* acc, preprocess, ppx =
@@ -1111,11 +1118,16 @@ let parse_runnable_group kind_label raw_kind ~workspace_root ~dune_path acc fiel
       | values, _ -> values
     in
     let* modules = field_atoms "modules" fields in
+    let* modules_without_implementation =
+      optional_atom_list_field "modules_without_implementation" fields
+    in
     let helper_modules =
       let modules =
         match modules with
-        | Some modules -> modules
-        | None -> inferred_modules
+        | Some modules ->
+            merge_module_lists modules modules_without_implementation
+        | None ->
+            merge_module_lists inferred_modules modules_without_implementation
       in
       List.filter (fun module_name -> not (List.mem module_name names)) modules
     in

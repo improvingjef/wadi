@@ -32,6 +32,7 @@ type source_descriptor = {
   ml_path : string;
   ml_relative : string;
   ml_exists : bool;
+  has_ml : bool;
   mli_path : string;
   mli_relative : string;
   mli_exists : bool;
@@ -40,7 +41,7 @@ type source_descriptor = {
 
 type prepared_source = {
   source : source_descriptor;
-  ml_compile_path : string;
+  ml_compile_path : string option;
   mli_compile_path : string option;
 }
 
@@ -418,6 +419,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     else workspace_ml_path
   in
   let ml_exists = Fs.exists ml_path in
+  let has_ml = ml_exists || generated_ml_declared in
   let mli_relative = Filename.concat dir (stem ^ ".mli") in
   let workspace_mli_path = Filename.concat workspace_root mli_relative in
   let generated_mli_path = Filename.concat generated_root (stem ^ ".mli") in
@@ -429,7 +431,8 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     else workspace_mli_path
   in
   let mli_exists = Fs.exists mli_path in
-  if (not ml_exists) && not generated_ml_declared then
+  let has_mli = mli_exists || generated_mli_declared in
+  if (not has_ml) && not has_mli then
     Error
       (Printf.sprintf "missing source file for module '%s': %s" stem ml_path)
   else
@@ -439,10 +442,11 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
         ml_path;
         ml_relative;
         ml_exists;
+        has_ml;
         mli_path;
         mli_relative;
         mli_exists;
-        has_mli = mli_exists || generated_mli_declared;
+        has_mli;
       }
 
 let source_descriptors ~workspace_root ~generated_root ~planned_generated_outputs
@@ -458,9 +462,13 @@ let library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outpu
     (library.modules @ wrapped_library_stems library)
 
 let prepared_source_files prepared_source =
-  match prepared_source.mli_compile_path with
-  | Some mli_path -> [ mli_path; prepared_source.ml_compile_path ]
-  | None -> [ prepared_source.ml_compile_path ]
+  (match prepared_source.mli_compile_path with
+  | Some mli_path -> [ mli_path ]
+  | None -> [])
+  @
+  match prepared_source.ml_compile_path with
+  | Some ml_path -> [ ml_path ]
+  | None -> []
 
 let ordered_source_table sources =
   let table = Hashtbl.create (List.length sources) in
@@ -556,7 +564,8 @@ let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
       append_line buffer
         (Printf.sprintf "ml %s %s" source.ml_relative
            (if source.ml_exists then Digest.to_hex (Digest.file source.ml_path)
-            else "planned-generated"));
+            else if source.has_ml then "planned-generated"
+            else "missing"));
       append_line buffer
         (Printf.sprintf "mli %s %s" source.mli_relative
            (if source.mli_exists then Digest.to_hex (Digest.file source.mli_path)
@@ -986,10 +995,16 @@ let preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
 
 let prepare_source ~mode ~workspace_root ~out_dir ~target_env
     (preprocessors : Manifest.command_tool list) source =
-  let logical_ml_path = Filename.basename source.ml_relative in
   let* ml_compile_path =
-    preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
-      preprocessors logical_ml_path source.ml_path
+    match source.has_ml with
+    | false -> Ok None
+    | true ->
+        let logical_ml_path = Filename.basename source.ml_relative in
+        let* path =
+          preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
+            preprocessors logical_ml_path source.ml_path
+        in
+        Ok (Some path)
   in
   let* mli_compile_path =
     match source.has_mli with
@@ -1009,19 +1024,39 @@ let prepare_sources ~mode ~workspace_root ~out_dir ~target_env
   collect_results sources
     (prepare_source ~mode ~workspace_root ~out_dir ~target_env preprocessors)
 
-let expected_module_outputs backend out_dir stem =
+let implementation_output_paths backend out_dir stem =
   match backend with
   | Toolchain.Native ->
       [
-        Filename.concat out_dir (stem ^ ".cmi");
         Filename.concat out_dir (stem ^ ".cmx");
         Filename.concat out_dir (stem ^ ".o");
       ]
-  | Toolchain.Bytecode ->
-      [
-        Filename.concat out_dir (stem ^ ".cmi");
-        Filename.concat out_dir (stem ^ ".cmo");
-      ]
+  | Toolchain.Bytecode -> [ Filename.concat out_dir (stem ^ ".cmo") ]
+
+let expected_prepared_source_outputs backend out_dir
+    (source : prepared_source) =
+  let cmi = Filename.concat out_dir (source.source.stem ^ ".cmi") in
+  if source.source.has_ml then
+    cmi :: implementation_output_paths backend out_dir source.source.stem
+  else [ cmi ]
+
+let prepared_source_object_path backend out_dir (source : prepared_source) =
+  if source.source.has_ml then
+    Some
+      (Filename.concat out_dir
+         (source.source.stem ^ Toolchain.object_extension backend))
+  else None
+
+let ordered_prepared_sources source_table ordered_stems =
+  List.map
+    (fun stem ->
+      match Hashtbl.find_opt source_table stem with
+      | Some source -> source
+      | None ->
+          failwith
+            (Printf.sprintf
+               "internal error: missing prepared source for '%s'" stem))
+    ordered_stems
 
 let prunable_output_suffixes =
   [ ".cmi"; ".cmo"; ".cmx"; ".cmxa"; ".cma"; ".a"; ".o" ]
@@ -1058,7 +1093,7 @@ let interface_compile_args ~workspace_root ~out_dir ~include_dirs ~compile_flags
   @ [ "-o"; Filename.concat out_dir (source.source.stem ^ ".cmi"); mli_compile_path ]
 
 let implementation_compile_args ~workspace_root ~backend ~out_dir ~include_dirs
-    ~compile_flags ~(ppx_tools : Manifest.ppx_tool list) source =
+    ~compile_flags ~(ppx_tools : Manifest.ppx_tool list) source ml_compile_path =
   compile_flags @ ppx_args ~workspace_root ppx_tools
   @ [ "-c" ]
   @ include_args include_dirs
@@ -1066,7 +1101,7 @@ let implementation_compile_args ~workspace_root ~backend ~out_dir ~include_dirs
   [
     "-o";
     Filename.concat out_dir (source.source.stem ^ Toolchain.object_extension backend);
-    source.ml_compile_path;
+    ml_compile_path;
   ]
 
 let render_preprocessor_command ~workspace_root ~target_env
@@ -1131,16 +1166,20 @@ let render_compile_commands ~session ~workspace_root ~backend ~out_dir
                 ]
           | None -> Ok []
         in
-        let* invocation =
-          Toolchain.compiler_invocation ~session backend package_resolution
-            (implementation_compile_args ~workspace_root ~backend ~out_dir
-               ~include_dirs ~compile_flags ~ppx_tools source)
-        in
-        loop
-          (Printf.sprintf "compile %s.ml: %s" source.source.stem
-             (Toolchain.render_invocation ~env invocation)
-          :: List.rev_append commands acc)
-          rest
+        (match source.ml_compile_path with
+        | Some ml_compile_path ->
+            let* invocation =
+              Toolchain.compiler_invocation ~session backend package_resolution
+                (implementation_compile_args ~workspace_root ~backend ~out_dir
+                   ~include_dirs ~compile_flags ~ppx_tools source
+                   ml_compile_path)
+            in
+            loop
+              (Printf.sprintf "compile %s.ml: %s" source.source.stem
+                 (Toolchain.render_invocation ~env invocation)
+              :: List.rev_append commands acc)
+              rest
+        | None -> loop (List.rev_append commands acc) rest)
   in
   loop [] ordered_stems
 
@@ -1160,15 +1199,19 @@ let compile_module ~session ~workspace_root ~verbose ~backend ~out_dir
         Ok ()
     | None -> Ok ()
   in
-  let* _ =
-    Toolchain.ensure_success_compiler ~session ~env ~verbose backend
-      package_resolution
-      (implementation_compile_args ~workspace_root ~backend ~out_dir
-         ~include_dirs ~compile_flags ~ppx_tools source)
-  in
-  Ok
-    (Filename.concat out_dir
-       (source.source.stem ^ Toolchain.object_extension backend))
+  match source.ml_compile_path with
+  | None -> Ok None
+  | Some ml_compile_path ->
+      let* _ =
+        Toolchain.ensure_success_compiler ~session ~env ~verbose backend
+          package_resolution
+          (implementation_compile_args ~workspace_root ~backend ~out_dir
+             ~include_dirs ~compile_flags ~ppx_tools source ml_compile_path)
+      in
+      Ok
+        (Some
+           (Filename.concat out_dir
+              (source.source.stem ^ Toolchain.object_extension backend)))
 
 let compile_ordered_sources ~session ~workspace_root ~verbose ~backend ~out_dir
     ~include_dirs ~package_resolution ~compile_flags
@@ -1190,7 +1233,12 @@ let compile_ordered_sources ~session ~workspace_root ~verbose ~backend ~out_dir
             ~include_dirs ~package_resolution ~compile_flags ~ppx_tools ~env
             source
         in
-        loop (object_file :: acc) rest
+        let acc =
+          match object_file with
+          | Some object_file -> object_file :: acc
+          | None -> acc
+        in
+        loop acc rest
   in
   loop [] ordered_stems
 
@@ -1496,6 +1544,15 @@ let write_target_report out_dir report json_report =
 
 let static_archive_path archive = Filename.remove_extension archive ^ ".a"
 
+let require_implementation_source ~target_kind ~target_name
+    (source : source_descriptor) =
+  if source.has_ml then Ok ()
+  else
+    Error
+      (Printf.sprintf
+         "%s '%s' requires an implementation for main module '%s': %s"
+         target_kind target_name source.stem source.ml_path)
+
 let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
     ~backend_request ~backend ~compiler_version ~profile workspace library
     library_outputs =
@@ -1615,21 +1672,26 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
       ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
       ordered_modules
   in
+  let ordered_prepared = ordered_prepared_sources source_table ordered_modules in
+  let object_files =
+    List.filter_map
+      (prepared_source_object_path backend out_dir)
+      ordered_prepared
+  in
   let expected_outputs =
-    List.concat_map (expected_module_outputs backend out_dir) ordered_modules
+    List.concat_map
+      (expected_prepared_source_outputs backend out_dir)
+      ordered_prepared
     @ [ archive ]
     @
-    (match backend with
-    | Toolchain.Native -> [ static_archive_path archive ]
-    | Toolchain.Bytecode -> [])
+    (match (backend, object_files) with
+    | Toolchain.Native, _ :: _ -> [ static_archive_path archive ]
+    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> [])
   in
   let* link_command =
     render_link_command ~session ~env:(pipeline.options.env) ~backend
       ~package_resolution
-      (pipeline.options.link_flags @ [ "-a"; "-o"; archive ]
-      @ List.map
-          (fun stem -> Filename.concat out_dir (stem ^ Toolchain.object_extension backend))
-          ordered_modules)
+      (pipeline.options.link_flags @ [ "-a"; "-o"; archive ] @ object_files)
   in
   let status =
     Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
@@ -1687,15 +1749,23 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
   in
   let source_table = ordered_source_table description.prepared_sources in
   let display_name = library.name ^ Manifest.package_suffix library.package_path in
+  let ordered_prepared =
+    ordered_prepared_sources source_table description.ordered_modules
+  in
+  let object_files =
+    List.filter_map
+      (prepared_source_object_path backend description.out_dir)
+      ordered_prepared
+  in
   let expected_outputs =
     List.concat_map
-      (expected_module_outputs backend description.out_dir)
-      description.ordered_modules
+      (expected_prepared_source_outputs backend description.out_dir)
+      ordered_prepared
     @ [ description.archive ]
     @
-    (match backend with
-    | Toolchain.Native -> [ static_archive_path description.archive ]
-    | Toolchain.Bytecode -> [])
+    (match (backend, object_files) with
+    | Toolchain.Native, _ :: _ -> [ static_archive_path description.archive ]
+    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> [])
   in
   prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
@@ -1806,6 +1876,10 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     source_descriptor ~workspace_root ~generated_root:(generated_root out_dir)
       ~planned_generated_outputs ~dir:runnable.dir runnable.main
   in
+  let* () =
+    require_implementation_source ~target_kind:(runnable_kind_name kind)
+      ~target_name:runnable.name main_source
+  in
   let* prepared_sources =
     let target_env = pipeline.options.env in
     prepare_sources ~mode ~workspace_root ~out_dir ~target_env
@@ -1900,8 +1974,16 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
       ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
       source_order
   in
+  let ordered_prepared = ordered_prepared_sources source_table source_order in
+  let object_files =
+    List.filter_map
+      (prepared_source_object_path backend out_dir)
+      ordered_prepared
+  in
   let expected_outputs =
-    List.concat_map (expected_module_outputs backend out_dir) source_order
+    List.concat_map
+      (expected_prepared_source_outputs backend out_dir)
+      ordered_prepared
     @ [ binary ]
   in
   let* link_command =
@@ -1910,10 +1992,7 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
       (pipeline.options.link_flags
       @ Toolchain.link_args package_resolution
       @ [ "-o"; binary ]
-      @ archive_files
-      @ List.map
-          (fun stem -> Filename.concat out_dir (stem ^ Toolchain.object_extension backend))
-          source_order)
+      @ archive_files @ object_files)
   in
   let status =
     Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
@@ -1973,10 +2052,13 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
   let display_name =
     runnable.name ^ Manifest.package_suffix runnable.package_path
   in
+  let ordered_prepared =
+    ordered_prepared_sources source_table description.source_order
+  in
   let expected_outputs =
     List.concat_map
-      (expected_module_outputs backend description.out_dir)
-      description.source_order
+      (expected_prepared_source_outputs backend description.out_dir)
+      ordered_prepared
     @ [ description.binary ]
   in
   prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;

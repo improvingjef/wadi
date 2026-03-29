@@ -256,6 +256,83 @@ modules = ["core"]
               "missing source files should fail the build";
             assert_string_contains ~needle:"missing source file" build.output
               "missing source files should produce a direct error")) );
+    ( "builds libraries with interface-only modules",
+      (fun () ->
+        with_temp_dir "oasis-interface-only" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["api"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/api.mli" {|val greeting : string|};
+            write_source workspace "app/main.ml" {|let () = print_endline "ok"|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "interface-only library modules should build cleanly";
+            let out_dir = Layout.library_out_dir workspace "core" in
+            assert_file_exists (Filename.concat out_dir "api.cmi");
+            assert_true
+              (not (Fs.exists (Filename.concat out_dir "api.cmx")))
+              "interface-only modules should not leave native object files behind";
+            assert_true
+              (not (Fs.exists (Filename.concat out_dir "api.o")))
+              "interface-only modules should not leave native object archives behind";
+            assert_file_exists (library_archive_path workspace "core");
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables should still link against libraries that only export interfaces";
+            assert_string_equal "ok\n" run.output
+              "the executable linked against an interface-only library should run")) );
+    ( "prunes stale object files when a module becomes interface-only",
+      (fun () ->
+        with_temp_dir "oasis-interface-prune" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["api"]
+|};
+            write_source workspace "lib/api.ml" {|let greeting = "hello"|};
+            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 first_build.status
+              "the initial implementation-backed build should succeed";
+            let out_dir = Layout.library_out_dir workspace "core" in
+            assert_file_exists (Filename.concat out_dir "api.cmx");
+            Fs.remove_tree (Filename.concat workspace "lib/api.ml");
+            write_source workspace "lib/api.mli" {|val greeting : string|};
+            let second_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 second_build.status
+              "rebuilding after dropping the implementation should still succeed";
+            assert_file_exists (Filename.concat out_dir "api.cmi");
+            assert_true
+              (not (Fs.exists (Filename.concat out_dir "api.cmx")))
+              "stale native object files should be removed when a module loses its implementation";
+            assert_true
+              (not (Fs.exists (Filename.concat out_dir "api.o")))
+              "stale native archives should be removed when a module loses its implementation")) );
+    ( "rejects interface-only main modules for executables",
+      (fun () ->
+        with_temp_dir "oasis-interface-only-main" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.mli" {|val main : unit -> unit|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_true (build.status <> 0)
+              "executables should reject interface-only main modules";
+            assert_string_contains
+              ~needle:"requires an implementation for main module 'main'"
+              build.output
+              "the error should explain that runnable entrypoints need a .ml implementation")) );
     ( "infers library module order from source dependencies",
       (fun () ->
         with_temp_dir "oasis-module-order" (fun workspace ->

@@ -589,6 +589,32 @@ ppx = ["rewrite"]
             assert_string_contains ~needle:"dependency changed: greeting"
               executable_explain.output
               "downstream targets should explain dependency-triggered rebuilds")) );
+    ( "explains when a module becomes interface-only",
+      (fun () ->
+        with_temp_dir "oasis-explain-interface-only" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["api"]
+|};
+            write_source workspace "lib/api.ml" {|let greeting = "hello"|};
+            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 first_build.status
+              "the initial implementation-backed build should succeed";
+            Fs.remove_tree (Filename.concat workspace "lib/api.ml");
+            write_source workspace "lib/api.mli" {|val greeting : string|};
+            let explain =
+              run_oasis ~cwd:workspace [ "explain"; "--current"; "core" ]
+            in
+            assert_int_equal 0 explain.status
+              "current explain should succeed after a module loses its implementation";
+            assert_string_contains ~needle:"State: rebuilt" explain.output
+              "changing a module from implementation-backed to interface-only should force a rebuild";
+            assert_string_contains
+              ~needle:"implementation availability changed: lib/api.ml"
+              explain.output
+              "current explain should describe the implementation-availability change directly")) );
     ( "explains preprocessor auxiliary input changes",
       (fun () ->
         with_temp_dir "oasis-explain-preprocess-deps" (fun workspace ->

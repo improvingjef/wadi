@@ -278,6 +278,25 @@ version = 1
               ~needle:"generated preprocess 'dune_preprocess_1' from dune action"
               migrate.output
               "migrate should drop the old manual-deps warning when explicit inputs are inferred")) );
+    ( "preserves dune modules_without_implementation entries in migrated targets",
+      (fun () ->
+        with_temp_dir "oasis-migrate-interface-only" (fun workspace ->
+            write_workspace_file workspace "lib/dune"
+              {|
+(library
+ (name demo)
+ (modules logic)
+ (modules_without_implementation api))
+|};
+            write_source workspace "lib/logic.ml" {|let value = "logic"|};
+            write_source workspace "lib/api.mli" {|val value : string|};
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should preserve interface-only dune modules";
+            assert_string_contains
+              ~needle:"[library.demo]\nwrapped = true\ndir = \"lib\"\nmodules = [\"logic\", \"api\"]\n"
+              migrate.output
+              "migrate should merge modules_without_implementation into the manifest module list")) );
     ( "migrates dune progn, with-stdin-from, diff, and alias deps into usable oasis actions",
       (fun () ->
         with_temp_dir "oasis-migrate-composite-actions" (fun workspace ->

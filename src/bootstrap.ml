@@ -8,9 +8,9 @@ type render_format =
 
 type module_plan = {
   stem : string;
-  logical_ml_path : string;
+  logical_ml_path : string option;
   logical_mli_path : string option;
-  ml_path : string;
+  ml_path : string option;
   mli_path : string option;
 }
 
@@ -270,7 +270,9 @@ let pipeline_input_paths ~workspace_root (pipeline : Builder.resolved_pipeline) 
 let source_input_paths ~workspace_root sources =
   sources
   |> List.concat_map (fun (source : Builder.source_descriptor) ->
-         existing_workspace_inputs ~workspace_root source.ml_relative
+         (if source.has_ml then
+            existing_workspace_inputs ~workspace_root source.ml_relative
+          else [])
          @
          if source.has_mli then
            existing_workspace_inputs ~workspace_root source.mli_relative
@@ -299,12 +301,16 @@ let ordered_module_plans ~workspace_root ordered_stems prepared_sources =
             let module_plan =
               {
                 stem = source.source.stem;
-                logical_ml_path = source.source.ml_relative;
+                logical_ml_path =
+                  if source.source.has_ml then Some source.source.ml_relative
+                  else None;
                 logical_mli_path =
                   if source.source.has_mli then Some source.source.mli_relative
                   else None;
                 ml_path =
-                  workspace_relative_path ~workspace_root source.ml_compile_path;
+                  Option.map
+                    (workspace_relative_path ~workspace_root)
+                    source.ml_compile_path;
                 mli_path =
                   Option.map
                     (workspace_relative_path ~workspace_root)
@@ -322,6 +328,12 @@ let ordered_module_plans ~workspace_root ordered_stems prepared_sources =
 let common_seed_reuse_allowed ~seed_profile requested_profile =
   requested_profile = seed_profile
 
+let module_source_path (module_plan : module_plan) =
+  match (module_plan.logical_ml_path, module_plan.logical_mli_path) with
+  | Some path, _ -> path
+  | None, Some path -> path
+  | None, None -> module_plan.stem
+
 let ensure_unique_module_stems groups =
   let stems : (string, module_owner list) Hashtbl.t = Hashtbl.create 16 in
   let add_module kind target_name module_plan =
@@ -329,7 +341,7 @@ let ensure_unique_module_stems groups =
       {
         kind;
         target_name;
-        source_path = module_plan.logical_ml_path;
+        source_path = module_source_path module_plan;
       }
     in
     let previous =
@@ -579,7 +591,12 @@ let interface_path stem = Printf.sprintf "$(OBJ_DIR)/%s.cmi" stem
 
 let object_list modules =
   String.concat " "
-    (List.map (fun module_plan -> object_path module_plan.stem) modules)
+    (List.filter_map
+       (fun module_plan ->
+         match module_plan.ml_path with
+         | Some _ -> Some (object_path module_plan.stem)
+         | None -> None)
+       modules)
 
 let last = function
   | [] -> None
@@ -620,11 +637,16 @@ let link_command prefix target =
        $(%s_LINK_FLAGS)"
       prefix prefix
 
+let module_primary_artifact module_plan =
+  match module_plan.ml_path with
+  | Some _ -> object_path module_plan.stem
+  | None -> interface_path module_plan.stem
+
 let module_rules prefix target predecessor module_plan =
-  let previous_object =
+  let previous_artifact =
     match predecessor with
     | None -> []
-    | Some previous -> [ object_path previous.stem ]
+    | Some previous -> [ module_primary_artifact previous ]
   in
   let interface_rules =
     match module_plan.mli_path with
@@ -632,28 +654,32 @@ let module_rules prefix target predecessor module_plan =
         [
           rule_header ~order_only:"$(OBJ_DIR)"
             (interface_path module_plan.stem)
-            (mli_path :: "$(BOOTSTRAP_MK)" :: previous_object);
+            (mli_path :: "$(BOOTSTRAP_MK)" :: previous_artifact);
           ("\t" ^ compile_command prefix target ^ " -c -o $@ $<");
           "";
         ]
     | None -> []
   in
-  let object_prerequisites =
-    [ module_plan.ml_path; "$(BOOTSTRAP_MK)" ]
-    @
-    (match module_plan.mli_path with
-    | Some _ -> [ interface_path module_plan.stem ]
-    | None -> [])
-    @ previous_object
+  let object_rules =
+    match module_plan.ml_path with
+    | None -> []
+    | Some ml_path ->
+        let object_prerequisites =
+          [ ml_path; "$(BOOTSTRAP_MK)" ]
+          @
+          (match module_plan.mli_path with
+          | Some _ -> [ interface_path module_plan.stem ]
+          | None -> [])
+          @ previous_artifact
+        in
+        [
+          rule_header ~order_only:"$(OBJ_DIR)" (object_path module_plan.stem)
+            object_prerequisites;
+          ("\t" ^ compile_command prefix target ^ " -c -o $@ $<");
+          "";
+        ]
   in
-  interface_rules
-  @
-  [
-    rule_header ~order_only:"$(OBJ_DIR)" (object_path module_plan.stem)
-      object_prerequisites;
-    ("\t" ^ compile_command prefix target ^ " -c -o $@ $<");
-    "";
-  ]
+  interface_rules @ object_rules
 
 let group_rules prefix target modules predecessor =
   let rec loop previous acc = function
@@ -775,7 +801,10 @@ let seed_compile_paths ~workspace_root ?seed_root ~(profile : string)
              | Some mli_path ->
                  [ workspace_relative_path ~workspace_root mli_path ]
              | None -> [])
-             @ [ workspace_relative_path ~workspace_root source.ml_compile_path ])
+             @
+             (match source.ml_compile_path with
+             | Some ml_path -> [ workspace_relative_path ~workspace_root ml_path ]
+             | None -> []))
            ordered_sources)
   | Some seed_root ->
       let snapshot_dir = seed_snapshot_dir ~seed_root ~profile library in
@@ -792,11 +821,17 @@ let seed_compile_paths ~workspace_root ?seed_root ~(profile : string)
                 Ok [ snapshot_path ]
             | None -> Ok []
           in
-          let* ml_path =
-            seed_snapshot_file ~workspace_root ~snapshot_dir source.source.stem "ml"
-              source.ml_compile_path
+          let* ml_paths =
+            match source.ml_compile_path with
+            | Some ml_path ->
+                let* snapshot_path =
+                  seed_snapshot_file ~workspace_root ~snapshot_dir
+                    source.source.stem "ml" ml_path
+                in
+                Ok [ snapshot_path ]
+            | None -> Ok []
           in
-          Ok (mli_paths @ [ ml_path ]))
+          Ok (mli_paths @ ml_paths))
       |> Result.map List.concat
 
 let enriched_seed_metadata_lines ?seed_root ~manifest_path workspace =
@@ -910,7 +945,8 @@ let seed_metadata_lines ?seed_root ~manifest_path workspace =
         List.concat_map
           (fun (source : Builder.prepared_source) ->
             (if source.source.mli_exists then [ source.source.mli_relative ] else [])
-            @ [ source.source.ml_relative ])
+            @
+            (if source.source.has_ml then [ source.source.ml_relative ] else []))
           ordered_sources
       in
       Ok
