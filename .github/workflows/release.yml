@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build source archive
-        run: bash scripts/build_release_archives.sh --source-only --output-dir dist
+        run: ./scripts/build_release_archives.sh --source-only --output-dir dist
 
       - uses: actions/upload-artifact@v4
         with:
@@ -75,7 +75,7 @@ jobs:
 
       - name: Build binary archive
         run: |
-          bash scripts/build_release_archives.sh \
+          ./scripts/build_release_archives.sh \
             --binary-only \
             --output-dir dist \
             --binary _bootstrap/bin/oasis \
@@ -105,8 +105,8 @@ jobs:
       - name: Render packaging manifests
         run: |
           . release/metadata.sh
-          bash scripts/render_oasis_opam.sh > dist/oasis.opam
-          bash scripts/render_homebrew_formula.sh \
+          ./scripts/render_oasis_opam.sh > dist/oasis.opam
+          ./scripts/render_homebrew_formula.sh \
             --source-archive "dist/$(oasis_release_source_archive_name)" \
             > dist/oasis.rb
           diff -u oasis.opam dist/oasis.opam
@@ -151,7 +151,7 @@ jobs:
 
       - name: Update Homebrew tap
         run: |
-          bash scripts/update_homebrew_tap.sh \
+          ./scripts/update_homebrew_tap.sh \
             --tap-dir homebrew-tap \
             --source-archive "dist/${{ steps.metadata.outputs.source_archive }}" \
             --commit \

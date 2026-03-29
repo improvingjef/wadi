@@ -76,7 +76,7 @@ fi
 
 mv "$tmp_metadata" "$METADATA_PATH"
 
-bash "$ROOT_DIR/scripts/generate_packaging_manifests.sh"
+"$ROOT_DIR/scripts/generate_packaging_manifests.sh"
 
 ruby -c "$ROOT_DIR/Formula/oasis.rb" >/dev/null
 opam lint "$ROOT_DIR/oasis.opam" >/dev/null

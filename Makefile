@@ -34,24 +34,24 @@ test: bootstrap-smoke $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) $(BIN_DIR)/test_runner
 
 release-artifacts: $(BIN_DIR)/oasis
-	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) bash scripts/generate_release_artifacts.sh
+	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
 
 release-manifests:
-	bash scripts/generate_packaging_manifests.sh
+	./scripts/generate_packaging_manifests.sh
 
 release-cut:
 	@if [ -z "$(VERSION)" ]; then \
 		echo "make release-cut VERSION=X.Y.Z [TAG=1]" >&2; \
 		exit 2; \
 	fi
-	bash scripts/cut_release.sh --version "$(VERSION)" $(if $(TAG),--tag,)
+	./scripts/cut_release.sh --version "$(VERSION)" $(if $(TAG),--tag,)
 
 update-homebrew-tap:
 	@if [ -z "$(TAP_DIR)" ]; then \
 		echo "make update-homebrew-tap TAP_DIR=/path/to/homebrew-oasis [SOURCE_ARCHIVE=dist/archive.tar.gz | FORMULA=dist/oasis.rb] [COMMIT=1] [PUSH=1]" >&2; \
 		exit 2; \
 	fi
-	bash scripts/update_homebrew_tap.sh --tap-dir "$(TAP_DIR)" $(if $(SOURCE_ARCHIVE),--source-archive "$(SOURCE_ARCHIVE)",$(if $(FORMULA),--formula "$(FORMULA)",)) $(if $(COMMIT),--commit,) $(if $(PUSH),--push,)
+	./scripts/update_homebrew_tap.sh --tap-dir "$(TAP_DIR)" $(if $(SOURCE_ARCHIVE),--source-archive "$(SOURCE_ARCHIVE)",$(if $(FORMULA),--formula "$(FORMULA)",)) $(if $(COMMIT),--commit,) $(if $(PUSH),--push,)
 
 benchmark-bootstrap:
 	scripts/benchmark_bootstrap.sh --workspace .

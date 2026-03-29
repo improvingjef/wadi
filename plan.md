@@ -110,5 +110,6 @@
 101. [x] Define one canonical release metadata source for archive URLs, checksums, homepage/bug-report links, and license so opam/Homebrew/GitHub release plumbing stops depending on repo-local placeholders.
 102. [x] Publish the generated `Formula/oasis.rb` through a dedicated tap update flow so users can get from `brew install oasis` to a working binary without pointing Homebrew at this repo directly.
 103. [x] Collapse release version bumps, source-archive refresh, and tag validation into one explicit release-cut command so the packaging metadata stops depending on a manually remembered sequence.
-104. [ ] Replace the hard-coded `LC_ALL=C.UTF-8` release-archive environment with a portable locale fallback so packaging commands stay warning-free on macOS and other hosts that do not ship that locale name.
-105. [ ] Teach `scripts/update_homebrew_tap.sh` to clone the tap repository directly from release metadata when no checkout is present so local release maintenance does not require a separate manual `git clone` step.
+104. [x] Replace the hard-coded `LC_ALL=C.UTF-8` release-archive environment with a portable locale fallback so packaging commands stay warning-free on macOS and other hosts that do not ship that locale name.
+105. [x] Teach `scripts/update_homebrew_tap.sh` to clone the tap repository directly from release metadata when no checkout is present so local release maintenance does not require a separate manual `git clone` step.
+106. [x] Execute packaging entrypoints directly from shipped scripts and emit duplicate-free release archives that preserve helper/installer script presence and execute bits so source-tarball installs behave the same as a repo checkout.

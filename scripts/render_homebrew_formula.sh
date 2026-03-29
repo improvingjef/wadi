@@ -79,7 +79,7 @@ class $OASIS_FORMULA_CLASS < Formula
 
   def install
     system "make", "release-artifacts"
-    system "bash", "scripts/install_release_tree.sh",
+    system "./scripts/install_release_tree.sh",
       "--package-root", "package",
       "--binary", "_bootstrap/bin/oasis",
       "--prefix", prefix

@@ -41,10 +41,10 @@ mkdir -p "$OUTPUT_DIR/Formula"
 tmp_dir=$(mktemp -d "${TMPDIR:-/tmp}/oasis-release-manifests.XXXXXX")
 trap 'rm -rf "$tmp_dir"' EXIT HUP INT TERM
 
-bash "$ROOT_DIR/scripts/render_oasis_opam.sh" >"$OUTPUT_DIR/oasis.opam"
-bash "$ROOT_DIR/scripts/build_release_archives.sh" \
+"$ROOT_DIR/scripts/render_oasis_opam.sh" >"$OUTPUT_DIR/oasis.opam"
+"$ROOT_DIR/scripts/build_release_archives.sh" \
   --source-only \
   --output-dir "$tmp_dir"
-bash "$ROOT_DIR/scripts/render_homebrew_formula.sh" \
+"$ROOT_DIR/scripts/render_homebrew_formula.sh" \
   --source-archive "$tmp_dir/$(oasis_release_source_archive_name)" \
   >"$OUTPUT_DIR/Formula/oasis.rb"

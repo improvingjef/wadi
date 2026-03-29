@@ -3,11 +3,9 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$ROOT_DIR/release/metadata.sh"
+. "$ROOT_DIR/scripts/release_locale.sh"
 
-export LANG=C
-export LC_ALL=C
-export TZ=UTC
-export COPYFILE_DISABLE=1
+oasis_apply_release_archive_env
 
 OUTPUT_DIR=$ROOT_DIR/dist
 BINARY_PATH=${OASIS_BIN:-$ROOT_DIR/_bootstrap/bin/oasis}
@@ -29,7 +27,7 @@ copy_tree_files() {
   src_root=$1
   dst_root=$2
   git -C "$src_root" ls-files --cached --modified \
-    | LC_ALL=C sort -u \
+    | sort -u \
     | while IFS= read -r relative_path; do
         [ -n "$relative_path" ] || continue
         if [ "$relative_path" = "Formula/oasis.rb" ]; then
@@ -57,7 +55,10 @@ create_archive() {
   file_list=$(mktemp "${TMPDIR:-/tmp}/oasis-release-files.XXXXXX")
   (
     cd "$parent_dir"
-    find "$root_name" -print | LC_ALL=C sort >"$file_list"
+    {
+      find "$root_name" -type d -empty -print
+      find "$root_name" \( -type f -o -type l \) -print
+    } | sort >"$file_list"
     tar -cf "$tmp_tar" -T "$file_list"
   )
   gzip -n -c "$tmp_tar" >"$archive_path"
@@ -93,9 +94,9 @@ build_binary_archive() {
   trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
   package_dir=$work_dir/package-root
   install_root=$work_dir/$root_name
-  OASIS_BIN=$BINARY_PATH bash "$ROOT_DIR/scripts/generate_release_artifacts.sh" \
+  OASIS_BIN=$BINARY_PATH "$ROOT_DIR/scripts/generate_release_artifacts.sh" \
     --output-dir "$package_dir"
-  bash "$ROOT_DIR/scripts/install_release_tree.sh" \
+  "$ROOT_DIR/scripts/install_release_tree.sh" \
     --package-root "$package_dir/package" \
     --binary "$BINARY_PATH" \
     --prefix "$install_root"

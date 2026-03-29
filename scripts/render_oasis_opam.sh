@@ -25,8 +25,7 @@ build: [
 ]
 install: [
   [
-    "bash"
-    "scripts/install_release_tree.sh"
+    "./scripts/install_release_tree.sh"
     "--package-root"
     "package"
     "--binary"

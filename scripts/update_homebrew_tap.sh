@@ -14,9 +14,10 @@ usage() {
   cat <<'EOF'
 Usage: update_homebrew_tap.sh --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]
 
-Update a checked-out Homebrew tap repository with the generated oasis formula.
+Update a Homebrew tap repository with the generated oasis formula.
 Pass either an existing formula file or a source archive path so the script can
-render a fresh formula with the correct sha256.
+render a fresh formula with the correct sha256. If DIR does not contain a git
+checkout yet, the script clones the tap from the canonical release metadata.
 EOF
 }
 
@@ -81,8 +82,12 @@ if [ -n "$FORMULA_PATH" ] && [ -n "$SOURCE_ARCHIVE" ]; then
 fi
 
 if [ ! -d "$TAP_DIR/.git" ]; then
-  echo "update_homebrew_tap.sh: tap dir is not a git checkout: $TAP_DIR" >&2
-  exit 1
+  if [ -e "$TAP_DIR" ] && [ -n "$(ls -A "$TAP_DIR" 2>/dev/null)" ]; then
+    echo "update_homebrew_tap.sh: tap dir is not a git checkout: $TAP_DIR" >&2
+    exit 1
+  fi
+  clone_url=$(oasis_homebrew_tap_clone_url)
+  git clone "$clone_url" "$TAP_DIR"
 fi
 
 tmp_formula=
@@ -94,7 +99,7 @@ if [ -n "$SOURCE_ARCHIVE" ]; then
     exit 1
   fi
   tmp_formula=$(mktemp "${TMPDIR:-/tmp}/oasis-homebrew-formula.XXXXXX")
-  bash "$ROOT_DIR/scripts/render_homebrew_formula.sh" \
+  "$ROOT_DIR/scripts/render_homebrew_formula.sh" \
     --source-archive "$SOURCE_ARCHIVE" >"$tmp_formula"
   FORMULA_PATH=$tmp_formula
 fi

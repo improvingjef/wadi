@@ -14,6 +14,7 @@ OASIS_REPOSITORY_URL='https://github.com/jef/oasis'
 OASIS_BUG_REPORTS_URL='https://github.com/jef/oasis/issues'
 OASIS_DEV_REPO='git+https://github.com/jef/oasis.git'
 OASIS_HOMEBREW_TAP='jef/oasis'
+OASIS_HOMEBREW_TAP_REMOTE_URL=''
 
 oasis_release_tag() {
   printf '%s%s\n' "$OASIS_RELEASE_TAG_PREFIX" "$OASIS_RELEASE_VERSION"
@@ -73,4 +74,12 @@ oasis_homebrew_tap_repository() {
 
 oasis_homebrew_tap_repository_url() {
   printf 'https://github.com/%s\n' "$(oasis_homebrew_tap_repository)"
+}
+
+oasis_homebrew_tap_clone_url() {
+  if [ -n "${OASIS_HOMEBREW_TAP_REMOTE_URL:-}" ]; then
+    printf '%s\n' "$OASIS_HOMEBREW_TAP_REMOTE_URL"
+  else
+    oasis_homebrew_tap_repository_url
+  fi
 }

@@ -12,8 +12,30 @@ let copy_tracked_repo ~src_root ~dst_root ?(extra_paths = []) () =
     (fun relative_path ->
       let src = Filename.concat src_root relative_path in
       let dst = Filename.concat dst_root relative_path in
-      if Fs.exists src then Fs.copy_file ~src ~dst)
+        if Fs.exists src then Fs.copy_file ~src ~dst)
     paths
+
+let set_shell_binding path ~name ~value =
+  let prefix = name ^ "=" in
+  let replaced = ref false in
+  let contents =
+    Fs.read_file path
+    |> String.split_on_char '\n'
+    |> List.map (fun line ->
+           if String_util.starts_with ~prefix line then (
+             replaced := true;
+             Printf.sprintf "%s='%s'" name value)
+           else line)
+  in
+  Fs.write_file path
+    (String.concat "\n"
+       (if !replaced then contents
+        else contents @ [ Printf.sprintf "%s='%s'" name value ]))
+
+let chmod_plus_x path =
+  let chmod = Process.run_capture "chmod" [ "+x"; path ] in
+  assert_int_equal 0 chmod.status
+    ("chmod +x should succeed for " ^ path ^ "\n" ^ chmod.output)
 
 let cases =
   [
@@ -31,14 +53,15 @@ let cases =
                 let generated =
                   Process.run_capture ~cwd:repo_root
                     ~env:[ ("OASIS_BIN", oasis_bin ()) ]
-                    "bash" [ release_script; "--output-dir"; output_dir ]
+                    release_script [ "--output-dir"; output_dir ]
                 in
                 assert_int_equal 0 generated.status
                   "release artifact generation should succeed before install";
+                assert_string_not_contains ~needle:"setlocale" generated.output
+                  "release artifact generation should not leak shell locale warnings";
                 let installed =
-                  Process.run_capture ~cwd:repo_root "bash"
+                  Process.run_capture ~cwd:repo_root install_script
                     [
-                      install_script;
                       "--package-root";
                       Filename.concat output_dir "package";
                       "--binary";
@@ -77,11 +100,13 @@ let cases =
         in
         with_temp_dir "oasis-packaging-manifests" (fun output_dir ->
             let generated =
-              Process.run_capture ~cwd:repo_root "bash"
-                [ manifest_script; "--output-dir"; output_dir ]
+              Process.run_capture ~cwd:repo_root manifest_script
+                [ "--output-dir"; output_dir ]
             in
             assert_int_equal 0 generated.status
               "packaging manifest generation should succeed";
+            assert_string_not_contains ~needle:"setlocale" generated.output
+              "packaging manifest generation should not leak shell locale warnings";
             assert_string_equal
               (Fs.read_file (Filename.concat output_dir "oasis.opam"))
               (Fs.read_file (Filename.concat repo_root "oasis.opam"))
@@ -98,17 +123,18 @@ let cases =
         in
         with_temp_dir "oasis-packaging-archives" (fun output_dir ->
             let source_run =
-              Process.run_capture ~cwd:repo_root "bash"
-                [ archive_script; "--source-only"; "--output-dir"; output_dir ]
+              Process.run_capture ~cwd:repo_root archive_script
+                [ "--source-only"; "--output-dir"; output_dir ]
             in
             assert_int_equal 0 source_run.status
               "source archive generation should succeed";
+            assert_string_not_contains ~needle:"setlocale" source_run.output
+              "source archive generation should not leak shell locale warnings";
             let binary_run =
               Process.run_capture ~cwd:repo_root
                 ~env:[ ("OASIS_BIN", oasis_bin ()) ]
-                "bash"
+                archive_script
                 [
-                  archive_script;
                   "--binary-only";
                   "--output-dir";
                   output_dir;
@@ -122,6 +148,8 @@ let cases =
             in
             assert_int_equal 0 binary_run.status
               "binary archive generation should succeed";
+            assert_string_not_contains ~needle:"setlocale" binary_run.output
+              "binary archive generation should not leak shell locale warnings";
             assert_file_exists
               (Filename.concat output_dir "oasis-0.1.0-source.tar.gz");
             assert_file_exists
@@ -132,6 +160,10 @@ let cases =
             in
             assert_int_equal 0 listing.status
               "binary archives should be valid tarballs";
+            let binary_entries = nonempty_lines listing.output in
+            assert_int_equal (List.length binary_entries)
+              (List.length (String_util.dedup_preserve binary_entries))
+              "binary release archives should not contain duplicate tar entries";
             assert_string_contains ~needle:"oasis-0.1.0-arm64-macos/bin/oasis\n"
               listing.output
               "binary release archives should stage the oasis binary";
@@ -145,12 +177,42 @@ let cases =
             in
             assert_int_equal 0 source_listing.status
               "source archives should be valid tarballs";
+            let source_entries = nonempty_lines source_listing.output in
+            assert_int_equal (List.length source_entries)
+              (List.length (String_util.dedup_preserve source_entries))
+              "source release archives should not contain duplicate tar entries";
             assert_string_contains ~needle:"oasis-0.1.0/LICENSE\n"
               source_listing.output
               "source release archives should include the license text";
             assert_string_contains ~needle:"oasis-0.1.0/release/metadata.sh\n"
               source_listing.output
-              "source release archives should include the canonical release metadata"));
+              "source release archives should include the canonical release metadata";
+            with_temp_dir "oasis-packaging-source-extract" (fun extract_dir ->
+                let unpacked =
+                  Process.run_capture ~cwd:extract_dir "tar"
+                    [ "-xzf"; Filename.concat output_dir "oasis-0.1.0-source.tar.gz" ]
+                in
+                assert_int_equal 0 unpacked.status
+                  ("source archive extraction should succeed\n" ^ unpacked.output);
+                let install_script =
+                  Filename.concat extract_dir
+                    "oasis-0.1.0/scripts/install_release_tree.sh"
+                in
+                let release_artifacts_script =
+                  Filename.concat extract_dir
+                    "oasis-0.1.0/scripts/generate_release_artifacts.sh"
+                in
+                let release_locale_script =
+                  Filename.concat extract_dir
+                    "oasis-0.1.0/scripts/release_locale.sh"
+                in
+                assert_file_exists release_locale_script;
+                assert_true
+                  (((Unix.stat install_script).Unix.st_perm land 0o111) <> 0)
+                  "the source archive should preserve execute bits for install_release_tree.sh";
+                assert_true
+                  (((Unix.stat release_artifacts_script).Unix.st_perm land 0o111) <> 0)
+                  "the source archive should preserve execute bits for generate_release_artifacts.sh")));
     ( "keeps package-manager definitions aligned with the shared release install script",
       (fun () ->
         let repo_root = Sys.getcwd () in
@@ -159,10 +221,15 @@ let cases =
         let formula =
           Fs.read_file (Filename.concat repo_root "Formula/oasis.rb")
         in
+        let makefile = Fs.read_file (Filename.concat repo_root "Makefile") in
         assert_string_contains ~needle:"[make \"release-artifacts\"]" opam
           "the opam package should build through the canonical release-artifact target";
         assert_string_contains ~needle:"scripts/install_release_tree.sh" opam
           "the opam package should install through the shared release-tree installer";
+        assert_string_not_contains
+          ~needle:"\"bash\"\n    \"scripts/install_release_tree.sh\""
+          opam
+          "the opam package should execute the shared installer directly instead of forcing bash";
         assert_string_contains ~needle:"make release-artifacts" flake
           "the Nix flake should build through the canonical release-artifact target";
         assert_string_contains ~needle:"scripts/install_release_tree.sh" flake
@@ -171,7 +238,83 @@ let cases =
           formula
           "the Homebrew formula should build through the canonical release-artifact target";
         assert_string_contains ~needle:"scripts/install_release_tree.sh" formula
-          "the Homebrew formula should install through the shared release-tree installer")) ;
+          "the Homebrew formula should install through the shared release-tree installer";
+        assert_string_not_contains
+          ~needle:"system \"bash\", \"scripts/install_release_tree.sh\","
+          formula
+          "the Homebrew formula should execute the shared installer directly instead of forcing bash";
+        assert_string_contains
+          ~needle:"./scripts/generate_packaging_manifests.sh"
+          makefile
+          "the Makefile should execute the packaging manifest script directly";
+        assert_string_not_contains
+          ~needle:"bash scripts/generate_packaging_manifests.sh"
+          makefile
+          "the Makefile should not force bash for packaging manifests";
+        assert_string_contains
+          ~needle:"./scripts/update_homebrew_tap.sh"
+          makefile
+          "the Makefile should execute the Homebrew tap updater directly";
+        assert_string_not_contains
+          ~needle:"bash scripts/update_homebrew_tap.sh"
+          makefile
+          "the Makefile should not force bash for Homebrew tap updates")) ;
+    ( "falls back to the C archive locale when UTF-8 C locales are unavailable",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let archive_script =
+          Filename.concat repo_root "scripts/build_release_archives.sh"
+        in
+        let tar_path =
+          let resolved =
+            Process.run_capture ~cwd:repo_root "sh" [ "-c"; "command -v tar" ]
+          in
+          assert_int_equal 0 resolved.status
+            ("command -v tar should succeed\n" ^ resolved.output);
+          String.trim resolved.output
+        in
+        let path_env =
+          match Sys.getenv_opt "PATH" with
+          | Some value -> value
+          | None -> "/usr/bin:/bin:/usr/sbin:/sbin"
+        in
+        with_temp_dir "oasis-packaging-locale" (fun workspace ->
+            let bin_dir = Filename.concat workspace "bin" in
+            Fs.ensure_dir bin_dir;
+            let fake_locale = Filename.concat bin_dir "locale" in
+            Fs.write_file fake_locale
+              "#!/bin/sh\n\
+               if [ \"$1\" = \"-a\" ]; then\n\
+               \  printf 'C\\nPOSIX\\n'\n\
+               else\n\
+               \  exec /usr/bin/locale \"$@\"\n\
+               fi\n";
+            chmod_plus_x fake_locale;
+            let fake_tar = Filename.concat bin_dir "tar" in
+            Fs.write_file fake_tar
+              (Printf.sprintf
+                 "#!/bin/sh\n\
+                  if [ \"${LC_ALL:-}\" != \"C\" ]; then\n\
+                  \  echo \"unexpected archive locale: ${LC_ALL:-}\" >&2\n\
+                  \  exit 19\n\
+                  fi\n\
+                  exec %s \"$@\"\n"
+                 (Filename.quote tar_path));
+            chmod_plus_x fake_tar;
+            let output_dir = Filename.concat workspace "dist" in
+            let run =
+              Process.run_capture ~cwd:repo_root
+                ~env:[ ("PATH", bin_dir ^ ":" ^ path_env) ]
+                archive_script [ "--source-only"; "--output-dir"; output_dir ]
+            in
+            assert_int_equal 0 run.status
+              ("archive generation should succeed with a C fallback locale\n"
+             ^ run.output);
+            assert_file_exists
+              (Filename.concat output_dir "oasis-0.1.0-source.tar.gz");
+            assert_string_not_contains ~needle:"unexpected archive locale"
+              run.output
+              "archive generation should fall back to LC_ALL=C when UTF-8 C locales are unavailable")) ;
     ( "keeps the Homebrew formula syntax-valid",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -203,11 +346,13 @@ let cases =
             assert_int_equal 0 init.status
               ("tap git init should succeed\n" ^ init.output);
             let updated =
-              Process.run_capture ~cwd:repo_root "bash"
-                [ update_script; "--tap-dir"; tap_dir; "--formula"; Filename.concat repo_root "Formula/oasis.rb"; "--commit" ]
+              Process.run_capture ~cwd:repo_root update_script
+                [ "--tap-dir"; tap_dir; "--formula"; Filename.concat repo_root "Formula/oasis.rb"; "--commit" ]
             in
             assert_int_equal 0 updated.status
               ("Homebrew tap update should succeed\n" ^ updated.output);
+            assert_string_not_contains ~needle:"setlocale" updated.output
+              "the Homebrew tap updater should not leak shell locale warnings";
             assert_string_equal formula
               (Fs.read_file (Filename.concat tap_dir "Formula/oasis.rb"))
               "the tap update flow should copy the generated formula into the tap checkout";
@@ -219,13 +364,62 @@ let cases =
               ("tap git log should succeed\n" ^ log.output);
             assert_string_contains ~needle:"oasis v0.1.0" log.output
               "the tap update flow should commit the rendered formula with the release tag in the message"));
+    ( "clones the Homebrew tap from release metadata when no local checkout exists",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-tap-clone" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let remote_dir = Filename.concat workspace "tap-remote.git" in
+            let remote_init =
+              Process.run_capture ~cwd:workspace "git"
+                [ "init"; "--bare"; remote_dir ]
+            in
+            assert_int_equal 0 remote_init.status
+              ("bare git init should succeed for the tap remote\n"
+             ^ remote_init.output);
+            set_shell_binding (Filename.concat workspace "release/metadata.sh")
+              ~name:"OASIS_HOMEBREW_TAP_REMOTE_URL" ~value:remote_dir;
+            let update_script =
+              Filename.concat workspace "scripts/update_homebrew_tap.sh"
+            in
+            let tap_dir = Filename.concat workspace "homebrew-oasis" in
+            let updated =
+              Process.run_capture ~cwd:workspace update_script
+                [ "--tap-dir"; tap_dir; "--formula"; Filename.concat workspace "Formula/oasis.rb"; "--commit" ]
+            in
+            assert_int_equal 0 updated.status
+              ("tap updater should clone and update the remote checkout\n"
+             ^ updated.output);
+            assert_string_not_contains ~needle:"setlocale" updated.output
+              "the cloned tap updater should not leak shell locale warnings";
+            assert_file_exists (Filename.concat tap_dir "Formula/oasis.rb");
+            let origin =
+              Process.run_capture ~cwd:tap_dir "git"
+                [ "remote"; "get-url"; "origin" ]
+            in
+            assert_int_equal 0 origin.status
+              ("git remote get-url origin should succeed\n" ^ origin.output);
+            assert_string_equal remote_dir (String.trim origin.output)
+              "the tap updater should clone from the metadata-defined remote";
+            let log =
+              Process.run_capture ~cwd:tap_dir "git"
+                [ "log"; "-1"; "--pretty=%s" ]
+            in
+            assert_int_equal 0 log.status
+              ("git log should succeed in the cloned tap checkout\n" ^ log.output);
+            assert_string_contains ~needle:"oasis v0.1.0" log.output
+              "the cloned tap checkout should receive the rendered formula commit"));
     ( "cuts a release version, refreshes packaging manifests, and creates the matching tag",
       fun () ->
         let repo_root = Sys.getcwd () in
         with_temp_dir "oasis-packaging-cut" (fun workspace ->
             copy_tracked_repo ~src_root:repo_root ~dst_root:workspace
               ~extra_paths:
-                [ "scripts/cut_release.sh"; "scripts/update_homebrew_tap.sh" ]
+                [
+                  "scripts/cut_release.sh";
+                  "scripts/update_homebrew_tap.sh";
+                  "scripts/release_locale.sh";
+                ]
               ();
             let cut_script = Filename.concat workspace "scripts/cut_release.sh" in
             let init = Process.run_capture ~cwd:workspace "git" [ "init" ] in
@@ -250,11 +444,13 @@ let cases =
               ("git commit should succeed in the release-cut sandbox\n"
              ^ commit.output);
             let cut =
-              Process.run_capture ~cwd:workspace "bash"
-                [ cut_script; "--version"; "0.1.1"; "--tag" ]
+              Process.run_capture ~cwd:workspace cut_script
+                [ "--version"; "0.1.1"; "--tag" ]
             in
             assert_int_equal 0 cut.status
               ("release-cut should succeed\n" ^ cut.output);
+            assert_string_not_contains ~needle:"setlocale" cut.output
+              "release-cut should not leak shell locale warnings";
             let metadata =
               Fs.read_file (Filename.concat workspace "release/metadata.sh")
             in
@@ -285,17 +481,21 @@ let cases =
         assert_string_contains ~needle:". release/metadata.sh" workflow
           "the release workflow should load the canonical release metadata";
         assert_string_contains
-          ~needle:"scripts/build_release_archives.sh --source-only --output-dir dist"
+          ~needle:"./scripts/build_release_archives.sh --source-only --output-dir dist"
           workflow
           "the release workflow should publish a deterministic source archive";
         assert_string_contains
-          ~needle:"scripts/render_homebrew_formula.sh"
+          ~needle:"./scripts/render_homebrew_formula.sh"
           workflow
           "the release workflow should render the Homebrew formula from the source archive";
         assert_string_contains
-          ~needle:"scripts/update_homebrew_tap.sh"
+          ~needle:"./scripts/update_homebrew_tap.sh"
           workflow
           "the release workflow should publish the rendered formula through the dedicated tap update flow";
+        assert_string_not_contains
+          ~needle:"bash scripts/build_release_archives.sh"
+          workflow
+          "the release workflow should execute archive scripts directly instead of forcing bash";
         assert_string_contains
           ~needle:"repository: ${{ steps.metadata.outputs.tap_repo }}"
           workflow
