@@ -237,4 +237,50 @@ version = 1
               ~needle:"generated preprocess 'dune_preprocess_1' from dune action"
               migrate.output
               "migrate should drop the old manual-deps warning when explicit inputs are inferred")) );
+    ( "migrates dune progn, with-stdin-from, diff, and alias deps into usable oasis actions",
+      (fun () ->
+        with_temp_dir "oasis-migrate-composite-actions" (fun workspace ->
+            write_workspace_file workspace "dune"
+              {|
+(library
+ (name core)
+ (modules core)
+ (preprocess (action (with-stdin-from fixtures/input.txt (run ./tools/filter.sh)))))
+
+(rule
+ (targets copied.txt)
+ (deps fixtures/expected.txt (alias runtest))
+ (action
+  (progn
+    (copy fixtures/expected.txt copied.txt)
+    (diff fixtures/expected.txt copied.txt))))
+|};
+            write_source workspace "core.ml" {|let value = 1|};
+            write_workspace_file workspace "fixtures/input.txt" "input\n";
+            write_workspace_file workspace "fixtures/expected.txt" "expected\n";
+            ignore
+              (write_executable workspace "tools/filter.sh"
+                 "#!/bin/sh\ncat\n");
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should support richer dune action forms without manual fallback";
+            assert_string_contains
+              ~needle:"[preprocess.dune_preprocess_1]\nargv = [\"sh\", \"-c\", \"'tools/filter.sh' < 'fixtures/input.txt'\"]\ncwd = \".\"\ndeps = [\"fixtures/input.txt\"]\n"
+              migrate.output
+              "migrate should translate with-stdin-from preprocess actions and infer their file deps";
+            assert_string_contains
+              ~needle:"[action.dune_action_2]\nargv = [\"sh\", \"-c\", \"'cp' 'fixtures/expected.txt' 'copied.txt' && 'diff' '-u' 'fixtures/expected.txt' 'copied.txt'\"]\noutputs = [\"copied.txt\"]\ndeps = [\"fixtures/expected.txt\"]\ncwd = \".\"\n"
+              migrate.output
+              "migrate should translate progn/diff rules into a runnable oasis action with concrete deps";
+            assert_string_contains
+              ~needle:"# - generated action 'dune_action_2' from dune rule in"
+              migrate.output
+              "migrate should keep a review comment when alias deps cannot map to concrete oasis file deps";
+            assert_string_contains ~needle:"references alias deps (runtest)"
+              migrate.output
+              "migrate should explain which dune alias dependency needs manual review";
+            assert_string_not_contains
+              ~needle:"ignored unsupported dune rule action"
+              migrate.output
+              "migrate should no longer drop progn/diff rules as unsupported")) );
   ]

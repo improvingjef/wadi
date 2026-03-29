@@ -83,7 +83,7 @@
 
 20. [ ] Benchmark build latency and tighten startup and execution overhead.
 67. [ ] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
-68. [ ] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
+68. [x] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
 69. [ ] Publish an `oasis.opam` package to the opam repository so OCaml developers can install oasis through their existing toolchain with `opam install oasis`.
 70. [ ] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
 71. [ ] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
@@ -91,8 +91,10 @@
 79. [ ] Add `oasis bench` with stable benchmark target execution and machine-readable summaries so the execution subtool split covers Dune’s benchmarking workflows as well as builds and tests.
 80. [ ] Eliminate the remaining app-only interpreter seed from bootstrap generation so cold-start builds no longer depend on `scripts/generate_bootstrap_makefile.ml` loading source through the toplevel at all.
 84. [x] Add an `oasis env repl` mode or equivalent machine-readable REPL plan output so editors can request include paths, linked units, and runtime env without launching the toplevel.
-85. [ ] Extend dune-action dependency inference beyond simple `run`/`copy` forms to `progn`, `with-stdin-from`, `diff`, and alias-driven workflows so fewer migrations fall back to review comments.
+85. [x] Extend dune-action dependency inference beyond simple `run`/`copy` forms to `progn`, `with-stdin-from`, `diff`, and alias-driven workflows so fewer migrations fall back to review comments.
 86. [x] Add an explicit `oasis repl --script` or generated-loader mode so noninteractive use does not depend on OCaml toplevel argument quirks like `-init` versus script-file execution.
 87. [ ] Allow wrapped libraries to provide an explicit checked-in wrapper module or interface so more custom Dune `Foo.ml` wrapper patterns migrate without disabling namespacing.
 88. [x] Prune stale compiled module artifacts when a target’s module list shrinks or wrapping mode flips so `oasis install` never stages dead `.cmi`/`.cmo` files from an older build shape.
-89. [ ] Extend the completion protocol with a file-path mode so file-valued flags like `oasis repl --script` do not fall back to directory-only completion.
+89. [x] Extend the completion protocol with a file-path mode so file-valued flags like `oasis repl --script` do not fall back to directory-only completion.
+90. [ ] Lower the shell-quoted noise in migrated composite dune actions by mapping `with-stdin-from`, `with-stdout-to`, and `progn` to more structured oasis action/preprocess fields when possible instead of emitting `sh -c` fallbacks.
+91. [ ] Feed the generated `package/share/...` completion tree into future opam/Homebrew/Nix packaging definitions so downstream installers reuse one canonical install layout instead of re-encoding shell-specific paths.

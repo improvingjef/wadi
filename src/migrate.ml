@@ -316,6 +316,15 @@ let rebase_command_prog dir prog =
 let rec shell_join args =
   String.concat " " (List.map String_util.shell_quote args)
 
+let collect_results items f =
+  let rec loop acc = function
+    | [] -> Ok (List.rev acc)
+    | item :: rest ->
+        let* value = f item in
+        loop (value :: acc) rest
+  in
+  loop [] items
+
 type parsed_command = {
   argv : string list;
   cwd : string option;
@@ -326,11 +335,23 @@ type inferred_deps = {
   opaque : bool;
 }
 
+type explicit_dep_refs = {
+  deps : string list;
+  aliases : string list;
+  opaque : bool;
+}
+
 let parse_run_like ~dir args =
   let* argv = atoms_of_values "run" args in
   match argv with
   | [] -> Error "dune run action is missing a program"
   | prog :: rest -> Ok { argv = rebase_command_prog dir prog :: rest; cwd = None }
+
+let shell_fragment_of_command (command : parsed_command) =
+  match command.cwd with
+  | None -> shell_join command.argv
+  | Some cwd ->
+      "cd " ^ String_util.shell_quote cwd ^ " && " ^ shell_join command.argv
 
 let rec parse_command_form ~dir = function
   | List (Atom "run" :: args) -> parse_run_like ~dir args
@@ -350,6 +371,32 @@ let rec parse_command_form ~dir = function
             ];
           cwd = None;
         }
+  | List [ Atom "diff"; Atom left; Atom right ] ->
+      Ok
+        {
+          argv =
+            [
+              "diff";
+              "-u";
+              rebase_dune_relative_path dir left;
+              rebase_dune_relative_path dir right;
+            ];
+          cwd = None;
+        }
+  | List [ Atom "with-stdin-from"; Atom path; nested ] ->
+      let* command = parse_command_form ~dir nested in
+      let input_path = rebase_dune_relative_path dir path in
+      Ok
+        {
+          argv =
+            [
+              "sh";
+              "-c";
+              shell_fragment_of_command command ^ " < "
+              ^ String_util.shell_quote input_path;
+            ];
+          cwd = None;
+        }
   | List [ Atom "chdir"; Atom cwd; nested ] ->
       let* command = parse_command_form ~dir nested in
       Ok
@@ -357,6 +404,21 @@ let rec parse_command_form ~dir = function
           command with
           cwd = Some (rebase_dune_relative_path dir cwd);
         }
+  | List (Atom "progn" :: forms) ->
+      let* commands = collect_results forms (parse_command_form ~dir) in
+      if commands = [] then Error "dune progn action is empty"
+      else
+        Ok
+          {
+            argv =
+              [
+                "sh";
+                "-c";
+                String.concat " && "
+                  (List.map shell_fragment_of_command commands);
+              ];
+            cwd = None;
+          }
   | _ -> Error "unsupported dune action form"
 
 let parse_rule_command ~dir ~outputs = function
@@ -386,11 +448,22 @@ let parse_rule_command ~dir ~outputs = function
         }
   | form -> parse_command_form ~dir form
 
-let inferred_none = { deps = []; opaque = false }
+let inferred_none : inferred_deps = { deps = []; opaque = false }
 
-let merge_inferred left right =
+let explicit_dep_refs_none : explicit_dep_refs =
+  { deps = []; aliases = []; opaque = false }
+
+let merge_inferred (left : inferred_deps) (right : inferred_deps) : inferred_deps =
   {
     deps = String_util.dedup_preserve (left.deps @ right.deps);
+    opaque = left.opaque || right.opaque;
+  }
+
+let merge_explicit_dep_refs (left : explicit_dep_refs)
+    (right : explicit_dep_refs) : explicit_dep_refs =
+  {
+    deps = String_util.dedup_preserve (left.deps @ right.deps);
+    aliases = String_util.dedup_preserve (left.aliases @ right.aliases);
     opaque = left.opaque || right.opaque;
   }
 
@@ -404,7 +477,7 @@ let inferred_dep_candidate ~workspace_root ~dir ~outputs value =
     else if Fs.exists absolute && not (Fs.is_directory absolute) then Some rebased
     else None
 
-let inferred_run_deps ~workspace_root ~dir ~outputs args =
+let inferred_run_deps ~workspace_root ~dir ~outputs args : inferred_deps =
   match args with
   | [] -> { deps = []; opaque = false }
   | _prog :: rest ->
@@ -421,7 +494,8 @@ let inferred_run_deps ~workspace_root ~dir ~outputs args =
       in
       loop [] false rest
 
-let rec infer_action_deps ~workspace_root ~dir ~outputs = function
+let rec infer_action_deps ~workspace_root ~dir ~outputs : sexp -> inferred_deps =
+  function
   | List (Atom "run" :: args) -> inferred_run_deps ~workspace_root ~dir ~outputs args
   | List [ Atom "copy"; Atom src; Atom _dst ]
   | List [ Atom "copy#"; Atom src; Atom _dst ] ->
@@ -432,12 +506,38 @@ let rec infer_action_deps ~workspace_root ~dir ~outputs = function
           | None -> []);
         opaque = false;
       }
+  | List [ Atom "diff"; Atom left; Atom right ] ->
+      let deps =
+        List.filter_map
+          (inferred_dep_candidate ~workspace_root ~dir ~outputs)
+          [ left; right ]
+      in
+      ({ inferred_none with deps } : inferred_deps)
+  | List [ Atom "with-stdin-from"; Atom path; nested ] ->
+      merge_inferred
+        (({
+            inferred_none with
+            deps =
+              (match
+                 inferred_dep_candidate ~workspace_root ~dir ~outputs path
+               with
+              | Some dep -> [ dep ]
+              | None -> []);
+          }
+           : inferred_deps))
+        (infer_action_deps ~workspace_root ~dir ~outputs nested)
   | List [ Atom "bash"; Atom _ ] | List [ Atom "system"; Atom _ ] ->
       { deps = []; opaque = true }
   | List [ Atom "chdir"; Atom cwd; nested ] ->
       infer_action_deps ~workspace_root
         ~dir:(rebase_dune_relative_path dir cwd)
         ~outputs nested
+  | List (Atom "progn" :: forms) ->
+      List.fold_left
+        (fun inferred form ->
+          merge_inferred inferred
+            (infer_action_deps ~workspace_root ~dir ~outputs form))
+        inferred_none forms
   | List [ Atom "with-stdout-to"; Atom output; nested ] ->
       let outputs =
         if output = "%{target}" || output = "%{targets}" then outputs
@@ -451,6 +551,43 @@ let rec infer_action_deps ~workspace_root ~dir ~outputs = function
           merge_inferred inferred
             (infer_action_deps ~workspace_root ~dir ~outputs form))
         inferred_none forms
+
+let rec explicit_dep_refs_from_form ~dir : sexp -> explicit_dep_refs = function
+  | Atom value ->
+      if value = "" || value = "." then explicit_dep_refs_none
+      else if String_util.starts_with ~prefix:"%{" value then
+        { explicit_dep_refs_none with opaque = true }
+      else
+        {
+          explicit_dep_refs_none with
+          deps = [ rebase_dune_relative_path dir value ];
+        }
+  | List [ Atom "alias"; Atom alias_name ]
+  | List [ Atom "alias_rec"; Atom alias_name ] ->
+      { explicit_dep_refs_none with aliases = [ alias_name ] }
+  | List [ Atom "file"; Atom path ] ->
+      {
+        explicit_dep_refs_none with
+        deps = [ rebase_dune_relative_path dir path ];
+      }
+  | List [] -> explicit_dep_refs_none
+  | List (Atom _ :: _) -> { explicit_dep_refs_none with opaque = true }
+  | List forms ->
+      List.fold_left
+        (fun refs form ->
+          merge_explicit_dep_refs refs (explicit_dep_refs_from_form ~dir form))
+        explicit_dep_refs_none forms
+
+let explicit_rule_deps ~dir fields =
+  let* values = field_values "deps" fields in
+  Ok
+    (match values with
+    | None -> explicit_dep_refs_none
+    | Some values ->
+        List.fold_left
+          (fun refs value ->
+            merge_explicit_dep_refs refs (explicit_dep_refs_from_form ~dir value))
+          explicit_dep_refs_none values)
 
 let resolved_ppx_argv packages =
   let ocamlfind = ocamlfind_cmd () in
@@ -664,6 +801,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
   let dir = relative_dir workspace_root dune_path in
   let* target = optional_atom_field "target" fields in
   let* targets = optional_atom_list_field "targets" fields in
+  let* explicit_deps = explicit_rule_deps ~dir fields in
   let outputs =
     match target with
     | Some target -> [ target ]
@@ -676,12 +814,11 @@ let parse_rule ~workspace_root ~dune_path acc fields =
             "ignored dune rule without target(s) in %s; migrate it manually"
             dune_path))
   else
-    let* deps = optional_atom_list_field "deps" fields in
     let* action_form = optional_single_value_field "action" fields in
     match action_form with
     | None ->
         Ok
-          (warn acc
+         (warn acc
              (Printf.sprintf
                 "ignored dune rule without an action in %s; migrate it manually"
                 dune_path))
@@ -702,10 +839,19 @@ let parse_rule ~workspace_root ~dune_path acc fields =
             in
             let deps =
               String_util.dedup_preserve
-                (rebased_field_paths dir deps @ inferred.deps)
+                (explicit_deps.deps @ inferred.deps)
             in
             let acc =
-              if inferred.opaque && deps = [] then
+              if explicit_deps.aliases = [] then acc
+              else
+                warn acc
+                  (Printf.sprintf
+                     "generated action '%s' from dune rule in %s references alias deps (%s); oasis migrated only the concrete file deps"
+                     name dune_path
+                     (String.concat ", " explicit_deps.aliases))
+            in
+            let acc =
+              if (inferred.opaque || explicit_deps.opaque) && deps = [] then
                 warn acc
                   (Printf.sprintf
                      "generated action '%s' from dune rule in %s may read auxiliary files; review deps = [...]"

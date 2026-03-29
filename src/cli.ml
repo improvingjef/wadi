@@ -118,6 +118,7 @@ type completion_candidate = {
 type completion_response =
   | Completion_candidates of completion_candidate list
   | Complete_directories
+  | Complete_files
 
 type option_doc = {
   usage : string;
@@ -658,6 +659,11 @@ let render_bash_completion ?workspace_dir () =
       "    compgen -V COMPREPLY -d -- \"$cur\"";
       "    return";
       "  fi";
+      "  if [[ \"$kind\" == files ]]; then";
+      "    compopt -o filenames 2>/dev/null";
+      "    compgen -V COMPREPLY -f -- \"$cur\"";
+      "    return";
+      "  fi";
       "  if [[ \"$response\" == *$'\\n'* ]]; then";
       "    body=\"${response#*$'\\n'}\"";
       "  else";
@@ -706,6 +712,10 @@ let render_zsh_completion ?workspace_dir () =
       ^ " ]] || return";
       "  if [[ \"$kind\" == directories ]]; then";
       "    _files -/";
+      "    return";
+      "  fi";
+      "  if [[ \"$kind\" == files ]]; then";
+      "    _files";
       "    return";
       "  fi";
       "  if [[ \"$response\" == *$'\\n'* ]]; then";
@@ -786,6 +796,10 @@ let render_fish_completion ?workspace_dir () =
       "  end";
       "  if test \"$header[3]\" = directories";
       "    __fish_complete_directories \"$current\"";
+      "    return";
+      "  end";
+      "  if test \"$header[3]\" = files";
+      "    __fish_complete_path \"$current\"";
       "    return";
       "  end";
       "  for line in $response[2..-1]";
@@ -1389,8 +1403,8 @@ let value_completion_candidates ?workspace = function
   | _ -> []
 
 let value_completion_response ?workspace = function
-  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script" ->
-      Complete_directories
+  | "--workspace" | "--prefix" | "--destdir" -> Complete_directories
+  | "--output" | "--script" -> Complete_files
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
 
@@ -1429,6 +1443,7 @@ let completion_response workspace ~previous ~current =
           | option_name :: _ when option_expects_value option_name -> (
               match value_completion_response ?workspace option_name with
               | Complete_directories -> Complete_directories
+              | Complete_files -> Complete_files
               | Completion_candidates candidates ->
                   Completion_candidates
                     (filter_completion_candidates ~current candidates))
@@ -1699,6 +1714,9 @@ let run_completion (options : completion_options) =
           (match completion_response workspace ~previous ~current with
           | Complete_directories ->
               print_endline (completion_protocol_header "directories");
+              Exit_code 0
+          | Complete_files ->
+              print_endline (completion_protocol_header "files");
               Exit_code 0
           | Completion_candidates candidates ->
               print_endline (completion_protocol_header "candidates");

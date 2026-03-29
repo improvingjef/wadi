@@ -10,7 +10,9 @@ usage() {
 Usage: generate_release_artifacts.sh [--output-dir DIR]
 
 Render the public CLI reference and packaged shell-completion artifacts from
-the live oasis binary.
+the live oasis binary. In addition to the repo-friendly `docs/` and
+`completions/` outputs, this also writes a package-manager-friendly install
+tree under `package/share/`.
 EOF
 }
 
@@ -35,9 +37,23 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-mkdir -p "$OUTPUT_DIR/docs" "$OUTPUT_DIR/completions"
+PACKAGE_DIR=$OUTPUT_DIR/package
+
+mkdir -p \
+  "$OUTPUT_DIR/docs" \
+  "$OUTPUT_DIR/completions" \
+  "$PACKAGE_DIR/share/bash-completion/completions" \
+  "$PACKAGE_DIR/share/zsh/site-functions" \
+  "$PACKAGE_DIR/share/fish/vendor_completions.d"
 
 "$OASIS_BIN" docs >"$OUTPUT_DIR/docs/cli.md"
 "$OASIS_BIN" completion bash >"$OUTPUT_DIR/completions/oasis.bash"
 "$OASIS_BIN" completion zsh >"$OUTPUT_DIR/completions/_oasis"
 "$OASIS_BIN" completion fish >"$OUTPUT_DIR/completions/oasis.fish"
+
+cp "$OUTPUT_DIR/completions/oasis.bash" \
+  "$PACKAGE_DIR/share/bash-completion/completions/oasis"
+cp "$OUTPUT_DIR/completions/_oasis" \
+  "$PACKAGE_DIR/share/zsh/site-functions/_oasis"
+cp "$OUTPUT_DIR/completions/oasis.fish" \
+  "$PACKAGE_DIR/share/fish/vendor_completions.d/oasis.fish"
