@@ -37,12 +37,14 @@ type install_options = {
   backend_request : Toolchain.backend_request;
   profile : string option;
   prefix : string option;
+  destdir : string option;
 }
 
 type explain_options = {
   workspace_dir : string;
   targets : string list;
   profile : string option;
+  json : bool;
 }
 
 type completion_options = { shell : string }
@@ -122,6 +124,21 @@ let prefix_option =
     description = "Stage installed files under DIR instead of the default profile root.";
   }
 
+let destdir_option =
+  {
+    usage = "--destdir DIR";
+    flags = [ "--destdir" ];
+    description =
+      "Prepend DIR to the resolved install prefix for packaging-style staging.";
+  }
+
+let json_option =
+  {
+    usage = "--json";
+    flags = [ "--json" ];
+    description = "Print machine-readable JSON output instead of the text report.";
+  }
+
 let build_doc =
   {
     name = "build";
@@ -193,12 +210,13 @@ let install_doc =
     name = "install";
     summary = "Stage installable libraries, executables, and metadata under a prefix.";
     signature =
-      "oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--verbose] [TARGET ...]";
+      "oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis install";
         "oasis install hello";
         "oasis install --prefix _stage hello greeting";
+        "oasis install --prefix /usr/local --destdir _pkg hello";
       ];
     options =
       [
@@ -206,6 +224,7 @@ let install_doc =
         profile_option;
         backend_option;
         prefix_option;
+        destdir_option;
         verbose_option;
         help_option;
       ];
@@ -246,14 +265,16 @@ let explain_doc =
   {
     name = "explain";
     summary = "Show why a target rebuilt or reused artifacts and which commands were planned.";
-    signature = "oasis explain [--workspace DIR] [--profile NAME] [TARGET ...]";
+    signature =
+      "oasis explain [--workspace DIR] [--profile NAME] [--json] [TARGET ...]";
     examples =
       [
         "oasis explain";
         "oasis explain hello";
+        "oasis explain --json hello";
         "oasis explain --profile release greeting hello";
       ];
-    options = [ workspace_option; profile_option; help_option ];
+    options = [ workspace_option; profile_option; json_option; help_option ];
     completion_words = [];
   }
 
@@ -635,6 +656,9 @@ let parse_install_args (args : string list) : (install_options, string) result =
     | "--prefix" :: prefix :: rest ->
         loop { options with prefix = Some prefix } rest
     | "--prefix" :: [] -> Error "--prefix requires a directory"
+    | "--destdir" :: destdir :: rest ->
+        loop { options with destdir = Some destdir } rest
+    | "--destdir" :: [] -> Error "--destdir requires a directory"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage install_doc)
@@ -650,6 +674,7 @@ let parse_install_args (args : string list) : (install_options, string) result =
       backend_request = default_backend_request;
       profile = None;
       prefix = None;
+      destdir = None;
     }
     args
 
@@ -662,12 +687,13 @@ let parse_explain_args (args : string list) : (explain_options, string) result =
     | "--profile" :: profile :: rest ->
         loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
+    | "--json" :: rest -> loop { options with json = true } rest
     | "--help" :: _ -> Error (command_usage explain_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
-  loop { workspace_dir = "."; targets = []; profile = None } args
+  loop { workspace_dir = "."; targets = []; profile = None; json = false } args
 
 let load_workspace workspace_dir =
   if not (Fs.is_directory workspace_dir) then
@@ -830,7 +856,7 @@ let run_install (options : install_options) =
       match
         Installer.install ~workspace_root:options.workspace_dir
           ~verbose:options.verbose ~backend_request:options.backend_request
-          ?profile:options.profile ?prefix:options.prefix
+          ?profile:options.profile ?prefix:options.prefix ?destdir:options.destdir
           ~requested_targets:options.targets workspace
       with
       | Ok status -> Exit_code status
@@ -860,15 +886,27 @@ let run_explain (options : explain_options) =
       | Ok targets ->
           let workspace_root = Fs.realpath options.workspace_dir in
           let profile = resolve_profile workspace options.profile in
+          let render_reports reports =
+            if options.json then
+              match List.rev reports with
+              | [] -> "[]"
+              | [ report ] -> String.trim report
+              | reports ->
+                  "[\n" ^ String.concat ",\n" (List.map String.trim reports) ^ "\n]"
+            else String.concat "\n\n" (List.rev reports)
+          in
           let rec loop reports = function
             | [] ->
-                print_endline (String.concat "\n\n" (List.rev reports));
+                print_endline (render_reports reports);
                 Exit_code 0
             | target :: rest ->
                 let out_dir =
                   Layout.target_out_dir ~profile workspace_root target
                 in
-                let report_path = Layout.explain_path out_dir in
+                let report_path =
+                  if options.json then Layout.explain_json_path out_dir
+                  else Layout.explain_path out_dir
+                in
                 if Fs.exists report_path then
                   loop (Explain.load_report report_path :: reports) rest
                 else

@@ -88,6 +88,40 @@ let cases =
               "machine-readable explain should preserve rebuild reasons";
             assert_string_contains ~needle:"\"commands\": [" report
               "machine-readable explain should preserve planned commands")) );
+    ( "prints persisted explain JSON directly for automation",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "build should succeed before explain JSON is requested";
+            let report_path =
+              Layout.explain_json_path (Layout.library_out_dir workspace "greeting")
+            in
+            let expected = String.trim (Fs.read_file report_path) in
+            let explain = run_oasis ~cwd:workspace [ "explain"; "--json"; "greeting" ] in
+            assert_int_equal 0 explain.status
+              "explain --json should succeed for built targets";
+            assert_string_equal expected (String.trim explain.output)
+              "explain --json should print the persisted JSON payload verbatim";
+            assert_string_not_contains ~needle:"Target: greeting" explain.output
+              "JSON explain output should not fall back to the text renderer")) );
+    ( "renders a JSON array when multiple explain targets are requested",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "build should succeed before explain JSON arrays are requested";
+            let explain =
+              run_oasis ~cwd:workspace [ "explain"; "--json"; "greeting"; "hello" ]
+            in
+            assert_int_equal 0 explain.status
+              "explain --json should support multiple targets";
+            assert_string_contains ~needle:"[\n{" explain.output
+              "multiple JSON explain targets should be wrapped in an array";
+            assert_string_contains ~needle:"\"target\": \"greeting\"" explain.output
+              "the JSON array should include the first requested target";
+            assert_string_contains ~needle:"\"target\": \"hello\"" explain.output
+              "the JSON array should include the second requested target")) );
     ( "surfaces rebuild reasons and planned compiler commands",
       (fun () ->
         with_fixture "hello" (fun workspace ->

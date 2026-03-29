@@ -13,6 +13,10 @@ let install_root_for_profile workspace_root profile =
 let install_root workspace_root =
   install_root_for_profile workspace_root default_profile
 
+let relative_install_bin_dir = "bin"
+
+let relative_install_lib_dir = "lib"
+
 let target_root_for_profile workspace_root profile kind =
   Filename.concat (build_root_for_profile workspace_root profile) kind
 
@@ -64,23 +68,39 @@ let explain_path out_dir = Explain.report_path out_dir
 
 let explain_json_path out_dir = Explain.json_path out_dir
 
-let install_bin_dir prefix = Filename.concat prefix "bin"
+let install_bin_dir prefix = Filename.concat prefix relative_install_bin_dir
 
 let relative_install_library_dir name = Filename.concat "lib" name
 
 let install_library_dir prefix name =
   Filename.concat prefix (relative_install_library_dir name)
 
+let relative_install_library_meta_path name =
+  Filename.concat (relative_install_library_dir name) "META"
+
+let install_library_meta_path prefix name =
+  Filename.concat prefix (relative_install_library_meta_path name)
+
 let relative_install_executable_path name = Filename.concat "bin" name
 
 let install_executable_path prefix name =
   Filename.concat prefix (relative_install_executable_path name)
 
+let relative_install_share_dir workspace_name =
+  Filename.concat "share/oasis" workspace_name
+
 let install_share_dir prefix workspace_name =
-  Filename.concat (Filename.concat prefix "share/oasis") workspace_name
+  Filename.concat prefix (relative_install_share_dir workspace_name)
+
+let relative_install_metadata_path workspace_name =
+  Filename.concat (relative_install_share_dir workspace_name) "install.json"
 
 let install_metadata_path prefix workspace_name =
-  Filename.concat (install_share_dir prefix workspace_name) "install.json"
+  Filename.concat prefix (relative_install_metadata_path workspace_name)
+
+let relative_install_manifest_copy_path workspace_name =
+  Filename.concat (relative_install_share_dir workspace_name)
+    Manifest.default_filename
 
 let install_manifest_copy_path prefix workspace_name =
-  Filename.concat (install_share_dir prefix workspace_name) Manifest.default_filename
+  Filename.concat prefix (relative_install_manifest_copy_path workspace_name)

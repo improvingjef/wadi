@@ -23,6 +23,8 @@ let cases =
             let installed_binary = Filename.concat prefix "bin/hello" in
             assert_file_exists installed_binary;
             assert_file_exists (Filename.concat prefix "lib/greeting/greeting.cmi");
+            let meta_path = Filename.concat prefix "lib/greeting/META" in
+            assert_file_exists meta_path;
             assert_one_file_exists
               [
                 Filename.concat prefix "lib/greeting/libgreeting.cmxa";
@@ -35,13 +37,24 @@ let cases =
             assert_file_exists metadata_path;
             assert_file_exists
               (Filename.concat prefix "share/oasis/hello/oasis.toml");
+            let meta = Fs.read_file meta_path in
+            assert_string_contains ~needle:"description = \"hello library greeting\"" meta
+              "install should emit a findlib-friendly META description";
+            assert_string_contains ~needle:"directory = \".\"" meta
+              "install should emit a relative META directory";
             let metadata = Fs.read_file metadata_path in
             assert_string_contains ~needle:"\"workspace\": \"hello\"" metadata
               "install metadata should record the workspace name";
             assert_string_contains ~needle:"\"name\": \"greeting\"" metadata
               "install metadata should record installed libraries";
+            assert_string_contains ~needle:"\"meta\": \"lib/greeting/META\"" metadata
+              "install metadata should record library META paths";
             assert_string_contains ~needle:"\"path\": \"bin/hello\"" metadata
               "install metadata should record installed executables";
+            assert_string_contains ~needle:"\"share_dir\": \"share/oasis/hello\"" metadata
+              "install metadata should publish the staged share root";
+            assert_string_contains ~needle:"\"ocamlpath\": [" metadata
+              "install metadata should publish OCAMLPATH roots for consumers";
             let run = run_binary installed_binary [] in
             assert_int_equal 0 run.status
               "installed executables should remain runnable from the staged prefix";
@@ -66,6 +79,68 @@ let cases =
             in
             assert_string_not_contains ~needle:"\"name\": \"greeting\"" metadata
               "install metadata should not list unrequested libraries")) );
+    ( "supports packaging-style staging with --destdir",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let destdir = Filename.concat workspace "_pkg" in
+            let install =
+              run_oasis ~cwd:workspace
+                [ "install"; "--prefix"; "/usr/local"; "--destdir"; "_pkg" ]
+            in
+            assert_int_equal 0 install.status
+              "install should support DESTDIR-style staging";
+            let staged_root = Filename.concat destdir "usr/local" in
+            assert_file_exists (Filename.concat staged_root "bin/hello");
+            assert_file_exists (Filename.concat staged_root "lib/greeting/META");
+            let metadata_path =
+              Filename.concat staged_root "share/oasis/hello/install.json"
+            in
+            assert_file_exists metadata_path;
+            let metadata = Fs.read_file metadata_path in
+            assert_string_contains ~needle:"\"prefix\": \"/usr/local\"" metadata
+              "install metadata should preserve the logical install prefix";
+            assert_string_contains
+              ~needle:(Printf.sprintf "\"stage_root\": %S" (Fs.realpath staged_root))
+              metadata
+              "install metadata should record the realized staging root";
+            assert_string_contains
+              ~needle:(Printf.sprintf "\"destdir\": %S" (Fs.realpath destdir))
+              metadata
+              "install metadata should record the resolved destdir")) );
+    ( "records findlib requires in staged META files",
+      (fun () ->
+        with_temp_dir "oasis-install-meta" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.patterns]
+dir = "lib"
+modules = ["patterns"]
+packages = ["str"]
+
+[library.facade]
+dir = "facade"
+modules = ["facade"]
+deps = ["patterns"]
+|};
+            write_source workspace "lib/patterns.ml"
+              {|
+let contains_digit text =
+  Str.string_match (Str.regexp ".*[0-9].*") text 0
+|};
+            write_source workspace "facade/facade.ml"
+              {|let contains_digit = Patterns.contains_digit|};
+            let prefix = Filename.concat workspace "_stage" in
+            let install =
+              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+            in
+            assert_int_equal 0 install.status
+              "install should succeed before META requires are inspected";
+            let patterns_meta = Fs.read_file (Filename.concat prefix "lib/patterns/META") in
+            assert_string_contains ~needle:"requires = \"str\"" patterns_meta
+              "package-backed libraries should export external requires";
+            let facade_meta = Fs.read_file (Filename.concat prefix "lib/facade/META") in
+            assert_string_contains ~needle:"requires = \"patterns\"" facade_meta
+              "dependent libraries should export internal library requires")) );
     ( "rejects test targets for install",
       (fun () ->
         with_temp_dir "oasis-install-tests" (fun workspace ->

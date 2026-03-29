@@ -32,3 +32,7 @@
 - Persisting `.oasis-explain.json` beside the human report is cheap and worthwhile as long as both formats are emitted from the same builder data. Two renderers over one fact set are maintainable; two diagnostic code paths are not.
 - The next install friction showed up immediately: local staging is pleasant, but downstream packaging still wants `META` export and `DESTDIR`-style relocation.
 - Static shell completion is enough to prove the command-table design, but the moment the tool grows real workspace nouns, target-aware and profile-aware completion becomes part of usability rather than polish.
+- `META` generation has to come from manifest intent, not just whichever artifacts happened to land in `lib/<name>`. The useful signal is direct workspace-library deps plus external package deps.
+- `DESTDIR` is a two-path problem: package managers care about the logical prefix, while the filesystem cares about the realized stage root. Install metadata has to record both or the staging story stays ambiguous.
+- `oasis explain --json` is most trustworthy when it prints the persisted payload directly. Automation should consume the exact sibling file the builder wrote, not a second renderer that might drift.
+- macOS temp paths quietly canonicalize through `/private`; staging tests that care about installed roots need to compare normalized paths, not raw temp-directory strings.

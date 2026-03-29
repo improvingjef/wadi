@@ -43,8 +43,10 @@
 42. [ ] Drive `scripts/generate_bootstrap_makefile.ml` from the workspace model or generated metadata so adding a core module never requires editing a second hard-coded module list.
 43. [x] Persist a machine-readable sibling to `.oasis-explain` so editors and CI can consume rebuild reasons without scraping human-formatted text.
 44. [ ] Add `oasis explain --current` or an equivalent dry-run diff so users can inspect why a target would rebuild before paying the build cost.
-45. [ ] Export findlib-friendly `META` files and install-layout metadata from `oasis install` so staged libraries can be consumed without bespoke `-I` wiring.
-46. [ ] Add `DESTDIR` or equivalent relocation support to `oasis install` so package-manager staging does not have to rewrite prefixes after the fact.
+45. [x] Export findlib-friendly `META` files and install-layout metadata from `oasis install` so staged libraries can be consumed without bespoke `-I` wiring.
+46. [x] Add `DESTDIR` or equivalent relocation support to `oasis install` so package-manager staging does not have to rewrite prefixes after the fact.
 47. [ ] Teach `oasis completion` to suggest workspace-local target names and profile names instead of only static flags and shell names.
-48. [ ] Add `oasis explain --json` so automation can print the persisted `.oasis-explain.json` payload directly instead of opening files by path.
+48. [x] Add `oasis explain --json` so automation can print the persisted `.oasis-explain.json` payload directly instead of opening files by path.
 49. [ ] Generate release docs and packaged shell-completion artifacts from `oasis docs` and `oasis completion` in CI so shipped assets cannot drift from the command table.
+50. [ ] Close over transitive workspace-library dependencies during `oasis install` or warn when generated `META` files reference unstaged internal packages.
+51. [ ] Clarify and test relative `--prefix` plus `--destdir` semantics so local staging does not inherit surprising absolute workspace paths.

@@ -32,5 +32,14 @@ let cases =
         assert_string_equal
           "/tmp/oasis-layout/_oasis/build/default/exe/app/.oasis-explain"
           (Layout.explain_path (Layout.executable_out_dir workspace "app"))
-          "target explain reports should live next to the target artifacts")) ;
+          "target explain reports should live next to the target artifacts";
+        assert_string_equal "/tmp/oasis-layout/lib/core/META"
+          (Layout.install_library_meta_path "/tmp/oasis-layout" "core")
+          "installed library META files should live beside staged library artifacts";
+        assert_string_equal "/tmp/oasis-layout/share/oasis/demo/install.json"
+          (Layout.install_metadata_path "/tmp/oasis-layout" "demo")
+          "install metadata should live under the workspace share root";
+        assert_string_equal "share/oasis/demo/oasis.toml"
+          (Layout.relative_install_manifest_copy_path "demo")
+          "manifest copies should have a stable relative install path")) ;
   ]
