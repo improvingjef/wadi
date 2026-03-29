@@ -1,6 +1,10 @@
+OCAMLC ?= ocamlc
 OCAMLOPT ?= ocamlopt
 OCAMLFLAGS ?= -g
-UNIX_FLAGS := -I +unix
+STDLIB_DIR := $(shell $(OCAMLC) -where)
+UNIX_DIR := $(shell if [ -e "$(STDLIB_DIR)/unix/unix.cmi" ]; then printf '%s\n' "$(STDLIB_DIR)/unix"; elif [ -e "$(STDLIB_DIR)/unix.cmi" ]; then printf '%s\n' "$(STDLIB_DIR)"; fi)
+UNIX_FLAGS := $(if $(UNIX_DIR),-I $(UNIX_DIR),)
+UNIX_ARCHIVE := $(if $(UNIX_DIR),$(UNIX_DIR)/unix.cmxa,unix.cmxa)
 
 BUILD_DIR := _bootstrap
 OBJ_DIR := $(BUILD_DIR)/obj
@@ -10,6 +14,7 @@ COMMON_OBJS := \
 	$(OBJ_DIR)/string_util.cmx \
 	$(OBJ_DIR)/fs.cmx \
 	$(OBJ_DIR)/process.cmx \
+	$(OBJ_DIR)/toolchain.cmx \
 	$(OBJ_DIR)/manifest.cmx \
 	$(OBJ_DIR)/builder.cmx \
 	$(OBJ_DIR)/cleaner.cmx
@@ -52,10 +57,13 @@ $(OBJ_DIR)/fs.cmx: src/fs.ml $(OBJ_DIR)/string_util.cmx | $(OBJ_DIR)
 $(OBJ_DIR)/process.cmx: src/process.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/fs.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
+$(OBJ_DIR)/toolchain.cmx: src/toolchain.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/process.cmx | $(OBJ_DIR)
+	$(OCAMLOPT) $(OCAMLFLAGS) -I $(OBJ_DIR) -c -o $@ $<
+
 $(OBJ_DIR)/manifest.cmx: src/manifest.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/fs.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
-$(OBJ_DIR)/builder.cmx: src/builder.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/fs.cmx $(OBJ_DIR)/process.cmx $(OBJ_DIR)/manifest.cmx | $(OBJ_DIR)
+$(OBJ_DIR)/builder.cmx: src/builder.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/fs.cmx $(OBJ_DIR)/process.cmx $(OBJ_DIR)/toolchain.cmx $(OBJ_DIR)/manifest.cmx | $(OBJ_DIR)
 	$(OCAMLOPT) $(OCAMLFLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
 $(OBJ_DIR)/cleaner.cmx: src/cleaner.ml $(OBJ_DIR)/string_util.cmx $(OBJ_DIR)/fs.cmx $(OBJ_DIR)/manifest.cmx $(OBJ_DIR)/builder.cmx | $(OBJ_DIR)
@@ -95,7 +103,7 @@ $(OBJ_DIR)/test_main.cmx: test/test_main.ml $(OBJ_DIR)/test_support.cmx $(OBJ_DI
 	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
 
 $(BIN_DIR)/oasis: $(APP_OBJS) | $(BIN_DIR)
-	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -o $@ unix.cmxa $(APP_OBJS)
+	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -o $@ $(UNIX_ARCHIVE) $(APP_OBJS)
 
 $(BIN_DIR)/test_runner: $(COMMON_OBJS) $(TEST_OBJS) | $(BIN_DIR)
-	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -o $@ unix.cmxa $(COMMON_OBJS) $(TEST_OBJS)
+	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -o $@ $(UNIX_ARCHIVE) $(COMMON_OBJS) $(TEST_OBJS)

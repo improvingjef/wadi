@@ -53,3 +53,27 @@ let dedup_preserve items =
         Hashtbl.add seen item ();
         true))
     items
+
+let split_whitespace text =
+  let length = String.length text in
+  let is_whitespace = function
+    | ' ' | '\t' | '\n' | '\r' -> true
+    | _ -> false
+  in
+  let rec skip index =
+    if index < length && is_whitespace text.[index] then skip (index + 1)
+    else index
+  in
+  let rec take index =
+    if index < length && not (is_whitespace text.[index]) then take (index + 1)
+    else index
+  in
+  let rec loop index acc =
+    let start = skip index in
+    if start >= length then List.rev acc
+    else
+      let stop = take start in
+      let word = String.sub text start (stop - start) in
+      loop stop (word :: acc)
+  in
+  loop 0 []

@@ -133,4 +133,32 @@ deps = ["core"]
             assert_string_equal "unit" test.name
               "test name should come from the section path"
         | _ -> fail "unexpected target layout in parsed workspace")) ;
+    ( "parses external package declarations",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[library.patterns]
+dir = "lib"
+modules = ["patterns"]
+packages = ["str", "compiler-libs.common"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+packages = ["unix"]
+deps = ["patterns"]
+|})
+        in
+        match workspace.Manifest.targets with
+        | [ Manifest.Library library; Manifest.Executable executable ] ->
+            assert_string_equal "str" (List.nth library.packages 0)
+              "library packages should preserve manifest order";
+            assert_string_equal "compiler-libs.common"
+              (List.nth library.packages 1)
+              "package names with dots should be accepted";
+            assert_string_equal "unix" (List.hd executable.packages)
+              "executables should parse direct package requirements"
+        | _ -> fail "unexpected target layout in parsed workspace")) ;
   ]

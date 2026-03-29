@@ -8,6 +8,7 @@ type library = {
   dir : string;
   modules : string list;
   deps : string list;
+  packages : string list;
 }
 
 type runnable = {
@@ -16,6 +17,7 @@ type runnable = {
   main : string;
   modules : string list;
   deps : string list;
+  packages : string list;
 }
 
 type executable = runnable
@@ -61,6 +63,11 @@ let target_deps = function
   | Library library -> library.deps
   | Executable executable -> executable.deps
   | Test test -> test.deps
+
+let target_packages = function
+  | Library library -> library.packages
+  | Executable executable -> executable.packages
+  | Test test -> test.packages
 
 let target_kind_name = function
   | Library _ -> "library"
@@ -231,11 +238,28 @@ let validate_identifier_list ~allow_empty path line label items =
     in
     loop items
 
+let validate_package_list path line packages =
+  let seen = Hashtbl.create (List.length packages) in
+  let rec loop = function
+    | [] -> Ok ()
+    | package_name :: rest ->
+        if package_name = "" then
+          error path line "packages cannot contain an empty entry"
+        else if Hashtbl.mem seen package_name then
+          error path line
+            (Printf.sprintf "duplicate packages entry '%s'" package_name)
+        else (
+          Hashtbl.add seen package_name ();
+          loop rest)
+  in
+  loop packages
+
 let parse_library path section name =
-  let* () = allowed_fields path section [ "dir"; "modules"; "deps" ] in
+  let* () = allowed_fields path section [ "dir"; "modules"; "deps"; "packages" ] in
   let* dir = required_string path section "dir" in
   let* modules = required_strings path section "modules" in
   let* deps = optional_strings path section "deps" in
+  let* packages = optional_strings path section "packages" in
   let* () =
     validate_identifier_list ~allow_empty:false path section.line "modules"
       modules
@@ -243,14 +267,18 @@ let parse_library path section name =
   let* () =
     validate_identifier_list ~allow_empty:true path section.line "deps" deps
   in
-  Ok (Library { name; dir; modules; deps })
+  let* () = validate_package_list path section.line packages in
+  Ok (Library { name; dir; modules; deps; packages })
 
 let parse_runnable path section name =
-  let* () = allowed_fields path section [ "dir"; "main"; "modules"; "deps" ] in
+  let* () =
+    allowed_fields path section [ "dir"; "main"; "modules"; "deps"; "packages" ]
+  in
   let* dir = required_string path section "dir" in
   let* main = required_string path section "main" in
   let* modules = optional_strings path section "modules" in
   let* deps = optional_strings path section "deps" in
+  let* packages = optional_strings path section "packages" in
   let* () =
     validate_identifier_list ~allow_empty:true path section.line "modules"
       modules
@@ -258,12 +286,13 @@ let parse_runnable path section name =
   let* () =
     validate_identifier_list ~allow_empty:true path section.line "deps" deps
   in
+  let* () = validate_package_list path section.line packages in
   if main = "" then error path section.line "main cannot be empty"
   else if String.contains main '/' || String.contains main '.' then
     error path section.line "main must be a file stem without path or extension"
   else if List.mem main modules then
     error path section.line "main should not be repeated in modules"
-  else Ok { name; dir; main; modules; deps }
+  else Ok { name; dir; main; modules; deps; packages }
 
 let parse_executable path section name =
   let* executable = parse_runnable path section name in
