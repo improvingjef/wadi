@@ -3,6 +3,7 @@ OCAMLC ?= ocamlc
 OCAMLOPT ?= ocamlopt
 OCAMLFIND ?= ocamlfind
 OCAMLFLAGS ?= -g
+OASIS_BIN ?= $(BIN_DIR)/oasis
 
 BUILD_DIR := _bootstrap
 OBJ_DIR := $(BUILD_DIR)/obj
@@ -10,6 +11,7 @@ SEED_OBJ_DIR := $(BUILD_DIR)/seed-obj
 BIN_DIR := $(BUILD_DIR)/bin
 BOOTSTRAP_MANIFEST := oasis.toml
 BOOTSTRAP_GENERATOR := scripts/bootstrap_seed_main.ml
+BOOTSTRAP_INTERNAL_COMMAND := __bootstrap_makefile
 BOOTSTRAP_SEED_METADATA := scripts/bootstrap_seed_metadata.mk
 BOOTSTRAP_SEED_BIN := $(BIN_DIR)/oasis-seed
 BOOTSTRAP_PROFILE ?=
@@ -38,7 +40,7 @@ benchmark-bootstrap:
 
 refresh-bootstrap-seed-metadata:
 	tmp=$(BOOTSTRAP_SEED_METADATA).tmp; \
-	BOOTSTRAP_MODULE_MANIFEST=$(BOOTSTRAP_MANIFEST) $(OCAML) scripts/render_bootstrap_mod_use.ml --format seed-metadata > $$tmp && mv $$tmp $(BOOTSTRAP_SEED_METADATA)
+	$(OASIS_BIN) $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --format seed-metadata > $$tmp && mv $$tmp $(BOOTSTRAP_SEED_METADATA)
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -106,13 +108,17 @@ BOOTSTRAP_LIBRARY_PACKAGE_FLAGS := $(addprefix -package ,$(BOOTSTRAP_LIBRARY_PAC
 BOOTSTRAP_SHARED_OUTPUTS := $(foreach stem,$(BOOTSTRAP_LIBRARY_MODULE_STEMS),$(OBJ_DIR)/$(stem).$(OBJ_EXT) $(OBJ_DIR)/$(stem).cmi $(OBJ_DIR)/$(stem).o)
 BOOTSTRAP_SEED_MAIN_OBJ := $(SEED_OBJ_DIR)/bootstrap_seed_main.$(OBJ_EXT)
 
-define TOUCH_BOOTSTRAP_SHARED_OUTPUTS
+define SYNC_BOOTSTRAP_SHARED_OUTPUTS
 set -eu; \
-for path in $(BOOTSTRAP_SHARED_OUTPUTS); do \
-	if [ -f "$$path" ]; then \
-		touch "$$path"; \
-	fi; \
-done
+if grep -q '^COMMON_SEED_REUSE := yes$$' "$(1)"; then \
+	for path in $(BOOTSTRAP_SHARED_OUTPUTS); do \
+		if [ -f "$$path" ]; then \
+			touch "$$path"; \
+		fi; \
+	done; \
+else \
+	rm -f $(BOOTSTRAP_SHARED_OUTPUTS); \
+fi
 endef
 
 $(BOOTSTRAP_SEED_BIN): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_SEED_METADATA) $(BOOTSTRAP_LIBRARY_COMPILE_SOURCES) | $(OBJ_DIR) $(SEED_OBJ_DIR) $(BIN_DIR)
@@ -135,12 +141,12 @@ $(BOOTSTRAP_SEED_BIN): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_
 $(BOOTSTRAP_APP_MK): $(BOOTSTRAP_SEED_BIN) $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) | $(BUILD_DIR)
 	tmp=$@.tmp; \
 	$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope app $(BOOTSTRAP_PROFILE_ARG) > $$tmp && mv $$tmp $@; \
-	$(TOUCH_BOOTSTRAP_SHARED_OUTPUTS)
+	$(call SYNC_BOOTSTRAP_SHARED_OUTPUTS,$@)
 
 $(BOOTSTRAP_FULL_MK): $(BOOTSTRAP_SEED_BIN) $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) | $(BUILD_DIR)
 	tmp=$@.tmp; \
 	$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope full $(BOOTSTRAP_PROFILE_ARG) > $$tmp && mv $$tmp $@; \
-	$(TOUCH_BOOTSTRAP_SHARED_OUTPUTS)
+	$(call SYNC_BOOTSTRAP_SHARED_OUTPUTS,$@)
 
 -include $(BOOTSTRAP_MK)
 endif

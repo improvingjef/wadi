@@ -138,9 +138,10 @@ Important rules:
 - Generated `.ml` or `.mli` files may not collide with checked-in source files
   in the target directory. Oasis fails fast instead of silently choosing one.
 - Wrapped libraries may keep a checked-in `Foo.ml` and/or `Foo.mli` wrapper.
-  When `oasis migrate` infers modules from the source tree, it omits that
-  wrapper stem from `modules = [...]` so the manifest matches the wrapped
-  library surface instead of fighting it.
+  When `oasis migrate` sees that wrapper in the source tree, it omits that
+  wrapper stem from `modules = [...]` even if the dune stanza listed it
+  explicitly, so the manifest matches the wrapped library surface instead of
+  fighting it.
 
 ## Multi-Package Workspaces
 

@@ -1051,7 +1051,8 @@ let parse_library ~workspace_root ~dune_path acc fields =
   let wrapped = Option.value ~default:true wrapped in
   let modules =
     match modules with
-    | Some modules -> modules
+    | Some modules ->
+        maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name modules
     | None ->
         maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name inferred_modules
   in

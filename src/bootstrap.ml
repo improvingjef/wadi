@@ -2,6 +2,10 @@ type scope =
   | Executable_only
   | Full
 
+type render_format =
+  | Makefile
+  | Seed_metadata
+
 type module_plan = {
   stem : string;
   logical_ml_path : string;
@@ -24,6 +28,7 @@ type workspace_plan = {
   scope : scope;
   profile : string;
   inputs : string list;
+  common_seed_reuse : bool;
   common : target_plan;
   executable : target_plan;
   test : target_plan option;
@@ -69,6 +74,57 @@ let index_targets workspace =
     (fun target -> Hashtbl.replace table (Manifest.target_name target) target)
     workspace.Manifest.targets;
   table
+
+let resolve_bootstrap_library_name () =
+  match Sys.getenv_opt "BOOTSTRAP_LIBRARY" with
+  | Some name when String.trim name <> "" -> Some (String.trim name)
+  | Some _ | None -> None
+
+let bootstrap_libraries workspace =
+  List.filter_map
+    (function
+      | Manifest.Library library -> Some library
+      | Manifest.Executable _ | Manifest.Test _ -> None)
+    workspace.Manifest.targets
+
+let choose_bootstrap_library ~manifest_path workspace =
+  let libraries = bootstrap_libraries workspace in
+  match resolve_bootstrap_library_name () with
+  | Some requested -> (
+      match
+        List.find_opt
+          (fun (library : Manifest.library) -> library.name = requested)
+          libraries
+      with
+      | Some library -> Ok library
+      | None ->
+          Error
+            (Printf.sprintf
+               "bootstrap library '%s' was not found in %s" requested
+               manifest_path))
+  | None -> (
+      match
+        List.find_opt
+          (fun (library : Manifest.library) -> library.name = "oasis_core")
+          libraries
+      with
+      | Some library -> Ok library
+      | None -> (
+          match libraries with
+          | [ library ] -> Ok library
+          | [] ->
+              Error
+                (Printf.sprintf "no [library.*] section found in %s" manifest_path)
+          | libraries ->
+              Error
+                (Printf.sprintf
+                   "multiple libraries found in %s; set BOOTSTRAP_LIBRARY to \
+                    choose one (%s)"
+                   manifest_path
+                   (String.concat ", "
+                      (List.map
+                         (fun (library : Manifest.library) -> library.name)
+                         libraries)))))
 
 let scope_name = function
   | Executable_only -> "app"
@@ -246,6 +302,20 @@ let ordered_module_plans ~workspace_root ordered_stems prepared_sources =
                  "bootstrap planning lost source descriptor for module '%s'" stem))
   in
   loop [] ordered_stems
+
+let module_uses_logical_paths (module_plan : module_plan) =
+  module_plan.ml_path = module_plan.logical_ml_path
+  &&
+  match (module_plan.mli_path, module_plan.logical_mli_path) with
+  | None, None -> true
+  | Some path, Some logical_path -> path = logical_path
+  | Some _, None | None, Some _ -> false
+
+let common_seed_reuse_allowed (target : target_plan) =
+  target.compile_flags = []
+  && target.env = []
+  && target.ppx_tools = []
+  && List.for_all module_uses_logical_paths target.ordered_modules
 
 let ensure_unique_module_stems groups =
   let stems : (string, module_owner list) Hashtbl.t = Hashtbl.create 16 in
@@ -490,6 +560,7 @@ let plan ~workspace_root ?profile ~scope workspace =
           (List.map
              (workspace_relative_path ~workspace_root)
              (common_inputs @ executable_inputs @ test_inputs));
+      common_seed_reuse = common_seed_reuse_allowed common;
       common;
       executable = executable_plan;
       test = test_plan;
@@ -623,6 +694,8 @@ let render_makefile_from_plan ~workspace_root plan =
       "# Edit oasis.toml instead of this file.";
       ("# Bootstrap scope: " ^ scope_name plan.scope);
       ("# Bootstrap profile: " ^ plan.profile);
+      ("COMMON_SEED_REUSE := "
+      ^ if plan.common_seed_reuse then "yes" else "no");
       "";
       rule_header "$(BOOTSTRAP_MK)"
         ([ "$(BOOTSTRAP_MANIFEST)"; "$(BOOTSTRAP_GENERATOR)" ] @ plan.inputs);
@@ -652,6 +725,77 @@ let render_makefile_from_plan ~workspace_root plan =
   in
   String.concat "\n" lines ^ "\n"
 
+let ordered_prepared_sources ordered_stems prepared_sources =
+  let source_table : (string, Builder.prepared_source) Hashtbl.t =
+    Hashtbl.create (List.length prepared_sources)
+  in
+  List.iter
+    (fun (source : Builder.prepared_source) ->
+      Hashtbl.replace source_table source.source.stem source)
+    prepared_sources;
+  let rec loop acc = function
+    | [] -> Ok (List.rev acc)
+    | stem :: rest -> (
+        match Hashtbl.find_opt source_table stem with
+        | Some source -> loop (source :: acc) rest
+        | None ->
+            Error
+              (Printf.sprintf
+                 "bootstrap seed metadata lost source descriptor for module '%s'" stem))
+  in
+  loop [] ordered_stems
+
+let seed_metadata_lines ~manifest_path workspace =
+  let workspace_root = Fs.realpath (Filename.dirname manifest_path) in
+  let* library = choose_bootstrap_library ~manifest_path workspace in
+  let target = Manifest.Library library in
+  let index = index_targets workspace in
+  let* packages = effective_packages index target in
+  let out_dir =
+    bootstrap_target_out_dir ~workspace_root
+      ~profile:(Manifest.default_profile workspace)
+      target
+  in
+  let* sources =
+    Builder.library_source_descriptors ~workspace_root ~out_dir
+      ~planned_generated_outputs:[] library
+  in
+  let* prepared_sources =
+    Builder.prepare_sources ~mode:Builder.Plan_only ~workspace_root ~out_dir
+      ~target_env:[] [] sources
+  in
+  let session = Toolchain.create_session () in
+  let* package_resolution = Toolchain.resolve_packages ~session packages in
+  let* ordered_stems =
+    Builder.infer_module_order ~session ~verbose:false ~env:[]
+      ~target_kind:"library" ~target_name:library.name package_resolution
+      prepared_sources
+  in
+  let* ordered_sources =
+    ordered_prepared_sources ordered_stems prepared_sources
+  in
+  let compile_paths =
+    List.concat_map
+      (fun (source : Builder.prepared_source) ->
+        (if source.source.mli_exists then [ source.source.mli_relative ] else [])
+        @ [ source.source.ml_relative ])
+      ordered_sources
+  in
+  Ok
+    [
+      "# Generated by oasis __bootstrap_makefile --format seed-metadata.";
+      "# Edit oasis.toml instead of this file.";
+      "# Refresh with: make refresh-bootstrap-seed-metadata";
+      "BOOTSTRAP_LIBRARY_COMPILE_SOURCES := " ^ String.concat " " compile_paths;
+      "BOOTSTRAP_LIBRARY_MODULE_STEMS := " ^ String.concat " " ordered_stems;
+      "BOOTSTRAP_LIBRARY_PACKAGES := " ^ String.concat " " packages;
+    ]
+
+let render_seed_metadata ~manifest_path () =
+  let* workspace = Manifest.load manifest_path in
+  let* lines = seed_metadata_lines ~manifest_path workspace in
+  Ok (String.concat "\n" lines ^ "\n")
+
 let render_makefile ?profile ?(scope = Full) ~manifest_path () =
   let* workspace = Manifest.load manifest_path in
   let workspace_root = Fs.realpath (Filename.dirname manifest_path) in
@@ -664,6 +808,7 @@ type command_options = {
   manifest_path : string;
   profile : string option;
   scope : scope;
+  format : render_format;
 }
 
 let parse_scope value =
@@ -674,6 +819,15 @@ let parse_scope value =
       Error
         (Printf.sprintf
            "unknown scope '%s'; expected app, executable, or full" value)
+
+let parse_format value =
+  match String.lowercase_ascii (String.trim value) with
+  | "makefile" -> Ok Makefile
+  | "seed_metadata" | "seed-metadata" -> Ok Seed_metadata
+  | value ->
+      Error
+        (Printf.sprintf
+           "unknown format '%s'; expected makefile or seed-metadata" value)
 
 let parse_command_args args =
   let rec loop options = function
@@ -688,9 +842,13 @@ let parse_command_args args =
         let* scope = parse_scope value in
         loop { options with scope } rest
     | "--scope" :: [] -> Error "--scope requires app, executable, or full"
+    | "--format" :: value :: rest ->
+        let* format = parse_format value in
+        loop { options with format } rest
+    | "--format" :: [] -> Error "--format requires makefile or seed-metadata"
     | "--help" :: _ ->
         Error
-          "usage: oasis __bootstrap_makefile --manifest PATH [--profile NAME] [--scope app|executable|full]"
+          "usage: oasis __bootstrap_makefile --manifest PATH [--profile NAME] [--scope app|executable|full] [--format makefile|seed-metadata]"
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | _ :: _ ->
@@ -698,7 +856,12 @@ let parse_command_args args =
           "oasis __bootstrap_makefile does not accept positional arguments"
   in
   loop
-    { manifest_path = Manifest.default_filename; profile = None; scope = Full }
+    {
+      manifest_path = Manifest.default_filename;
+      profile = None;
+      scope = Full;
+      format = Makefile;
+    }
     args
 
 let run_hidden_command args =
@@ -708,8 +871,11 @@ let run_hidden_command args =
       2
   | Ok options -> (
       match
-        render_makefile ?profile:options.profile ~scope:options.scope
-          ~manifest_path:options.manifest_path ()
+        (match options.format with
+        | Makefile ->
+            render_makefile ?profile:options.profile ~scope:options.scope
+              ~manifest_path:options.manifest_path ()
+        | Seed_metadata -> render_seed_metadata ~manifest_path:options.manifest_path ())
       with
       | Ok text ->
           print_string text;

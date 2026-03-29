@@ -106,6 +106,27 @@ let cases =
             assert_string_not_contains ~needle:"modules = [\"core\", \"greeting\"]"
               migrate.output
               "migrate should not emit the wrapper stem as a child module")) );
+    ( "drops checked-in wrapper sources from explicit dune wrapped-library module lists",
+      (fun () ->
+        with_temp_dir "oasis-migrate-explicit-wrapper-modules" (fun workspace ->
+            write_workspace_file workspace "lib/dune"
+              {|
+(library
+ (name core)
+ (modules core greeting))
+|};
+            write_source workspace "lib/core.ml" {|module Greeting = Greeting|};
+            write_source workspace "lib/greeting.ml" {|let message = "hello"|};
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should preserve explicit dune wrapped-library module lists with a checked-in wrapper";
+            assert_string_contains
+              ~needle:"[library.core]\nwrapped = true\ndir = \"lib\"\nmodules = [\"greeting\"]\n"
+              migrate.output
+              "migrate should omit the checked-in wrapper stem even when dune lists it explicitly";
+            assert_string_not_contains ~needle:"modules = [\"core\", \"greeting\"]"
+              migrate.output
+              "migrate should not keep the wrapper stem in the migrated module list")) );
     ( "infers helper modules for dune executables groups",
       (fun () ->
         with_temp_dir "oasis-migrate-executables" (fun workspace ->
@@ -208,7 +229,7 @@ version = 1
                   migrate.output
                   "migrate should turn dune rules into oasis actions";
                 assert_string_contains
-                  ~needle:"[library.core]\npublic_name = \"migrate_demo.core\"\nwrapped = true\ndir = \".\"\nmodules = [\"core\", \"version\"]\nactions = [\"dune_action_3\"]\npreprocess = [\"dune_preprocess_1\"]\npackages = [\"unix\"]\n"
+                  ~needle:"[library.core]\npublic_name = \"migrate_demo.core\"\nwrapped = true\ndir = \".\"\nmodules = [\"version\"]\nactions = [\"dune_action_3\"]\npreprocess = [\"dune_preprocess_1\"]\npackages = [\"unix\"]\n"
                   migrate.output
                   "migrate should preserve public library metadata and attach generated tools";
                 assert_string_contains

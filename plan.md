@@ -82,7 +82,7 @@
 73a. [x] Implement library namespace wrapping so a library named `foo` generates a wrapper module that re-exports all child modules as `Foo.Child_module`. This is required for compatibility with any dune-built OCaml project that uses `(libraries ...)` namespacing and is the single biggest blocker for real-world migration.
 
 20. [x] Benchmark build latency and tighten startup and execution overhead.
-67. [ ] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
+67. [x] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
 68. [x] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
 69. [ ] Publish an `oasis.opam` package to the opam repository so OCaml developers can install oasis through their existing toolchain with `opam install oasis`.
 70. [ ] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
@@ -99,10 +99,11 @@
 90. [x] Lower the shell-quoted noise in migrated composite dune actions by mapping `with-stdin-from`, `with-stdout-to`, and `progn` to more structured oasis action/preprocess fields when possible instead of emitting `sh -c` fallbacks.
 91. [ ] Feed the generated `package/share/...` completion tree into future opam/Homebrew/Nix packaging definitions so downstream installers reuse one canonical install layout instead of re-encoding shell-specific paths.
 92. [x] Introduce first-class multi-step action sequences so migrated multi-command dune `progn` rules no longer need a shell fallback once command chaining deserves manifest-level structure.
-93. [ ] Teach `oasis migrate` to recognize explicit wrapped-library module lists that intentionally keep a checked-in `Foo.ml` wrapper, not just the source-inferred wrapper case.
+93. [x] Teach `oasis migrate` to recognize explicit wrapped-library module lists that intentionally keep a checked-in `Foo.ml` wrapper, not just the source-inferred wrapper case.
 94. [x] Extend `oasis env` with a `bench` mode so benchmark subprocess environments are inspectable with the same ergonomics as build, run, test, and install.
 95. [ ] Add dedicated `[bench.*]` target declarations if executable-only benchmarking becomes too limiting for real-world suites that need per-benchmark metadata or non-default argv.
 96. [x] Replace the remaining `$(shell $(OCAML) scripts/render_bootstrap_mod_use.ml ...)` cold-start metadata probe with a compiled or cached helper so bootstrap source discovery no longer needs the OCaml interpreter even after the planner itself is compiled.
 97. [x] Collapse duplicate cold-start compilation between `oasis-seed` and the subsequent app bootstrap build so removing the toplevel planner path does not replace one bootstrap tax with two full compiles of the core modules.
-98. [ ] Teach the compiled bootstrap planner to refresh `scripts/bootstrap_seed_metadata.mk` directly so the legacy metadata helper script can disappear instead of surviving as a generator-only maintenance path.
-99. [ ] Gate shared `oasis-seed` object reuse on profile-sensitive compile inputs so future bootstrap-profile flags, env, preprocessors, or PPX on the core library cannot silently reuse mismatched seed artifacts.
+98. [x] Teach the compiled bootstrap planner to refresh `scripts/bootstrap_seed_metadata.mk` directly so the legacy metadata helper script can disappear instead of surviving as a generator-only maintenance path.
+99. [x] Gate shared `oasis-seed` object reuse on profile-sensitive compile inputs so future bootstrap-profile flags, env, preprocessors, or PPX on the core library cannot silently reuse mismatched seed artifacts.
+100. [ ] Teach the bootstrap seed compiler itself to honor common-library actions, preprocessors, PPX, and profile env so safe shared-object reuse remains available even after `oasis_core` stops compiling from raw checked-in sources.

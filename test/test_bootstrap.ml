@@ -15,16 +15,19 @@ let write_executable workspace relative_path contents =
 let run_bootstrap_loader ?(env = []) () =
   Process.run_capture ~env "ocaml" [ "scripts/render_bootstrap_mod_use.ml" ]
 
-let run_seed_metadata_loader ?(env = []) () =
-  Process.run_capture ~env "ocaml"
-    [ "scripts/render_bootstrap_mod_use.ml"; "--format"; "seed-metadata" ]
+let render_format_name = function
+  | Bootstrap.Makefile -> "makefile"
+  | Bootstrap.Seed_metadata -> "seed-metadata"
 
-let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full) workspace =
+let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full)
+    ?(format = Bootstrap.Makefile) workspace =
   let args =
     [
       Bootstrap.hidden_command_name;
       "--manifest";
       manifest_path workspace;
+      "--format";
+      render_format_name format;
       "--scope";
       (match scope with
       | Bootstrap.Executable_only -> "app"
@@ -153,6 +156,8 @@ deps = ["core"]
               ~needle:"$(BOOTSTRAP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) src/alpha.ml src/beta.ml src/cli.ml src/main.ml test/test_helper.ml test/test_main.ml"
               makefile
               "bootstrap generation should track the manifest-driven inputs that require a regenerated makefile";
+            assert_string_contains ~needle:"COMMON_SEED_REUSE := yes" makefile
+              "bootstrap generation should explicitly mark when shared seed objects are reusable";
             assert_string_contains
               ~needle:"COMMON_OBJS := $(OBJ_DIR)/beta.$(OBJ_EXT) $(OBJ_DIR)/alpha.$(OBJ_EXT)"
               makefile
@@ -309,13 +314,24 @@ deps = ["core"]
           makefile
           "app-only bootstrap generation should run through the compiled seed binary";
         assert_string_contains
+          ~needle:"$(OASIS_BIN) $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --format seed-metadata"
+          makefile
+          "bootstrap seed metadata refresh should run through the compiled bootstrap planner";
+        assert_string_contains
           ~needle:"-I $(OBJ_DIR) -c \"$$src\" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT)"
           makefile
           "bootstrap seed compilation should populate the shared object directory for reuse by the final app build";
         assert_string_contains
-          ~needle:"touch \"$$path\""
+          ~needle:"grep -q '^COMMON_SEED_REUSE := yes$$' \"$(1)\""
           makefile
-          "bootstrap makefile generation should refresh shared object mtimes so the final app/test build reuses the seed compile outputs";
+          "bootstrap makefile generation should consult the compiled plan before reusing shared seed objects";
+        assert_string_contains ~needle:"rm -f $(BOOTSTRAP_SHARED_OUTPUTS)"
+          makefile
+          "bootstrap makefile generation should drop incompatible shared seed objects instead of reusing them";
+        assert_string_not_contains
+          ~needle:"render_bootstrap_mod_use.ml --format seed-metadata"
+          makefile
+          "seed metadata refresh should not fall back to the legacy script path";
         assert_string_not_contains
           ~needle:"ocaml scripts/generate_bootstrap_makefile.ml"
           makefile
@@ -335,21 +351,19 @@ deps = ["core"]
           ~needle:"$(BIN_DIR)/oasis $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --scope full"
           makefile
           "full bootstrap generation should not require a freshly built app binary before the makefile exists")) ;
-    ( "keeps cached bootstrap seed metadata in sync with the manifest-driven loader",
+    ( "keeps cached bootstrap seed metadata in sync with the compiled bootstrap planner",
       (fun () ->
         let generated =
-          run_seed_metadata_loader
-            ~env:[ ("BOOTSTRAP_MODULE_MANIFEST", manifest_path (Sys.getcwd ())) ]
-            ()
+          run_compiled_bootstrap ~format:Bootstrap.Seed_metadata (Sys.getcwd ())
         in
         assert_int_equal 0 generated.status
-          "the bootstrap seed metadata helper should render successfully";
+          "the compiled bootstrap planner should render seed metadata successfully";
         let cached =
           Fs.read_file
             (Filename.concat (Sys.getcwd ()) "scripts/bootstrap_seed_metadata.mk")
         in
         assert_string_equal generated.output cached
-          "the cached bootstrap seed metadata should stay in sync with the manifest-driven helper")) ;
+          "the cached bootstrap seed metadata should stay in sync with the compiled helper")) ;
     ( "benchmarks bootstrap latency and emits machine-readable summaries",
       (fun () ->
         with_temp_dir "oasis-bootstrap-benchmark" (fun workspace ->
@@ -550,6 +564,8 @@ let () =
               ~needle:"# Bootstrap profile: release"
               makefile
               "bootstrap generation should record the resolved profile";
+            assert_string_contains ~needle:"COMMON_SEED_REUSE := no" makefile
+              "bootstrap generation should disable shared seed reuse when the common target needs profile-sensitive compile inputs";
             assert_string_contains
               ~needle:"COMMON_COMPILE_FLAGS := -w +a"
               makefile
