@@ -24,10 +24,19 @@ type locked_target = {
   resolved_packages : (string * string) list;
 }
 
+type locked_toolchain = {
+  selected_backend : (string, string) result;
+  compiler_version : (string, string) result;
+  stdlib : (string, string) result;
+  unix_dir : (string option, string) result;
+  package_roots : (string list, string) result;
+}
+
 type snapshot = {
   version : int;
   manifest_path : string;
   manifest_digest : string;
+  toolchain : locked_toolchain;
   package_paths : (string * string) list;
   targets : locked_target list;
 }
@@ -230,6 +239,12 @@ let json_string_value = function
   | JString value -> Ok value
   | _ -> Error "expected a JSON string"
 
+let json_option_value parse = function
+  | JNull -> Ok None
+  | value ->
+      let* parsed = parse value in
+      Ok (Some parsed)
+
 let json_array_value = function
   | JArray items -> Ok items
   | _ -> Error "expected a JSON array"
@@ -262,9 +277,33 @@ let json_string_list_field name json =
   in
   loop [] items
 
+let json_string_list_value json =
+  let* items = json_array_value json in
+  let rec loop acc = function
+    | [] -> Ok (List.rev acc)
+    | item :: rest ->
+        let* value = json_string_value item in
+        loop (value :: acc) rest
+  in
+  loop [] items
+
 let json_object_fields = function
   | JObject fields -> Ok fields
   | _ -> Error "expected a JSON object"
+
+let parse_result parse_ok json =
+  let* fields = json_object_fields json in
+  match (List.assoc_opt "ok" fields, List.assoc_opt "error" fields) with
+  | Some ok_json, None ->
+      let* ok_value = parse_ok ok_json in
+      Ok (Ok ok_value)
+  | None, Some error_json ->
+      let* error_message = json_string_value error_json in
+      Ok (Error error_message)
+  | Some _, Some _ ->
+      Error "JSON result objects must contain exactly one of ok or error"
+  | None, None ->
+      Error "JSON result objects must contain ok or error"
 
 let parse_locked_target json =
   let* _ = json_object_fields json in
@@ -294,6 +333,30 @@ let parse_package_paths json =
   let* packages_json = json_array_value json in
   loop [] packages_json
 
+let parse_locked_toolchain json =
+  let* _ = json_object_fields json in
+  let* selected_backend =
+    let* value = json_field "selected_backend" json in
+    parse_result json_string_value value
+  in
+  let* compiler_version =
+    let* value = json_field "compiler_version" json in
+    parse_result json_string_value value
+  in
+  let* stdlib =
+    let* value = json_field "stdlib" json in
+    parse_result json_string_value value
+  in
+  let* unix_dir =
+    let* value = json_field "unix_library_dir" json in
+    parse_result (json_option_value json_string_value) value
+  in
+  let* package_roots =
+    let* value = json_field "package_roots" json in
+    parse_result json_string_list_value value
+  in
+  Ok { selected_backend; compiler_version; stdlib; unix_dir; package_roots }
+
 let load_snapshot lock_path =
   let* json = parse_json lock_path (Fs.read_file lock_path) in
   let* _ = json_object_fields json in
@@ -306,6 +369,8 @@ let load_snapshot lock_path =
     let* _ = json_object_fields manifest_json in
     let* manifest_path = json_string_field "path" manifest_json in
     let* manifest_digest = json_string_field "digest" manifest_json in
+    let* toolchain_json = json_field "toolchain" json in
+    let* toolchain = parse_locked_toolchain toolchain_json in
     let* package_paths =
       let* package_paths_json = json_field "package_paths" json in
       parse_package_paths package_paths_json
@@ -318,7 +383,8 @@ let load_snapshot lock_path =
           loop (target :: acc) rest
     in
     let* targets = loop [] targets_json in
-    Ok { version; manifest_path; manifest_digest; package_paths; targets }
+    Ok
+      { version; manifest_path; manifest_digest; toolchain; package_paths; targets }
 
 let render_names names =
   match names with
@@ -332,6 +398,44 @@ let package_map packages =
   let table = Hashtbl.create (List.length packages) in
   List.iter (fun (name, path) -> Hashtbl.replace table name path) packages;
   table
+
+let render_result render_ok = function
+  | Ok value -> render_ok value
+  | Error message -> "error: " ^ message
+
+let compare_result ~label render_ok locked current =
+  if locked = current then []
+  else
+    [
+      Printf.sprintf "%s drifted: locked %s, current %s" label
+        (render_result render_ok locked)
+        (render_result render_ok current);
+    ]
+
+let compare_toolchain locked (current : Toolchain.report) =
+  let differences = ref [] in
+  let append items = differences := List.rev_append items !differences in
+  append
+    (compare_result ~label:"toolchain selected backend" (fun value -> value)
+       locked.selected_backend
+       (Result.map Toolchain.backend_name current.selected_backend));
+  append
+    (compare_result ~label:"toolchain compiler version" (fun value -> value)
+       locked.compiler_version current.compiler_version);
+  append
+    (compare_result ~label:"toolchain stdlib path" (fun value -> value)
+       locked.stdlib current.stdlib);
+  append
+    (compare_result ~label:"toolchain unix library dir"
+       (function
+         | Some path -> path
+         | None -> "none")
+       locked.unix_dir current.unix_dir);
+  append
+    (compare_result ~label:"toolchain package search roots"
+       (fun values -> "[" ^ String.concat ", " values ^ "]")
+       locked.package_roots current.package_roots);
+  List.rev !differences
 
 let compare_package_paths ~label locked current =
   let locked_map = package_map locked in
@@ -413,6 +517,10 @@ let validate_current ~workspace_root workspace requested_targets =
       differences :=
         "workspace manifest digest changed since oasis.lock was written"
         :: !differences;
+    differences :=
+      List.rev_append
+        (compare_toolchain snapshot.toolchain current.toolchain)
+        !differences;
     differences :=
       List.rev_append
         (compare_package_paths ~label:"workspace package closure"

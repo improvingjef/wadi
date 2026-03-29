@@ -20,9 +20,31 @@ BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
 BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
-.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata
+.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
 
 include $(BOOTSTRAP_SEED_METADATA)
+
+define REFRESH_BOOTSTRAP_SEED_METADATA
+set -eu; \
+rm -rf "$(BOOTSTRAP_SEED_ROOT)"; \
+tmp="$(BOOTSTRAP_SEED_METADATA).tmp"; \
+"$(1)" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; \
+if [ -f "$(BOOTSTRAP_SEED_METADATA)" ] && cmp -s "$$tmp" "$(BOOTSTRAP_SEED_METADATA)"; then \
+	rm -f "$$tmp"; \
+else \
+	mv "$$tmp" "$(BOOTSTRAP_SEED_METADATA)"; \
+fi
+endef
+
+FORCE:
+
+$(BOOTSTRAP_SEED_METADATA): FORCE
+	@if [ -x "$(OASIS_BIN)" ]; then \
+		$(call REFRESH_BOOTSTRAP_SEED_METADATA,$(OASIS_BIN)); \
+	elif [ ! -f "$(BOOTSTRAP_SEED_METADATA)" ]; then \
+		echo "missing $(BOOTSTRAP_SEED_METADATA) and $(OASIS_BIN) is unavailable" >&2; \
+		exit 2; \
+	fi
 
 all: $(BIN_DIR)/oasis
 
@@ -57,9 +79,11 @@ benchmark-bootstrap:
 	scripts/benchmark_bootstrap.sh --workspace .
 
 refresh-bootstrap-seed-metadata:
-	rm -rf $(BOOTSTRAP_SEED_ROOT)
-	tmp=$(BOOTSTRAP_SEED_METADATA).tmp; \
-	$(OASIS_BIN) $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --format seed-metadata --seed-root $(BOOTSTRAP_SEED_ROOT) > $$tmp && mv $$tmp $(BOOTSTRAP_SEED_METADATA)
+	@if [ ! -x "$(OASIS_BIN)" ]; then \
+		echo "refresh-bootstrap-seed-metadata requires $(OASIS_BIN)" >&2; \
+		exit 2; \
+	fi
+	@$(call REFRESH_BOOTSTRAP_SEED_METADATA,$(OASIS_BIN))
 
 clean:
 	rm -rf $(BUILD_DIR)

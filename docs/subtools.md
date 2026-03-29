@@ -32,10 +32,11 @@ exit codes rather than hidden global state.
 
 - `oasis deps`: resolve external libraries, surface missing packages, and print
   the exact toolchain assumptions.
-- `oasis vendor`: copy a local package into `vendor/` and register it as a
-  workspace member.
+- `oasis vendor`: copy a local package or fetch a pinned git/archive source
+  into `vendor/` and register it as a workspace member.
 - `oasis lock`: snapshot resolved toolchain facts and external package paths
-  into a machine-readable lock file.
+  into a machine-readable lock file and validate those facts during locked
+  builds and installs.
 - `oasis install`: stage installable binaries, libraries, and metadata.
 
 ### Discoverability

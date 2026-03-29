@@ -104,6 +104,10 @@ type ppx_options = {
 type vendor_options = {
   workspace_dir : string;
   source_dir : string option;
+  git_url : string option;
+  archive_url : string option;
+  ref_name : string option;
+  checksum : string option;
   name : string option;
   force : bool;
 }
@@ -400,7 +404,7 @@ let locked_option =
     usage = "--locked";
     flags = [ "--locked" ];
     description =
-      "Require oasis.lock to match the current manifest and resolved package paths before continuing.";
+      "Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.";
   }
 
 let warn_locked_option =
@@ -408,7 +412,7 @@ let warn_locked_option =
     usage = "--warn-locked";
     flags = [ "--warn-locked" ];
     description =
-      "Warn when oasis.lock is missing or stale, but continue with the build or install.";
+      "Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.";
   }
 
 let source_option =
@@ -416,6 +420,38 @@ let source_option =
     usage = "--source DIR";
     flags = [ "--source" ];
     description = "Copy the vendored package from DIR into vendor/NAME.";
+  }
+
+let git_option =
+  {
+    usage = "--git URL";
+    flags = [ "--git" ];
+    description =
+      "Clone the vendored package from URL into vendor/NAME and verify the pinned commit checksum.";
+  }
+
+let url_option =
+  {
+    usage = "--url URL";
+    flags = [ "--url" ];
+    description =
+      "Download and extract the vendored source archive from URL into vendor/NAME and verify its checksum.";
+  }
+
+let ref_option =
+  {
+    usage = "--ref REV";
+    flags = [ "--ref" ];
+    description =
+      "Checkout REV after cloning --git before validating the pinned checksum.";
+  }
+
+let checksum_option =
+  {
+    usage = "--checksum VALUE";
+    flags = [ "--checksum" ];
+    description =
+      "Pin remote vendored sources. Git sources compare the resolved commit id; URL sources verify the downloaded archive digest (plain hex defaults to sha256:).";
   }
 
 let interface_option =
@@ -703,16 +739,28 @@ let vendor_doc =
   {
     name = "vendor";
     summary =
-      "Copy a local source dependency into vendor/ and register it as a workspace member.";
+      "Copy or fetch a source dependency into vendor/ and register it as a workspace member.";
     signature =
-      "oasis vendor [--workspace DIR] --source DIR [--name NAME] [--force]";
+      "oasis vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]";
     examples =
       [
         "oasis vendor --source ../dep";
-        "oasis vendor --source ../dep --name dep";
+        "oasis vendor --git https://example.com/dep.git --checksum 0123abcd --name dep";
+        "oasis vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep";
         "oasis vendor --workspace examples/app --source ../core --force";
       ];
-    options = [ workspace_option; source_option; name_option; force_option; help_option ];
+    options =
+      [
+        workspace_option;
+        source_option;
+        git_option;
+        url_option;
+        ref_option;
+        checksum_option;
+        name_option;
+        force_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -1566,20 +1614,61 @@ let parse_vendor_args (args : string list) : (vendor_options, string) result =
     | "--source" :: dir :: rest ->
         loop { options with source_dir = Some dir } rest
     | "--source" :: [] -> Error "--source requires a directory"
+    | "--git" :: url :: rest ->
+        loop { options with git_url = Some url } rest
+    | "--git" :: [] -> Error "--git requires a URL"
+    | "--url" :: url :: rest ->
+        loop { options with archive_url = Some url } rest
+    | "--url" :: [] -> Error "--url requires a URL"
+    | "--ref" :: value :: rest ->
+        loop { options with ref_name = Some value } rest
+    | "--ref" :: [] -> Error "--ref requires a value"
+    | "--checksum" :: value :: rest ->
+        loop { options with checksum = Some value } rest
+    | "--checksum" :: [] -> Error "--checksum requires a value"
     | "--name" :: name :: rest -> loop { options with name = Some name } rest
     | "--name" :: [] -> Error "--name requires a value"
     | "--force" :: rest -> loop { options with force = true } rest
     | "--help" :: _ -> Error (command_usage vendor_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
-    | _ :: _ -> Error "vendor does not accept positional arguments; use --source DIR"
+    | _ :: _ ->
+        Error
+          "vendor does not accept positional arguments; use --source DIR, --git URL, or --url URL"
   in
   let* options =
-    loop { workspace_dir = "."; source_dir = None; name = None; force = false } args
+    loop
+      {
+        workspace_dir = ".";
+        source_dir = None;
+        git_url = None;
+        archive_url = None;
+        ref_name = None;
+        checksum = None;
+        name = None;
+        force = false;
+      }
+      args
   in
-  match options.source_dir with
-  | Some _ -> Ok options
-  | None -> Error "vendor requires --source DIR"
+  let selected_source_count =
+    List.length
+      (List.filter Option.is_some
+         [ options.source_dir; options.git_url; options.archive_url ])
+  in
+  if selected_source_count = 0 then
+    Error "vendor requires one of --source DIR, --git URL, or --url URL"
+  else if selected_source_count > 1 then
+    Error "vendor accepts exactly one of --source DIR, --git URL, or --url URL"
+  else if options.ref_name <> None && options.git_url = None then
+    Error "vendor --ref requires --git URL"
+  else if options.checksum <> None && options.source_dir <> None then
+    Error "vendor --checksum is only valid with --git URL or --url URL"
+  else if
+    (options.git_url <> None || options.archive_url <> None)
+    && options.checksum = None
+  then
+    Error "vendor remote sources require --checksum VALUE"
+  else Ok options
 
 let parse_env_args (args : string list) : (env_options, string) result =
   let rec loop workspace_dir profile json changed_only subtool targets = function
@@ -2008,7 +2097,7 @@ let value_completion_candidates ?workspace = function
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
   | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script"
   | "--dir" | "--name" | "--member" | "--library" | "--executable"
-  | "--source" ->
+  | "--source" | "--git" | "--url" | "--ref" | "--checksum" ->
       []
   | _ -> []
 
@@ -2390,11 +2479,28 @@ let run_ppx (options : ppx_options) =
                 | Error message -> report_error message))
 
 let run_vendor (options : vendor_options) =
-  match options.source_dir with
-  | None -> report_error "vendor requires --source DIR"
-  | Some source_dir -> (
+  let source =
+    match (options.source_dir, options.git_url, options.archive_url) with
+    | Some source_dir, None, None -> Ok (Vendor.Local_dir source_dir)
+    | None, Some git_url, None -> (
+        match options.checksum with
+        | Some checksum ->
+            Ok
+              (Vendor.Git_repo
+                 { url = git_url; ref_name = options.ref_name; checksum })
+        | None -> Error "vendor remote sources require --checksum VALUE")
+    | None, None, Some archive_url -> (
+        match options.checksum with
+        | Some checksum -> Ok (Vendor.Url_archive { url = archive_url; checksum })
+        | None -> Error "vendor remote sources require --checksum VALUE")
+    | _ ->
+        Error "vendor requires exactly one of --source DIR, --git URL, or --url URL"
+  in
+  match source with
+  | Error message -> report_error message
+  | Ok source -> (
       match
-        Vendor.vendor ~workspace_root:options.workspace_dir ~source_dir
+        Vendor.vendor ~workspace_root:options.workspace_dir source
           ?name:options.name ~force:options.force ()
       with
       | Ok report ->

@@ -39,8 +39,8 @@ Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
 - `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
-- `--locked`: Require oasis.lock to match the current manifest and resolved package paths before continuing.
-- `--warn-locked`: Warn when oasis.lock is missing or stale, but continue with the build or install.
+- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
+- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
@@ -257,22 +257,27 @@ Examples:
 
 ## vendor
 
-Copy a local source dependency into vendor/ and register it as a workspace member.
+Copy or fetch a source dependency into vendor/ and register it as a workspace member.
 
 Usage:
 
-`oasis vendor [--workspace DIR] --source DIR [--name NAME] [--force]`
+`oasis vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--source DIR`: Copy the vendored package from DIR into vendor/NAME.
+- `--git URL`: Clone the vendored package from URL into vendor/NAME and verify the pinned commit checksum.
+- `--url URL`: Download and extract the vendored source archive from URL into vendor/NAME and verify its checksum.
+- `--ref REV`: Checkout REV after cloning --git before validating the pinned checksum.
+- `--checksum VALUE`: Pin remote vendored sources. Git sources compare the resolved commit id; URL sources verify the downloaded archive digest (plain hex defaults to sha256:).
 - `--name NAME`: Set the generated workspace or vendor name explicitly.
 - `--force`: Overwrite existing generated files or output paths.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis vendor --source ../dep`
-- `oasis vendor --source ../dep --name dep`
+- `oasis vendor --git https://example.com/dep.git --checksum 0123abcd --name dep`
+- `oasis vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep`
 - `oasis vendor --workspace examples/app --source ../core --force`
 
 ## env
@@ -338,8 +343,8 @@ Options:
 - `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
 - `--prefix DIR`: Stage installed files under DIR instead of the default profile root.
 - `--destdir DIR`: Prepend DIR to the resolved install prefix for packaging-style staging.
-- `--locked`: Require oasis.lock to match the current manifest and resolved package paths before continuing.
-- `--warn-locked`: Warn when oasis.lock is missing or stale, but continue with the build or install.
+- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
+- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 

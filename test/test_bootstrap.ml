@@ -318,9 +318,17 @@ deps = ["core"]
           makefile
           "app-only bootstrap generation should run through the compiled seed binary";
         assert_string_contains
-          ~needle:"$(OASIS_BIN) $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --format seed-metadata"
+          ~needle:"$(BOOTSTRAP_SEED_METADATA): FORCE"
+          makefile
+          "bootstrap should teach make how to revisit cached seed metadata during normal workflows";
+        assert_string_contains
+          ~needle:"$(call REFRESH_BOOTSTRAP_SEED_METADATA,$(OASIS_BIN))"
           makefile
           "bootstrap seed metadata refresh should run through the compiled bootstrap planner";
+        assert_string_contains
+          ~needle:"cmp -s \"$$tmp\" \"$(BOOTSTRAP_SEED_METADATA)\""
+          makefile
+          "bootstrap seed metadata refresh should avoid pointless rewrites when the compiled planner output is unchanged";
         assert_string_contains
           ~needle:"-I $(OBJ_DIR) -c \"$$src\" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT)"
           makefile

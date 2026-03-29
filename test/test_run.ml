@@ -536,7 +536,7 @@ actions = ["generate"]
               ~needle:"oasis lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]"
               run.output "top-level usage should include the lock command";
             assert_string_contains
-              ~needle:"oasis vendor [--workspace DIR] --source DIR [--name NAME] [--force]"
+              ~needle:"oasis vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]"
               run.output "top-level usage should include the vendor command";
             assert_string_contains
               ~needle:"oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]"
@@ -644,11 +644,11 @@ actions = ["generate"]
               docs.output
               "docs output should include the member init description";
             assert_string_contains
-              ~needle:"- `--locked`: Require oasis.lock to match the current manifest and resolved package paths before continuing."
+              ~needle:"- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing."
               docs.output
               "docs output should include the strict lock description";
             assert_string_contains
-              ~needle:"- `--warn-locked`: Warn when oasis.lock is missing or stale, but continue with the build or install."
+              ~needle:"- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install."
               docs.output
               "docs output should include the warning lock description";
             assert_string_contains

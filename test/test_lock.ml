@@ -26,6 +26,17 @@ let resolve_package_path package_name =
     ("expected ocamlfind query to resolve " ^ package_name);
   String.trim outcome.output
 
+let resolve_compiler_version () =
+  let outcome = Process.run_capture "ocamlc" [ "-version" ] in
+  assert_int_equal 0 outcome.status "expected ocamlc -version to succeed";
+  String.trim outcome.output
+
+let resolve_package_roots () =
+  let outcome = Process.run_capture "ocamlfind" [ "printconf"; "path" ] in
+  assert_int_equal 0 outcome.status
+    "expected ocamlfind printconf path to succeed";
+  String_util.split_lines outcome.output
+
 let cases =
   [
     ( "writes a lock file with toolchain facts and package resolutions",
@@ -183,6 +194,89 @@ deps = ["core"]
             assert_string_contains ~needle:"Refresh the snapshot with `oasis lock`."
               build.output
               "strict lock validation should explain how to refresh the snapshot") );
+    ( "build --locked fails when recorded toolchain facts drift from the lock snapshot",
+      fun () ->
+        with_temp_dir "oasis-lock-toolchain-drift" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+packages = ["unix"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let message = "locked"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            assert_int_equal 0 lock.status
+              "lock should succeed before toolchain drift is introduced";
+            let compiler_version = resolve_compiler_version () in
+            let compiler_entry =
+              Printf.sprintf {|"compiler_version":{"ok":"%s"}|} compiler_version
+            in
+            let drifted =
+              replace_once ~needle:compiler_entry
+                ~replacement:{|"compiler_version":{"ok":"0.0.0-drifted"}|}
+                (Fs.read_file (lock_path workspace))
+            in
+            Fs.write_file (lock_path workspace) drifted;
+            let build = run_oasis ~cwd:workspace [ "build"; "--locked"; "demo" ] in
+            assert_true (build.status <> 0)
+              "build --locked should fail when locked toolchain facts change";
+            assert_string_contains ~needle:"toolchain compiler version drifted"
+              build.output
+              "strict lock validation should report toolchain drift directly";
+            assert_string_contains ~needle:"Refresh the snapshot with `oasis lock`."
+              build.output
+              "strict lock validation should explain how to refresh toolchain drift") );
+    ( "build --locked fails when package search roots drift from the lock snapshot",
+      fun () ->
+        with_temp_dir "oasis-lock-package-root-drift" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+packages = ["unix"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let message = "locked"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.message|};
+            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            assert_int_equal 0 lock.status
+              "lock should succeed before package-root drift is introduced";
+            let package_roots = resolve_package_roots () in
+            let first_root =
+              match package_roots with
+              | root :: _ -> root
+              | [] -> fail "expected ocamlfind printconf path to report at least one root"
+            in
+            let roots_prefix =
+              Printf.sprintf {|"package_roots":{"ok":["%s"|} first_root
+            in
+            let drifted =
+              replace_once ~needle:roots_prefix
+                ~replacement:{|"package_roots":{"ok":["/tmp/drifted-package-root"|}
+                (Fs.read_file (lock_path workspace))
+            in
+            Fs.write_file (lock_path workspace) drifted;
+            let build = run_oasis ~cwd:workspace [ "build"; "--locked"; "demo" ] in
+            assert_true (build.status <> 0)
+              "build --locked should fail when locked package roots change";
+            assert_string_contains
+              ~needle:"toolchain package search roots drifted"
+              build.output
+              "strict lock validation should surface package-root drift") );
     ( "install --warn-locked reports drift but still stages artifacts",
       fun () ->
         with_fixture "hello" (fun workspace ->
