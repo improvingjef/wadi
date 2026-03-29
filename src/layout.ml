@@ -21,8 +21,12 @@ let target_out_dir workspace_root = function
       executable_out_dir workspace_root executable.name
   | Manifest.Test test -> test_out_dir workspace_root test.name
 
+let library_archive_for_backend workspace_root backend name =
+  Filename.concat (library_out_dir workspace_root name)
+    ("lib" ^ name ^ Toolchain.library_archive_extension backend)
+
 let library_archive workspace_root name =
-  Filename.concat (library_out_dir workspace_root name) ("lib" ^ name ^ ".cmxa")
+  library_archive_for_backend workspace_root Toolchain.Native name
 
 let executable_binary workspace_root name =
   Filename.concat (executable_out_dir workspace_root name) name

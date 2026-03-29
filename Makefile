@@ -1,12 +1,8 @@
 OCAML ?= ocaml
 OCAMLC ?= ocamlc
 OCAMLOPT ?= ocamlopt
+OCAMLFIND ?= ocamlfind
 OCAMLFLAGS ?= -g
-
-STDLIB_DIR := $(shell $(OCAMLC) -where)
-UNIX_DIR := $(shell if [ -e "$(STDLIB_DIR)/unix/unix.cmi" ]; then printf '%s\n' "$(STDLIB_DIR)/unix"; elif [ -e "$(STDLIB_DIR)/unix.cmi" ]; then printf '%s\n' "$(STDLIB_DIR)"; fi)
-UNIX_FLAGS := $(if $(UNIX_DIR),-I $(UNIX_DIR),)
-UNIX_ARCHIVE := $(if $(UNIX_DIR),$(UNIX_DIR)/unix.cmxa,unix.cmxa)
 
 BUILD_DIR := _bootstrap
 OBJ_DIR := $(BUILD_DIR)/obj
@@ -16,11 +12,15 @@ BOOTSTRAP_GENERATOR := scripts/generate_bootstrap_makefile.ml
 BOOTSTRAP_MK := $(BUILD_DIR)/bootstrap.generated.mk
 BOOTSTRAP_SOURCES := $(wildcard src/*.ml src/*.mli test/*.ml test/*.mli)
 
-.PHONY: all test clean
+.PHONY: all test clean bootstrap-smoke
 
 all: $(BIN_DIR)/oasis
 
-test: $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
+bootstrap-smoke:
+	rm -rf $(BUILD_DIR)
+	$(MAKE) $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
+
+test: bootstrap-smoke $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) $(BIN_DIR)/test_runner
 
 clean:
@@ -33,11 +33,45 @@ $(BOOTSTRAP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_SOURCE
 	$(OCAML) $(BOOTSTRAP_GENERATOR) --manifest $(BOOTSTRAP_MANIFEST) > $@
 
 ifeq ($(filter clean,$(MAKECMDGOALS)),)
--include $(BOOTSTRAP_MK)
+BOOTSTRAP_BACKEND ?= $(or $(OASIS_BACKEND),auto)
+BOOTSTRAP_NATIVE_OK := $(shell $(OCAMLOPT) -version >/dev/null 2>&1 && printf yes)
+BOOTSTRAP_BYTECODE_OK := $(shell $(OCAMLC) -version >/dev/null 2>&1 && printf yes)
+
+ifeq ($(BOOTSTRAP_BACKEND),native)
+ifeq ($(BOOTSTRAP_NATIVE_OK),)
+$(error BOOTSTRAP_BACKEND=native requested but $(OCAMLOPT) is unavailable)
+endif
+RESOLVED_BOOTSTRAP_BACKEND := native
+else ifeq ($(BOOTSTRAP_BACKEND),bytecode)
+ifeq ($(BOOTSTRAP_BYTECODE_OK),)
+$(error BOOTSTRAP_BACKEND=bytecode requested but $(OCAMLC) is unavailable)
+endif
+RESOLVED_BOOTSTRAP_BACKEND := bytecode
+else ifeq ($(BOOTSTRAP_BACKEND),auto)
+ifeq ($(BOOTSTRAP_NATIVE_OK),yes)
+RESOLVED_BOOTSTRAP_BACKEND := native
+else ifeq ($(BOOTSTRAP_BYTECODE_OK),yes)
+RESOLVED_BOOTSTRAP_BACKEND := bytecode
+else
+$(error no working OCaml compiler found for bootstrap)
+endif
+else
+$(error unknown BOOTSTRAP_BACKEND '$(BOOTSTRAP_BACKEND)'; expected auto, native, or bytecode)
 endif
 
-$(OBJ_DIR)/%.cmx: src/%.ml $(BOOTSTRAP_MK) | $(OBJ_DIR)
-	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
+ifeq ($(RESOLVED_BOOTSTRAP_BACKEND),native)
+BOOTSTRAP_COMPILER := $(OCAMLOPT)
+BOOTSTRAP_COMPILER_KIND := ocamlopt
+OBJ_EXT := cmx
+else
+BOOTSTRAP_COMPILER := $(OCAMLC)
+BOOTSTRAP_COMPILER_KIND := ocamlc
+OBJ_EXT := cmo
+endif
 
-$(OBJ_DIR)/%.cmx: test/%.ml $(BOOTSTRAP_MK) | $(OBJ_DIR)
-	$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -c -o $@ $<
+define BOOTSTRAP_TOOL_CMD
+$(if $(strip $(1)),$(OCAMLFIND) $(BOOTSTRAP_COMPILER_KIND) $(1),$(BOOTSTRAP_COMPILER))
+endef
+
+-include $(BOOTSTRAP_MK)
+endif

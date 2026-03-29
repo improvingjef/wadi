@@ -1,3 +1,11 @@
+type backend =
+  | Native
+  | Bytecode
+
+type backend_request =
+  | Auto
+  | Select of backend
+
 type package_resolution = {
   packages : string list;
   package_paths : (string * string) list;
@@ -13,6 +21,7 @@ type report = {
   ocamlopt : resolved_command;
   ocamldep : resolved_command;
   ocamlfind : resolved_command;
+  selected_backend : (backend, string) result;
   compiler_version : (string, string) result;
   stdlib : (string, string) result;
   unix_dir : (string option, string) result;
@@ -35,6 +44,47 @@ let ocamlopt_cmd () = command_override "OCAMLOPT" "ocamlopt"
 let ocamldep_cmd () = command_override "OCAMLDEP" "ocamldep"
 
 let ocamlfind_cmd () = command_override "OCAMLFIND" "ocamlfind"
+
+let backend_name = function
+  | Native -> "native"
+  | Bytecode -> "bytecode"
+
+let compiler_kind = function
+  | Native -> "ocamlopt"
+  | Bytecode -> "ocamlc"
+
+let compiler_cmd = function
+  | Native -> ocamlopt_cmd ()
+  | Bytecode -> ocamlc_cmd ()
+
+let object_extension = function
+  | Native -> ".cmx"
+  | Bytecode -> ".cmo"
+
+let library_archive_extension = function
+  | Native -> ".cmxa"
+  | Bytecode -> ".cma"
+
+let parse_backend value =
+  match String.lowercase_ascii (String.trim value) with
+  | "native" -> Ok Native
+  | "bytecode" -> Ok Bytecode
+  | value ->
+      Error
+        (Printf.sprintf
+           "unknown backend '%s'; expected auto, native, or bytecode" value)
+
+let parse_backend_request value =
+  match String.lowercase_ascii (String.trim value) with
+  | "" | "auto" -> Ok Auto
+  | value ->
+      let* backend = parse_backend value in
+      Ok (Select backend)
+
+let env_backend_request () =
+  match Sys.getenv_opt "OASIS_BACKEND" with
+  | None -> Ok Auto
+  | Some value -> parse_backend_request value
 
 let path_entries () =
   match Sys.getenv_opt "PATH" with
@@ -63,7 +113,29 @@ let version_of prog =
     Error
       (Printf.sprintf "failed to query %s version\n%s" prog outcome.output)
 
-let compiler_version () = version_of (ocamlopt_cmd ())
+let command_is_available prog =
+  let outcome = Process.run_capture prog [ "-version" ] in
+  outcome.status = 0
+
+let resolve_backend request =
+  match request with
+  | Select backend ->
+      let compiler = compiler_cmd backend in
+      if command_is_available compiler then Ok backend
+      else
+        Error
+          (Printf.sprintf "%s backend requested but %s is unavailable"
+             (backend_name backend) compiler)
+  | Auto ->
+      if command_is_available (compiler_cmd Native) then Ok Native
+      else if command_is_available (compiler_cmd Bytecode) then Ok Bytecode
+      else
+        Error
+          (Printf.sprintf
+             "no working OCaml compiler found; tried %s and %s"
+             (ocamlopt_cmd ()) (ocamlc_cmd ()))
+
+let compiler_version backend = version_of (compiler_cmd backend)
 
 let stdlib_dir () =
   let ocamlc = ocamlc_cmd () in
@@ -171,13 +243,13 @@ let link_args resolution =
   | [] -> []
   | _ -> [ "-linkpkg" ]
 
-let ensure_success_ocamlopt ~verbose resolution args =
+let ensure_success_compiler ~verbose backend resolution args =
   match resolution.packages with
-  | [] -> Process.ensure_success ~verbose (ocamlopt_cmd ()) args
+  | [] -> Process.ensure_success ~verbose (compiler_cmd backend) args
   | _ ->
       let* ocamlfind = ensure_ocamlfind () in
       Process.ensure_success ~verbose ocamlfind
-        (("ocamlopt" :: package_args resolution) @ args)
+        ((compiler_kind backend :: package_args resolution) @ args)
 
 let ensure_success_ocamldep ~verbose resolution args =
   match resolution.packages with
@@ -226,7 +298,11 @@ let inspect () =
     ocamlopt = configured_command_report (ocamlopt_cmd ());
     ocamldep = configured_command_report (ocamldep_cmd ());
     ocamlfind = resolved_ocamlfind_report ();
-    compiler_version = compiler_version ();
+    selected_backend = Result.bind (env_backend_request ()) resolve_backend;
+    compiler_version =
+      Result.bind
+        (Result.bind (env_backend_request ()) resolve_backend)
+        compiler_version;
     stdlib;
     unix_dir;
     package_roots = package_search_roots ();
@@ -252,6 +328,10 @@ let render_report report =
       render_command_report "ocamlopt" report.ocamlopt;
       render_command_report "ocamldep" report.ocamldep;
       render_command_report "ocamlfind" report.ocamlfind;
+      (match report.selected_backend with
+      | Ok backend -> "selected-backend: " ^ backend_name backend
+      | Error message ->
+          "selected-backend-error: " ^ String.trim message);
       render_result "compiler-version" report.compiler_version;
       render_result "stdlib" report.stdlib;
       (match report.unix_dir with

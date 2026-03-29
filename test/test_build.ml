@@ -6,6 +6,9 @@ let executable_path workspace name =
 let library_archive_path workspace name =
   Layout.library_archive workspace name
 
+let bytecode_library_archive_path workspace name =
+  Layout.library_archive_for_backend workspace Toolchain.Bytecode name
+
 let write_source workspace relative_path contents =
   Fs.write_file (Filename.concat workspace relative_path) contents
 
@@ -285,6 +288,43 @@ modules = ["alpha", "beta"]
               "build should invoke the overridden native compiler";
             assert_string_contains ~needle:"ocamldep\n" log
               "build should invoke the overridden dependency scanner")) );
+    ( "falls back to bytecode when ocamlopt is unavailable",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let log_path = Filename.concat workspace "toolchain.log" in
+            let ocamlc_wrapper =
+              write_wrapper workspace "bin/ocamlc-wrapper" "ocamlc" log_path
+                (resolve_command "ocamlc")
+            in
+            let build =
+              with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
+                  with_env "OCAMLC" ocamlc_wrapper (fun () ->
+                      run_oasis ~cwd:workspace [ "build" ]))
+            in
+            assert_int_equal 0 build.status
+              "build should fall back to bytecode when ocamlopt is unavailable";
+            let log = Fs.read_file log_path in
+            assert_string_contains ~needle:"ocamlc\n" log
+              "bytecode fallback should invoke the bytecode compiler";
+            assert_file_exists (bytecode_library_archive_path workspace "greeting");
+            let run = run_binary (executable_path workspace "hello") [] in
+            assert_int_equal 0 run.status
+              "bytecode-built executables should still run successfully";
+            assert_string_equal "Hello, world!\n" run.output
+              "bytecode fallback should preserve executable behavior")) );
+    ( "reports an unavailable native backend directly",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let build =
+              with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
+                  run_oasis ~cwd:workspace [ "build"; "--backend"; "native" ])
+            in
+            assert_true (build.status <> 0)
+              "explicit native builds should fail when ocamlopt is unavailable";
+            assert_string_contains
+              ~needle:"native backend requested but /definitely/missing/ocamlopt is unavailable"
+              build.output
+              "backend selection failures should explain the missing compiler")) );
     ( "resolves unix from a stdlib subdirectory",
       (fun () ->
         with_temp_dir "oasis-unix-subdir" (fun workspace ->

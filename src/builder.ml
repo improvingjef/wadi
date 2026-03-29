@@ -186,21 +186,15 @@ let infer_module_order ~verbose ~target_kind ~target_name package_resolution
            "%s '%s' failed to infer a complete module order for %s from ocamldep"
            target_kind target_name (String.concat ", " requested))
 
-let expected_module_outputs out_dir stem =
-  [
-    Filename.concat out_dir (stem ^ ".cmi");
-    Filename.concat out_dir (stem ^ ".cmx");
-    Filename.concat out_dir (stem ^ ".o");
-  ]
-
 let target_is_up_to_date ~stamp_path expected_outputs fingerprint =
   List.for_all Fs.exists expected_outputs && Fs.read_file stamp_path = fingerprint
 
 let target_fingerprint ~manifest_path ~compiler_version ~kind_name ~target_name
-    ~dir ~main ~ordered_modules ~sources ~package_resolution
+    ~backend ~dir ~main ~ordered_modules ~sources ~package_resolution
     ~dependency_fingerprints =
   let buffer = Buffer.create 512 in
   append_line buffer ("compiler " ^ compiler_version);
+  append_line buffer ("backend " ^ Toolchain.backend_name backend);
   append_line buffer ("manifest " ^ Digest.to_hex (Digest.file manifest_path));
   append_line buffer ("kind " ^ kind_name);
   append_line buffer ("target " ^ target_name);
@@ -230,11 +224,12 @@ let target_fingerprint ~manifest_path ~compiler_version ~kind_name ~target_name
     dependency_fingerprints;
   Buffer.contents buffer
 
-let compile_module ~verbose ~out_dir ~include_dirs ~package_resolution source =
+let compile_module ~verbose ~backend ~out_dir ~include_dirs ~package_resolution
+    source =
   let* () =
     if source.has_mli then
       let* _ =
-        Toolchain.ensure_success_ocamlopt ~verbose package_resolution
+        Toolchain.ensure_success_compiler ~verbose backend package_resolution
           ([ "-c" ] @ include_args include_dirs
          @ [ "-o"; Filename.concat out_dir (source.stem ^ ".cmi"); source.mli_path ])
       in
@@ -242,14 +237,21 @@ let compile_module ~verbose ~out_dir ~include_dirs ~package_resolution source =
     else Ok ()
   in
   let* _ =
-    Toolchain.ensure_success_ocamlopt ~verbose package_resolution
+    Toolchain.ensure_success_compiler ~verbose backend package_resolution
       ([ "-c" ] @ include_args include_dirs
-     @ [ "-o"; Filename.concat out_dir (source.stem ^ ".cmx"); source.ml_path ])
+     @
+     [
+       "-o";
+       Filename.concat out_dir (source.stem ^ Toolchain.object_extension backend);
+       source.ml_path;
+     ])
   in
-  Ok (Filename.concat out_dir (source.stem ^ ".cmx"))
+  Ok
+    (Filename.concat out_dir
+       (source.stem ^ Toolchain.object_extension backend))
 
-let compile_ordered_sources ~verbose ~out_dir ~include_dirs ~package_resolution
-    source_table ordered_stems =
+let compile_ordered_sources ~verbose ~backend ~out_dir ~include_dirs
+    ~package_resolution source_table ordered_stems =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
     | stem :: rest ->
@@ -262,15 +264,29 @@ let compile_ordered_sources ~verbose ~out_dir ~include_dirs ~package_resolution
                    "internal error: missing source descriptor for '%s'" stem)
         in
         let* object_file =
-          compile_module ~verbose ~out_dir ~include_dirs ~package_resolution
-            source
+          compile_module ~verbose ~backend ~out_dir ~include_dirs
+            ~package_resolution source
         in
         loop (object_file :: acc) rest
   in
   loop [] ordered_stems
 
-let build_library ~workspace_root ~verbose ~manifest_path ~compiler_version
-    library library_outputs =
+let expected_module_outputs backend out_dir stem =
+  match backend with
+  | Toolchain.Native ->
+      [
+        Filename.concat out_dir (stem ^ ".cmi");
+        Filename.concat out_dir (stem ^ ".cmx");
+        Filename.concat out_dir (stem ^ ".o");
+      ]
+  | Toolchain.Bytecode ->
+      [
+        Filename.concat out_dir (stem ^ ".cmi");
+        Filename.concat out_dir (stem ^ ".cmo");
+      ]
+
+let build_library ~workspace_root ~verbose ~manifest_path ~backend
+    ~compiler_version library library_outputs =
   let out_dir = target_out_dir workspace_root (Manifest.Library library) in
   let dependency_outputs =
     List.map
@@ -298,8 +314,8 @@ let build_library ~workspace_root ~verbose ~manifest_path ~compiler_version
   in
   let fingerprint =
     target_fingerprint ~manifest_path ~compiler_version ~kind_name:"library"
-      ~target_name:library.name ~dir:library.dir ~main:None ~ordered_modules
-      ~sources ~package_resolution
+      ~target_name:library.name ~backend ~dir:library.dir ~main:None
+      ~ordered_modules ~sources ~package_resolution
       ~dependency_fingerprints:
         (List.map
            (fun dependency ->
@@ -314,10 +330,16 @@ let build_library ~workspace_root ~verbose ~manifest_path ~compiler_version
              (dependency, output.fingerprint))
            library.deps)
   in
-  let archive = Layout.library_archive workspace_root library.name in
+  let archive =
+    Layout.library_archive_for_backend workspace_root backend library.name
+  in
   let expected_outputs =
-    List.concat_map (expected_module_outputs out_dir) ordered_modules
-    @ [ archive; static_archive_path archive; stamp_path out_dir ]
+    List.concat_map (expected_module_outputs backend out_dir) ordered_modules
+    @ [ archive; stamp_path out_dir ]
+    @
+    (match backend with
+      | Toolchain.Native -> [ static_archive_path archive ]
+      | Toolchain.Bytecode -> [])
   in
   if target_is_up_to_date ~stamp_path:(stamp_path out_dir) expected_outputs
        fingerprint
@@ -335,11 +357,11 @@ let build_library ~workspace_root ~verbose ~manifest_path ~compiler_version
     Fs.remove_tree out_dir;
     Fs.ensure_dir out_dir;
     let* object_files =
-      compile_ordered_sources ~verbose ~out_dir ~include_dirs ~package_resolution
-        source_table ordered_modules
+      compile_ordered_sources ~verbose ~backend ~out_dir ~include_dirs
+        ~package_resolution source_table ordered_modules
     in
     let* _ =
-      Toolchain.ensure_success_ocamlopt ~verbose package_resolution
+      Toolchain.ensure_success_compiler ~verbose backend package_resolution
         ([ "-a"; "-o"; archive ] @ object_files)
     in
     Fs.write_file (stamp_path out_dir) fingerprint;
@@ -367,8 +389,8 @@ let runnable_kind_name = function
   | Executable_kind -> "executable"
   | Test_kind -> "test"
 
-let build_runnable ~workspace_root ~verbose ~manifest_path ~compiler_version
-    ~kind runnable order index library_outputs =
+let build_runnable ~workspace_root ~verbose ~manifest_path ~backend
+    ~compiler_version ~kind runnable order index library_outputs =
   let target =
     match kind with
     | Executable_kind -> Manifest.Executable runnable
@@ -407,7 +429,7 @@ let build_runnable ~workspace_root ~verbose ~manifest_path ~compiler_version
   let source_order = ordered_modules @ [ runnable.main ] in
   let fingerprint =
     target_fingerprint ~manifest_path ~compiler_version
-      ~kind_name:(runnable_kind_name kind) ~target_name:runnable.name
+      ~kind_name:(runnable_kind_name kind) ~target_name:runnable.name ~backend
       ~dir:runnable.dir ~main:(Some runnable.main) ~ordered_modules ~sources
       ~package_resolution
       ~dependency_fingerprints:
@@ -442,7 +464,7 @@ let build_runnable ~workspace_root ~verbose ~manifest_path ~compiler_version
     | Test_kind -> Layout.test_binary workspace_root runnable.name
   in
   let expected_outputs =
-    List.concat_map (expected_module_outputs out_dir) source_order
+    List.concat_map (expected_module_outputs backend out_dir) source_order
     @ [ binary; stamp_path out_dir ]
   in
   if target_is_up_to_date ~stamp_path:(stamp_path out_dir) expected_outputs
@@ -465,11 +487,11 @@ let build_runnable ~workspace_root ~verbose ~manifest_path ~compiler_version
     Fs.remove_tree out_dir;
     Fs.ensure_dir out_dir;
     let* object_files =
-      compile_ordered_sources ~verbose ~out_dir ~include_dirs ~package_resolution
-        source_table source_order
+      compile_ordered_sources ~verbose ~backend ~out_dir ~include_dirs
+        ~package_resolution source_table source_order
     in
     let* _ =
-      Toolchain.ensure_success_ocamlopt ~verbose package_resolution
+      Toolchain.ensure_success_compiler ~verbose backend package_resolution
         (Toolchain.link_args package_resolution
         @ [ "-o"; binary ]
         @ archive_files @ object_files)
@@ -484,10 +506,12 @@ let build_runnable ~workspace_root ~verbose ~manifest_path ~compiler_version
           Built_executable { name = runnable.name; out_dir; binary }
       | Test_kind -> Built_test { name = runnable.name; out_dir; binary })
 
-let build ~workspace_root ~verbose ?(requested_targets = []) workspace =
+let build ~workspace_root ~verbose ?(requested_targets = [])
+    ?(backend_request = Toolchain.Auto) workspace =
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
-  let* compiler_version = Toolchain.compiler_version () in
+  let* backend = Toolchain.resolve_backend backend_request in
+  let* compiler_version = Toolchain.compiler_version backend in
   let* order = resolve_build_order workspace requested_targets in
   let index = index_targets workspace in
   Fs.ensure_dir (build_root workspace_root);
@@ -501,20 +525,20 @@ let build ~workspace_root ~verbose ?(requested_targets = []) workspace =
           }
     | Manifest.Library library :: rest ->
       let* artifact =
-          build_library ~workspace_root ~verbose ~manifest_path
+          build_library ~workspace_root ~verbose ~manifest_path ~backend
             ~compiler_version library library_outputs
         in
         loop (artifact :: artifacts) rest
     | Manifest.Executable executable :: rest ->
         let* artifact =
-          build_runnable ~workspace_root ~verbose ~manifest_path
+          build_runnable ~workspace_root ~verbose ~manifest_path ~backend
             ~compiler_version ~kind:Executable_kind executable order index
             library_outputs
         in
         loop (artifact :: artifacts) rest
     | Manifest.Test test :: rest ->
         let* artifact =
-          build_runnable ~workspace_root ~verbose ~manifest_path
+          build_runnable ~workspace_root ~verbose ~manifest_path ~backend
             ~compiler_version ~kind:Test_kind test order index library_outputs
         in
         loop (artifact :: artifacts) rest

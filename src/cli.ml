@@ -2,6 +2,7 @@ type build_options = {
   workspace_dir : string;
   verbose : bool;
   targets : string list;
+  backend_request : Toolchain.backend_request;
 }
 
 type run_options = {
@@ -9,12 +10,14 @@ type run_options = {
   verbose : bool;
   target : string option;
   args : string list;
+  backend_request : Toolchain.backend_request;
 }
 
 type test_options = {
   workspace_dir : string;
   verbose : bool;
   targets : string list;
+  backend_request : Toolchain.backend_request;
 }
 
 type clean_options = {
@@ -43,10 +46,13 @@ type command =
     }
       -> command
 
+let ( let* ) = Result.bind
+
 let build_doc =
   {
     name = "build";
-    signature = "oasis build [--workspace DIR] [--verbose] [TARGET ...]";
+    signature =
+      "oasis build [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis build";
@@ -58,7 +64,8 @@ let build_doc =
 let run_doc =
   {
     name = "run";
-    signature = "oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]";
+    signature =
+      "oasis run [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
     examples =
       [
         "oasis run";
@@ -71,7 +78,8 @@ let run_doc =
 let test_doc =
   {
     name = "test";
-    signature = "oasis test [--workspace DIR] [--verbose] [TARGET ...]";
+    signature =
+      "oasis test [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
       [
         "oasis test";
@@ -125,12 +133,20 @@ let report_error message =
   prerr_endline ("oasis: " ^ message);
   Exit_code 1
 
+let default_backend_request () = Toolchain.env_backend_request ()
+
 let parse_build_args (args : string list) : (build_options, string) result =
+  let* default_backend_request = default_backend_request () in
   let rec loop (options : build_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage build_doc)
@@ -138,15 +154,28 @@ let parse_build_args (args : string list) : (build_options, string) result =
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
-  loop { workspace_dir = "."; verbose = false; targets = [] } args
+  loop
+    {
+      workspace_dir = ".";
+      verbose = false;
+      targets = [];
+      backend_request = default_backend_request;
+    }
+    args
 
 let parse_run_args args =
+  let* default_backend_request = default_backend_request () in
   let rec loop options = function
-    | [] -> Ok options
+    | [] -> Ok { options with args = options.args }
     | "--" :: rest -> Ok { options with args = rest }
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage run_doc)
@@ -160,14 +189,28 @@ let parse_run_args args =
               "run accepts at most one target before '--'; use '--' to pass \
                program arguments")
   in
-  loop { workspace_dir = "."; verbose = false; target = None; args = [] } args
+  loop
+    {
+      workspace_dir = ".";
+      verbose = false;
+      target = None;
+      args = [];
+      backend_request = default_backend_request;
+    }
+    args
 
 let parse_test_args (args : string list) : (test_options, string) result =
+  let* default_backend_request = default_backend_request () in
   let rec loop (options : test_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
     | "--workspace" :: dir :: rest ->
         loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage test_doc)
@@ -175,7 +218,14 @@ let parse_test_args (args : string list) : (test_options, string) result =
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
   in
-  loop { workspace_dir = "."; verbose = false; targets = [] } args
+  loop
+    {
+      workspace_dir = ".";
+      verbose = false;
+      targets = [];
+      backend_request = default_backend_request;
+    }
+    args
 
 let parse_clean_args (args : string list) : (clean_options, string) result =
   let rec loop (options : clean_options) = function
@@ -260,7 +310,8 @@ let run_build (options : build_options) =
   | Ok workspace -> (
       match
         Builder.build ~workspace_root:options.workspace_dir
-          ~verbose:options.verbose ~requested_targets:options.targets workspace
+          ~verbose:options.verbose ~requested_targets:options.targets
+          ~backend_request:options.backend_request workspace
       with
       | Ok _ -> Exit_code 0
       | Error message -> report_error message)
@@ -275,7 +326,7 @@ let run_executable (options : run_options) =
           match
             Builder.build ~workspace_root:options.workspace_dir
               ~verbose:options.verbose ~requested_targets:[ target_name ]
-              workspace
+              ~backend_request:options.backend_request workspace
           with
           | Error message -> report_error message
           | Ok result -> (
@@ -297,6 +348,7 @@ let run_tests (options : test_options) =
   | Ok workspace -> (
       match
         Tester.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
+          ~backend_request:options.backend_request
           ~requested_targets:options.targets workspace
       with
       | Ok status -> Exit_code status

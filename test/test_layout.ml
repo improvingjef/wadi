@@ -15,6 +15,10 @@ let cases =
           "/tmp/oasis-layout/_oasis/build/default/lib/core/libcore.cmxa"
           (Layout.library_archive workspace "core")
           "library archives should live in the lib target root";
+        assert_string_equal
+          "/tmp/oasis-layout/_oasis/build/default/lib/core/libcore.cma"
+          (Layout.library_archive_for_backend workspace Toolchain.Bytecode "core")
+          "bytecode archives should live next to native archives";
         assert_string_equal "/tmp/oasis-layout/_oasis/build/default/exe/app/app"
           (Layout.executable_binary workspace "app")
           "executables should use the exe target root";

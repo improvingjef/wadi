@@ -20,7 +20,7 @@
 20. [ ] Benchmark build latency and tighten startup and execution overhead.
 21. [x] Infer intra-target module compilation order from OCaml interface dependencies so manifests stay declarative.
 22. [x] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
-23. [ ] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
+23. [x] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
 24. [x] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.
 25. [x] Eliminate the hand-maintained bootstrap `Makefile` object lists and rules by deriving bootstrap compilation from the workspace model or a tiny generator.
 26. [ ] Extend the direct process driver with explicit environment and stdin plumbing so future action/codegen subtools never need shell fallbacks.
@@ -30,6 +30,8 @@
 30. [ ] Cache toolchain and package discovery within a build session so package-aware workspaces do not pay repeated probe subprocess costs.
 31. [ ] Persist rebuild reasons alongside target stamps and surface them through `oasis explain` so users can see exactly why a target rebuilt or was reused.
 32. [ ] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.
-33. [ ] Teach the bootstrap generator to honor `.mli` files so interface-heavy self-hosting builds stay aligned with `oasis build`.
-34. [ ] Drive bootstrap compile/link flags from target package metadata instead of the global `UNIX_FLAGS` fallback so the root workspace manifest becomes the single source of truth.
-35. [ ] Add a bootstrap smoke target or CI step that removes `_bootstrap`, regenerates the make fragment, and rebuilds from scratch to catch self-hosting regressions immediately.
+33. [x] Teach the bootstrap generator to honor `.mli` files so interface-heavy self-hosting builds stay aligned with `oasis build`.
+34. [x] Drive bootstrap compile/link flags from target package metadata instead of the global `UNIX_FLAGS` fallback so the root workspace manifest becomes the single source of truth.
+35. [x] Add a bootstrap smoke target or CI step that removes `_bootstrap`, regenerates the make fragment, and rebuilds from scratch to catch self-hosting regressions immediately.
+36. [ ] Detect duplicate module stems across bootstrap library/executable/test groups before writing rules so the shared `_bootstrap/obj` directory never hides collisions behind overwritten artifacts.
+37. [ ] Add CI coverage for both native and bytecode bootstrap smoke lanes so backend portability stays enforced outside local development.

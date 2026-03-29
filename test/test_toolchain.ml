@@ -28,10 +28,25 @@ let cases =
               "toolchain output should report ocamldep";
             assert_string_contains ~needle:"ocamlfind: " run.output
               "toolchain output should report ocamlfind";
+            assert_string_contains ~needle:"selected-backend: " run.output
+              "toolchain output should report the selected backend";
             assert_string_contains ~needle:"stdlib: " run.output
               "toolchain output should report the stdlib path";
             assert_string_contains ~needle:"package-roots:" run.output
               "toolchain output should report ocamlfind package roots")) );
+    ( "falls back to the bytecode backend when native compilation is unavailable",
+      (fun () ->
+        with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
+            match Toolchain.resolve_backend Toolchain.Auto with
+            | Ok Toolchain.Bytecode -> ()
+            | Ok backend ->
+                fail
+                  (Printf.sprintf
+                     "expected bytecode fallback but resolved %s"
+                     (Toolchain.backend_name backend))
+            | Error message ->
+                fail
+                  ("expected bytecode fallback but resolution failed: " ^ message)))) ;
     ( "prints command-specific help for the toolchain subcommand",
       (fun () ->
         with_temp_dir "oasis-toolchain-help" (fun workspace ->
@@ -41,7 +56,7 @@ let cases =
             assert_string_contains ~needle:"oasis toolchain" help.output
               "toolchain help should include the toolchain signature";
             assert_string_not_contains
-              ~needle:"oasis build [--workspace DIR] [--verbose] [TARGET ...]"
+              ~needle:"oasis build [--workspace DIR] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
               help.output
               "toolchain help should stay scoped to the requested command")) );
   ]

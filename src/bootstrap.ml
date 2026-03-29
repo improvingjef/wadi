@@ -1,10 +1,17 @@
+type module_plan = {
+  stem : string;
+  dir : string;
+  has_mli : bool;
+}
+
 type target_plan = {
   name : string;
-  ordered_modules : string list;
+  packages : string list;
+  ordered_modules : module_plan list;
 }
 
 type workspace_plan = {
-  common_modules : string list;
+  common : target_plan;
   executable : target_plan;
   test : target_plan;
 }
@@ -50,7 +57,9 @@ let rec dependency_packages index seen name =
           (Printf.sprintf
              "bootstrap manifest refers to unknown dependency '%s'" name)
     | Some (Manifest.Library library) ->
-        let* packages = collect_results library.deps (dependency_packages index seen) in
+        let* packages =
+          collect_results library.deps (dependency_packages index seen)
+        in
         Ok
           (String_util.dedup_preserve
              (library.packages @ List.concat packages))
@@ -70,12 +79,50 @@ let effective_packages index target =
     (String_util.dedup_preserve
        (Manifest.target_packages target @ List.concat packages))
 
-let ordered_modules ~workspace_root ~target_kind ~target_name ~dir ~modules
+let ordered_module_plans ~workspace_root ~target_kind ~target_name ~dir ~modules
     ~packages =
   let* package_resolution = Toolchain.resolve_packages packages in
   let* sources = Builder.source_descriptors ~workspace_root ~dir modules in
-  Builder.infer_module_order ~verbose:false ~target_kind ~target_name
-    package_resolution sources
+  let* ordered =
+    Builder.infer_module_order ~verbose:false ~target_kind ~target_name
+      package_resolution sources
+  in
+  let source_table : (string, Builder.source_descriptor) Hashtbl.t =
+    Hashtbl.create (List.length sources)
+  in
+  List.iter
+    (fun (source : Builder.source_descriptor) ->
+      Hashtbl.replace source_table source.stem source)
+    sources;
+  let rec loop acc = function
+    | [] -> Ok (List.rev acc)
+    | stem :: rest -> (
+        match Hashtbl.find_opt source_table stem with
+        | Some source ->
+            loop ({ stem = source.stem; dir; has_mli = source.has_mli } :: acc) rest
+        | None ->
+            Error
+              (Printf.sprintf
+                 "bootstrap planning lost source descriptor for module '%s'" stem))
+  in
+  loop [] ordered
+
+let append_main_module ~workspace_root (runnable : Manifest.runnable)
+    ordered_modules =
+  let* main_source =
+    Builder.source_descriptor ~workspace_root ~dir:runnable.dir
+      runnable.main
+  in
+  Ok
+    (ordered_modules
+    @
+    [
+      {
+        stem = main_source.stem;
+        dir = runnable.dir;
+        has_mli = main_source.has_mli;
+      };
+    ])
 
 let plan ~workspace_root workspace =
   let* _ = Builder.resolve_build_order workspace [] in
@@ -104,69 +151,134 @@ let plan ~workspace_root workspace =
   let library_target = Manifest.Library library in
   let executable_target = Manifest.Executable executable in
   let test_target = Manifest.Test test in
+  let* common_packages = effective_packages index library_target in
   let* common_modules =
-    let* packages = effective_packages index library_target in
-    ordered_modules ~workspace_root ~target_kind:"library"
+    ordered_module_plans ~workspace_root ~target_kind:"library"
       ~target_name:library.name ~dir:library.dir ~modules:library.modules
-      ~packages
+      ~packages:common_packages
   in
+  let* executable_packages = effective_packages index executable_target in
   let* executable_modules =
-    let* packages = effective_packages index executable_target in
     let* ordered =
-      ordered_modules ~workspace_root ~target_kind:"executable"
+      ordered_module_plans ~workspace_root ~target_kind:"executable"
         ~target_name:executable.name ~dir:executable.dir
-        ~modules:executable.modules ~packages
+        ~modules:executable.modules ~packages:executable_packages
     in
-    Ok (ordered @ [ executable.main ])
+    append_main_module ~workspace_root executable ordered
   in
+  let* test_packages = effective_packages index test_target in
   let* test_modules =
-    let* packages = effective_packages index test_target in
     let* ordered =
-      ordered_modules ~workspace_root ~target_kind:"test" ~target_name:test.name
-        ~dir:test.dir ~modules:test.modules ~packages
+      ordered_module_plans ~workspace_root ~target_kind:"test"
+        ~target_name:test.name ~dir:test.dir ~modules:test.modules
+        ~packages:test_packages
     in
-    Ok (ordered @ [ test.main ])
+    append_main_module ~workspace_root test ordered
   in
   Ok
     {
-      common_modules;
-      executable = { name = executable.name; ordered_modules = executable_modules };
-      test = { name = test.name; ordered_modules = test_modules };
+      common = { name = library.name; packages = common_packages; ordered_modules = common_modules };
+      executable =
+        {
+          name = executable.name;
+          packages = executable_packages;
+          ordered_modules = executable_modules;
+        };
+      test = { name = test.name; packages = test_packages; ordered_modules = test_modules };
     }
 
-let object_path stem = Printf.sprintf "$(OBJ_DIR)/%s.cmx" stem
+let object_path stem = Printf.sprintf "$(OBJ_DIR)/%s.$(OBJ_EXT)" stem
 
-let object_list modules = String.concat " " (List.map object_path modules)
+let interface_path stem = Printf.sprintf "$(OBJ_DIR)/%s.cmi" stem
+
+let object_list modules =
+  String.concat " "
+    (List.map (fun module_plan -> object_path module_plan.stem) modules)
+
+let package_flags packages =
+  let resolution : Toolchain.package_resolution = { packages; package_paths = [] } in
+  String.concat " " (Toolchain.package_args resolution)
+
+let link_flags packages =
+  let resolution : Toolchain.package_resolution = { packages; package_paths = [] } in
+  String.concat " " (Toolchain.link_args resolution)
 
 let last = function
   | [] -> None
   | items -> Some (List.hd (List.rev items))
 
-let chain_rules modules predecessor =
+let rule_header target prerequisites =
+  match prerequisites with
+  | [] -> Printf.sprintf "%s: | $(OBJ_DIR)" target
+  | prerequisites ->
+      Printf.sprintf "%s: %s | $(OBJ_DIR)" target
+        (String.concat " " prerequisites)
+
+let compile_command prefix =
+  Printf.sprintf "$(call BOOTSTRAP_TOOL_CMD,$(%s_PACKAGE_FLAGS)) $(OCAMLFLAGS) -I $(OBJ_DIR)"
+    prefix
+
+let link_command prefix =
+  Printf.sprintf
+    "$(call BOOTSTRAP_TOOL_CMD,$(%s_PACKAGE_FLAGS)) $(OCAMLFLAGS) -I $(OBJ_DIR) \
+     $(%s_LINK_FLAGS)"
+    prefix prefix
+
+let source_path module_plan extension =
+  Filename.concat module_plan.dir (module_plan.stem ^ extension)
+
+let module_rules prefix predecessor module_plan =
+  let previous_object =
+    match predecessor with
+    | None -> []
+    | Some previous -> [ object_path previous.stem ]
+  in
+  let interface_rules =
+    if module_plan.has_mli then
+      [
+        rule_header (interface_path module_plan.stem)
+          (source_path module_plan ".mli" :: previous_object);
+        ("\t" ^ compile_command prefix ^ " -c -o $@ $<");
+        "";
+      ]
+    else []
+  in
+  let object_prerequisites =
+    [ source_path module_plan ".ml" ]
+    @ (if module_plan.has_mli then [ interface_path module_plan.stem ] else [])
+    @ previous_object
+  in
+  interface_rules
+  @
+  [
+    rule_header (object_path module_plan.stem) object_prerequisites;
+    ("\t" ^ compile_command prefix ^ " -c -o $@ $<");
+    "";
+  ]
+
+let group_rules prefix modules predecessor =
   let rec loop previous acc = function
     | [] -> List.rev acc
-    | module_name :: rest ->
-        let acc =
-          match previous with
-          | None -> acc
-          | Some dependency ->
-              (Printf.sprintf "%s: %s" (object_path module_name)
-                 (object_path dependency))
-              :: acc
-        in
-        loop (Some module_name) acc rest
+    | module_plan :: rest ->
+        let rules = module_rules prefix previous module_plan in
+        loop (Some module_plan) (List.rev_append rules acc) rest
   in
   loop predecessor [] modules
 
 let render_makefile_from_plan plan =
-  let common_objects = object_list plan.common_modules in
+  let common_objects = object_list plan.common.ordered_modules in
   let executable_objects = object_list plan.executable.ordered_modules in
   let test_objects = object_list plan.test.ordered_modules in
-  let common_tail = last plan.common_modules in
+  let common_tail = last plan.common.ordered_modules in
   let lines =
     [
       "# Generated by scripts/generate_bootstrap_makefile.ml from oasis.toml.";
       "# Edit oasis.toml instead of this file.";
+      ("COMMON_PACKAGE_FLAGS := " ^ package_flags plan.common.packages);
+      ("APP_PACKAGE_FLAGS := " ^ package_flags plan.executable.packages);
+      ("APP_LINK_FLAGS := " ^ link_flags plan.executable.packages);
+      ("TEST_PACKAGE_FLAGS := " ^ package_flags plan.test.packages);
+      ("TEST_LINK_FLAGS := " ^ link_flags plan.test.packages);
       ("COMMON_OBJS := " ^ common_objects);
       ("APP_OBJS := $(COMMON_OBJS)"
       ^ if executable_objects = "" then "" else " " ^ executable_objects);
@@ -174,17 +286,16 @@ let render_makefile_from_plan plan =
       ^ if test_objects = "" then "" else " " ^ test_objects);
       "";
     ]
-    @ chain_rules plan.common_modules None
-    @ chain_rules plan.executable.ordered_modules common_tail
-    @ chain_rules plan.test.ordered_modules common_tail
+    @ group_rules "COMMON" plan.common.ordered_modules None
+    @ group_rules "APP" plan.executable.ordered_modules common_tail
+    @ group_rules "TEST" plan.test.ordered_modules common_tail
     @ [
-        "";
         Printf.sprintf "$(BIN_DIR)/%s: $(APP_OBJS) | $(BIN_DIR)"
           plan.executable.name;
-        "\t$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -o $@ $(UNIX_ARCHIVE) $(APP_OBJS)";
+        ("\t" ^ link_command "APP" ^ " -o $@ $(APP_OBJS)");
         "";
         Printf.sprintf "$(BIN_DIR)/%s: $(TEST_OBJS) | $(BIN_DIR)" plan.test.name;
-        "\t$(OCAMLOPT) $(OCAMLFLAGS) $(UNIX_FLAGS) -I $(OBJ_DIR) -o $@ $(UNIX_ARCHIVE) $(TEST_OBJS)";
+        ("\t" ^ link_command "TEST" ^ " -o $@ $(TEST_OBJS)");
       ]
   in
   String.concat "\n" lines ^ "\n"
