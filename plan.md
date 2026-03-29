@@ -132,5 +132,7 @@
 123. [x] Implement `oasis ppx` as an explicit inspect/apply subtool so preprocess and PPX debugging is as decomposed as build/action/promote.
 124. [x] Validate recorded `oasis.lock` toolchain facts like compiler version, stdlib/unix roots, and package search roots so snapshot drift cannot hide outside `package_paths`.
 125. [x] Eliminate the remaining tracked `scripts/bootstrap_seed_metadata.mk` maintenance seam by deriving or refreshing seed metadata directly from the compiled planner during normal workflows.
-126. [ ] Add shared preprocess-plus-PPX fixture helpers for source-inspection tests so transform expectations follow real rewritten syntax instead of ad hoc test-only assumptions.
-127. [ ] Remove the remaining clean-checkout fallback dependency on tracked bootstrap seed metadata by deriving enough seed compile inputs before any compiled `oasis` binary exists.
+126. [x] Add shared preprocess-plus-PPX fixture helpers for source-inspection tests so transform expectations follow real rewritten syntax instead of ad hoc test-only assumptions.
+127. [x] Remove the remaining clean-checkout fallback dependency on tracked bootstrap seed metadata by deriving enough seed compile inputs before any compiled `oasis` binary exists.
+128. [x] Move bootstrap seed metadata and transformed seed snapshots under `_bootstrap/` so normal first-build cache generation does not dirty tracked `scripts/` paths.
+129. [ ] Replace the one-time clean-checkout OCaml-toplevel fallback for seed metadata generation with a lighter metadata-only bootstrap path so the first `make` does not need to load the full planner through the interpreter.

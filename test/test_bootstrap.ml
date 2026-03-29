@@ -88,6 +88,31 @@ let run_make ~cwd goals =
       ]
     "make" goals
 
+let copy_repo_path workspace relative_path =
+  let src_path = Filename.concat (Sys.getcwd ()) relative_path in
+  let dst_path = Filename.concat workspace relative_path in
+  if Fs.is_directory src_path then Fs.copy_tree ~src:src_path ~dst:dst_path
+  else Fs.copy_file ~src:src_path ~dst:dst_path
+
+let copy_clean_bootstrap_fixture workspace =
+  List.iter (copy_repo_path workspace) [ "Makefile"; "oasis.toml"; "src"; "scripts" ]
+
+let run_workspace_bootstrap ?seed_root workspace =
+  let args =
+    [
+      Bootstrap.hidden_command_name;
+      "--manifest";
+      manifest_path workspace;
+      "--format";
+      "seed-metadata";
+    ]
+    @
+    match seed_root with
+    | Some seed_root -> [ "--seed-root"; seed_root ]
+    | None -> []
+  in
+  Process.run_capture ~cwd:workspace "./_bootstrap/bin/oasis" args
+
 let cases =
   [
     ( "derives bootstrap loader directives from the manifest instead of a hard-coded module list",
@@ -306,29 +331,41 @@ deps = ["core"]
           makefile
           "the top-level Makefile should define a compiled bootstrap seed binary";
         assert_string_contains
-          ~needle:"include $(BOOTSTRAP_SEED_METADATA)"
+          ~needle:"BOOTSTRAP_SEED_METADATA := $(BUILD_DIR)/bootstrap.seed-metadata.mk"
           makefile
-          "bootstrap should read cached seed metadata instead of probing the interpreter at runtime";
+          "bootstrap seed metadata should live under the bootstrap artifact root";
         assert_string_not_contains
           ~needle:"$(shell BOOTSTRAP_MODULE_MANIFEST=$(BOOTSTRAP_MANIFEST) $(OCAML) $(BOOTSTRAP_SOURCE_HELPER)"
           makefile
           "cold-start bootstrap should not shell out through the OCaml toplevel to discover seed metadata";
         assert_string_contains
+          ~needle:"BOOTSTRAP_SEED_ROOT := $(BUILD_DIR)/seed"
+          makefile
+          "bootstrap seed snapshots should stay under the bootstrap artifact root";
+        assert_string_contains
+          ~needle:"include $(BOOTSTRAP_SEED_METADATA)"
+          makefile
+          "bootstrap should reread cached seed metadata before planning the final app build";
+        assert_string_contains
           ~needle:"$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope app"
           makefile
           "app-only bootstrap generation should run through the compiled seed binary";
         assert_string_contains
-          ~needle:"$(BOOTSTRAP_SEED_METADATA): FORCE"
+          ~needle:"$(BOOTSTRAP_SEED_METADATA): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) scripts/render_bootstrap_mod_use.ml FORCE | $(BUILD_DIR)"
           makefile
-          "bootstrap should teach make how to revisit cached seed metadata during normal workflows";
+          "bootstrap seed metadata should be remade from source inputs instead of relying on a tracked file";
         assert_string_contains
-          ~needle:"$(call REFRESH_BOOTSTRAP_SEED_METADATA,$(OASIS_BIN))"
+          ~needle:"\"$(OASIS_BIN)\" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest \"$(BOOTSTRAP_MANIFEST)\" --format seed-metadata --seed-root \"$(BOOTSTRAP_SEED_ROOT)\""
           makefile
           "bootstrap seed metadata refresh should run through the compiled bootstrap planner";
         assert_string_contains
           ~needle:"cmp -s \"$$tmp\" \"$(BOOTSTRAP_SEED_METADATA)\""
           makefile
           "bootstrap seed metadata refresh should avoid pointless rewrites when the compiled planner output is unchanged";
+        assert_string_contains
+          ~needle:"\"$(OCAML)\" \"$(BOOTSTRAP_LEGACY_PLANNER)\" --manifest \"$(BOOTSTRAP_MANIFEST)\" --format seed-metadata --seed-root \"$(BOOTSTRAP_SEED_ROOT)\""
+          makefile
+          "clean-checkout metadata generation should fall back to the toplevel loader only for seed metadata";
         assert_string_contains
           ~needle:"-I $(OBJ_DIR) -c \"$$src\" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT)"
           makefile
@@ -345,9 +382,9 @@ deps = ["core"]
           makefile
           "seed metadata refresh should not fall back to the legacy script path";
         assert_string_not_contains
-          ~needle:"ocaml scripts/generate_bootstrap_makefile.ml"
+          ~needle:"\"$(OCAML)\" \"$(BOOTSTRAP_LEGACY_PLANNER)\" --manifest \"$(BOOTSTRAP_MANIFEST)\" --scope app"
           makefile
-          "cold-start bootstrap should no longer evaluate the planner through the OCaml toplevel")) ;
+          "cold-start bootstrap should still keep final app planning on the compiled seed binary")) ;
     ( "uses the compiled seed binary for full bootstrap generation without recursive app builds",
       (fun () ->
         let makefile = Fs.read_file (Filename.concat (Sys.getcwd ()) "Makefile") in
@@ -363,20 +400,36 @@ deps = ["core"]
           ~needle:"$(BIN_DIR)/oasis $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --scope full"
           makefile
           "full bootstrap generation should not require a freshly built app binary before the makefile exists")) ;
-    ( "keeps cached bootstrap seed metadata in sync with the compiled bootstrap planner",
+    ( "bootstraps a clean checkout without tracked seed metadata",
       (fun () ->
-        let generated =
-          run_compiled_bootstrap ~format:Bootstrap.Seed_metadata
-            ~seed_root:"scripts/bootstrap_seed" (Sys.getcwd ())
-        in
-        assert_int_equal 0 generated.status
-          "the compiled bootstrap planner should render seed metadata successfully";
-        let cached =
-          Fs.read_file
-            (Filename.concat (Sys.getcwd ()) "scripts/bootstrap_seed_metadata.mk")
-        in
-        assert_string_equal generated.output cached
-          "the cached bootstrap seed metadata should stay in sync with the compiled helper")) ;
+        with_temp_dir "oasis-bootstrap-clean-checkout" (fun workspace ->
+            copy_clean_bootstrap_fixture workspace;
+            let metadata_path =
+              Filename.concat workspace "_bootstrap/bootstrap.seed-metadata.mk"
+            in
+            assert_true (not (Fs.exists metadata_path))
+              "a clean-checkout bootstrap fixture should start without cached seed metadata";
+            let build = run_make ~cwd:workspace [ "_bootstrap/bin/oasis" ] in
+            assert_int_equal 0 build.status
+              ("clean-checkout bootstrap should regenerate seed metadata automatically\n"
+             ^ build.output);
+            assert_file_exists metadata_path;
+            assert_true
+              (not
+                 (Fs.exists
+                    (Filename.concat workspace "scripts/bootstrap_seed_metadata.mk")))
+              "clean-checkout bootstrap should not recreate the old tracked metadata path";
+            assert_true
+              (Fs.exists (Filename.concat workspace "_bootstrap/seed"))
+              "clean-checkout bootstrap should materialize seed snapshots under _bootstrap";
+            let generated =
+              run_workspace_bootstrap ~seed_root:"_bootstrap/seed" workspace
+            in
+            assert_int_equal 0 generated.status
+              "the bootstrap-built oasis binary should render seed metadata successfully";
+            let cached = Fs.read_file metadata_path in
+            assert_string_equal generated.output cached
+              "the regenerated bootstrap seed metadata should stay in sync with the built helper")) );
     ( "renders transform-aware seed metadata for default-profile bootstrap libraries",
       (fun () ->
         with_temp_dir "oasis-bootstrap-seed-transforms" (fun workspace ->
@@ -435,33 +488,11 @@ ppx = ["rewrite"]
               (write_executable workspace "tools/expand.sh"
                  "#!/bin/sh\nset -eu\nbanner=$(cat config/banner.txt)\nsed \"s/@@PROFILE@@/${BUILD_PROFILE}/g; s/@@BANNER@@/${banner}/g\"\n");
             let _ppx_binary =
-              Test_build.compile_ppx workspace "ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let replacement () =
-  let channel = open_in "ppx/message.txt" in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr channel)
-    (fun () -> input_line channel)
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string (replacement (), loc, delimiter);
-          pconst_loc = loc;
-        }
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "ppx/rewrite.exe"
+              Test_transforms.compile_string_marker_ppx workspace
+                ~relative_path:"ppx/rewrite.ml"
+                ~output_relative_path:"ppx/rewrite.exe"
+                ~marker:"ppx-marker"
+                (Test_transforms.First_line_of_file "ppx/message.txt")
             in
             write_source workspace "lib/core.ml"
               {|let message = "@@PROFILE@@:@@BANNER@@:" ^ Version.value ^ ":" ^ "ppx-marker"|};
@@ -471,12 +502,10 @@ let () =
               {|let () = print_endline Core.message|};
             let metadata =
               run_compiled_bootstrap ~format:Bootstrap.Seed_metadata
-                ~seed_root:"scripts/bootstrap_seed" workspace
+                ~seed_root:"_bootstrap/seed" workspace
             in
             assert_int_equal 0 metadata.status
               "the compiled bootstrap planner should render transform-aware seed metadata";
-            write_workspace_file workspace "scripts/bootstrap_seed_metadata.mk"
-              metadata.output;
             assert_string_contains
               ~needle:"BOOTSTRAP_LIBRARY_ENV_PREFIX := BUILD_PROFILE='release'"
               metadata.output
@@ -490,19 +519,19 @@ let () =
               metadata.output
               "seed metadata should capture ppx arguments";
             assert_string_contains
-              ~needle:"scripts/bootstrap_seed/release/library-core/version.ml"
+              ~needle:"_bootstrap/seed/release/library-core/version.ml"
               metadata.output
               "seed metadata should snapshot transformed generated sources";
             assert_string_contains
-              ~needle:"scripts/bootstrap_seed/release/library-core/core.ml"
+              ~needle:"_bootstrap/seed/release/library-core/core.ml"
               metadata.output
               "seed metadata should snapshot transformed preprocessed sources";
             assert_file_exists
               (Filename.concat workspace
-                 "scripts/bootstrap_seed/release/library-core/version.ml");
+                 "_bootstrap/seed/release/library-core/version.ml");
             assert_file_exists
               (Filename.concat workspace
-                 "scripts/bootstrap_seed/release/library-core/core.ml");
+                 "_bootstrap/seed/release/library-core/core.ml");
             let makefile =
               expect_ok (render_bootstrap ~profile:"release" workspace)
             in
@@ -719,33 +748,11 @@ ppx = ["rewrite"]
               (write_executable workspace "tools/expand.sh"
                  "#!/bin/sh\nset -eu\nbanner=$(cat config/banner.txt)\nsed \"s/@@PROFILE@@/${BUILD_PROFILE}/g; s/@@BANNER@@/${banner}/g\"\n");
             let _ppx_binary =
-              Test_build.compile_ppx workspace "ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let replacement () =
-  let channel = open_in "ppx/message.txt" in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr channel)
-    (fun () -> input_line channel)
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string (replacement (), loc, delimiter);
-          pconst_loc = loc;
-        }
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "ppx/rewrite.exe"
+              Test_transforms.compile_string_marker_ppx workspace
+                ~relative_path:"ppx/rewrite.ml"
+                ~output_relative_path:"ppx/rewrite.exe"
+                ~marker:"ppx-marker"
+                (Test_transforms.First_line_of_file "ppx/message.txt")
             in
             write_source workspace "lib/core.ml"
               {|let message = "@@PROFILE@@:@@BANNER@@:" ^ Version.value ^ ":" ^ "ppx-marker"|};

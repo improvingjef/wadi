@@ -9,26 +9,6 @@ let write_executable workspace relative_path contents =
   Unix.chmod path 0o755;
   path
 
-let compile_ppx workspace relative_path contents output_relative_path =
-  let source_path = Filename.concat workspace relative_path in
-  Fs.write_file source_path contents;
-  let output_path = Filename.concat workspace output_relative_path in
-  let outcome =
-    Process.run_capture "ocamlfind"
-      [
-        "ocamlopt";
-        "-package";
-        "compiler-libs.common";
-        "-linkpkg";
-        "-o";
-        output_path;
-        source_path;
-      ]
-  in
-  assert_int_equal 0 outcome.status
-    "expected the helper ppx binary to compile successfully";
-  output_path
-
 let resolve_command prog =
   let outcome = Process.run_capture "/bin/sh" [ "-c"; "command -v " ^ prog ] in
   assert_int_equal 0 outcome.status
@@ -185,27 +165,11 @@ deps = ["core"]
                  "#!/bin/sh\nset -eu\nbanner=$(cat ../templates/banner.txt)\nsed \"s/@@PREFIX@@/${banner}/g\"\n");
             write_source workspace "packages/core/ppx/config.txt" "member-ppx\n";
             let _ppx_binary =
-              compile_ppx workspace "packages/core/ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string ("member-ppx", loc, delimiter);
-          pconst_loc = loc;
-        }
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "packages/core/ppx/rewrite.exe"
+              Test_transforms.compile_string_marker_ppx workspace
+                ~relative_path:"packages/core/ppx/rewrite.ml"
+                ~output_relative_path:"packages/core/ppx/rewrite.exe"
+                ~marker:"ppx-marker"
+                (Test_transforms.Literal "member-ppx")
             in
             write_source workspace "packages/core/lib/core.ml"
               {|let message = "@@PREFIX@@" ^ ":" ^ Version.value ^ ":" ^ "ppx-marker"|};
@@ -500,33 +464,10 @@ preprocess = ["trace"]
       (fun () ->
         with_temp_dir "oasis-explain-steady-ppx-inputs" (fun workspace ->
             let _ppx_binary =
-              compile_ppx workspace "ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let read_message () =
-  let channel = open_in "ppx/message.txt" in
-  Fun.protect
-    ~finally:(fun () -> close_in channel)
-    (fun () -> input_line channel)
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      { pconst_desc = Pconst_string ("__PPX__", _, delimiter); pconst_loc = loc } ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string (read_message (), loc, delimiter);
-          pconst_loc = loc;
-        }
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "ppx/rewrite.exe"
+              Test_transforms.compile_string_marker_ppx workspace
+                ~relative_path:"ppx/rewrite.ml"
+                ~output_relative_path:"ppx/rewrite.exe" ~marker:"__PPX__"
+                (Test_transforms.First_line_of_file "ppx/message.txt")
             in
             write_manifest workspace
               {|
@@ -662,33 +603,10 @@ preprocess = ["expand"]
       (fun () ->
         with_temp_dir "oasis-explain-ppx-deps" (fun workspace ->
             let _ppx_binary =
-              compile_ppx workspace "ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let read_message () =
-  let channel = open_in "ppx/message.txt" in
-  Fun.protect
-    ~finally:(fun () -> close_in channel)
-    (fun () -> input_line channel)
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      { pconst_desc = Pconst_string ("__PPX__", _, delimiter); pconst_loc = loc } ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string (read_message (), loc, delimiter);
-          pconst_loc = loc;
-        }
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "ppx/rewrite.exe"
+              Test_transforms.compile_string_marker_ppx workspace
+                ~relative_path:"ppx/rewrite.ml"
+                ~output_relative_path:"ppx/rewrite.exe" ~marker:"__PPX__"
+                (Test_transforms.First_line_of_file "ppx/message.txt")
             in
             write_manifest workspace
               {|

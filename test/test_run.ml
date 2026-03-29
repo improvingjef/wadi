@@ -41,6 +41,33 @@ let run_fish_completion ~cwd script body =
   Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "fish"
     [ "-c"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
 
+let setup_ppx_source_inspection_fixture workspace =
+  let _ppx_binary =
+    Test_transforms.compile_string_marker_ppx workspace
+      ~relative_path:"ppx/rewrite.ml" ~output_relative_path:"ppx/rewrite.exe"
+      ~marker:"__PPX__"
+      (Test_transforms.Literal "rewritten by ppx")
+  in
+  ignore
+    (Test_transforms.write_token_preprocessor workspace "tools/expand.sh"
+       ~token:"__PRE__" ~replacement:"pre");
+  write_manifest workspace
+    {|
+[preprocess.expand]
+argv = ["./tools/expand.sh"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+  write_source workspace "app/main.ml"
+    {|let () = print_endline "__PRE__:__PPX__"|}
+
 let cases =
   [
     ( "runs the only executable target in a workspace",
@@ -162,72 +189,7 @@ main = "main"
     ( "inspects preprocessor and ppx pipelines for a selected module",
       (fun () ->
         with_temp_dir "oasis-ppx-plan" (fun workspace ->
-            let _ppx_binary =
-              Test_build.compile_ppx workspace "ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let replace_ppx_marker value =
-  let marker = "__PPX__" in
-  let marker_length = String.length marker in
-  let value_length = String.length value in
-  let rec find index =
-    if index + marker_length > value_length then None
-    else if String.sub value index marker_length = marker then Some index
-    else find (index + 1)
-  in
-  match find 0 with
-  | None -> None
-  | Some index ->
-      Some
-        (String.sub value 0 index ^ "rewritten by ppx"
-       ^ String.sub value (index + marker_length)
-           (value_length - index - marker_length))
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      {
-        pconst_desc = Pconst_string (value, _, delimiter);
-        pconst_loc = loc;
-      }
-    -> (
-      match replace_ppx_marker value with
-      | Some rewritten ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string (rewritten, loc, delimiter);
-          pconst_loc = loc;
-        }
-      | None -> default_mapper.expr mapper expression )
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "ppx/rewrite.exe"
-            in
-            ignore
-              (write_executable workspace "tools/expand.sh"
-                 "#!/bin/sh\nset -eu\nsed 's/__PRE__/pre/g'\n");
-            write_manifest workspace
-              {|
-[preprocess.expand]
-argv = ["./tools/expand.sh"]
-
-[ppx.rewrite]
-argv = ["./ppx/rewrite.exe"]
-
-[executable.demo]
-dir = "app"
-main = "main"
-preprocess = ["expand"]
-ppx = ["rewrite"]
-|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline "__PRE__:__PPX__"|};
+            setup_ppx_source_inspection_fixture workspace;
             let plan =
               run_oasis ~cwd:workspace [ "ppx"; "--plan"; "demo"; "main" ]
             in
@@ -252,72 +214,7 @@ ppx = ["rewrite"]
     ( "dumps transformed source for a module after preprocessors and ppx",
       (fun () ->
         with_temp_dir "oasis-ppx-apply" (fun workspace ->
-            let _ppx_binary =
-              Test_build.compile_ppx workspace "ppx/rewrite.ml"
-                {|
-open Ast_helper
-open Ast_mapper
-open Parsetree
-
-let replace_ppx_marker value =
-  let marker = "__PPX__" in
-  let marker_length = String.length marker in
-  let value_length = String.length value in
-  let rec find index =
-    if index + marker_length > value_length then None
-    else if String.sub value index marker_length = marker then Some index
-    else find (index + 1)
-  in
-  match find 0 with
-  | None -> None
-  | Some index ->
-      Some
-        (String.sub value 0 index ^ "rewritten by ppx"
-       ^ String.sub value (index + marker_length)
-           (value_length - index - marker_length))
-
-let expr mapper expression =
-  match expression.pexp_desc with
-  | Pexp_constant
-      {
-        pconst_desc = Pconst_string (value, _, delimiter);
-        pconst_loc = loc;
-      }
-    -> (
-      match replace_ppx_marker value with
-      | Some rewritten ->
-      Exp.constant
-        {
-          pconst_desc = Pconst_string (rewritten, loc, delimiter);
-          pconst_loc = loc;
-        }
-      | None -> default_mapper.expr mapper expression )
-  | _ -> default_mapper.expr mapper expression
-
-let () =
-  run_main (fun _argv -> { default_mapper with expr })
-|}
-                "ppx/rewrite.exe"
-            in
-            ignore
-              (write_executable workspace "tools/expand.sh"
-                 "#!/bin/sh\nset -eu\nsed 's/__PRE__/pre/g'\n");
-            write_manifest workspace
-              {|
-[preprocess.expand]
-argv = ["./tools/expand.sh"]
-
-[ppx.rewrite]
-argv = ["./ppx/rewrite.exe"]
-
-[executable.demo]
-dir = "app"
-main = "main"
-preprocess = ["expand"]
-ppx = ["rewrite"]
-|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline "__PRE__:__PPX__"|};
+            setup_ppx_source_inspection_fixture workspace;
             let dump = run_oasis ~cwd:workspace [ "ppx"; "demo"; "main" ] in
             assert_int_equal 0 dump.status
               "ppx should dump transformed source for the requested module";
