@@ -22,6 +22,7 @@ type target_options = {
 type library = {
   name : string;
   dir : string;
+  package_path : string option;
   modules : string list;
   deps : string list;
   packages : string list;
@@ -31,6 +32,7 @@ type library = {
 type runnable = {
   name : string;
   dir : string;
+  package_path : string option;
   main : string;
   modules : string list;
   deps : string list;
@@ -44,6 +46,7 @@ type test_target = runnable
 
 type command_tool = {
   name : string;
+  package_path : string option;
   argv : string list;
   cwd : string option;
   env : env_binding list;
@@ -52,12 +55,14 @@ type command_tool = {
 
 type ppx_tool = {
   name : string;
+  package_path : string option;
   argv : string list;
   deps : string list;
 }
 
 type action = {
   name : string;
+  package_path : string option;
   argv : string list;
   cwd : string option;
   deps : string list;
@@ -148,6 +153,32 @@ let target_deps = function
   | Library library -> library.deps
   | Executable executable -> executable.deps
   | Test test -> test.deps
+
+let target_package_path = function
+  | Library library -> library.package_path
+  | Executable executable -> executable.package_path
+  | Test test -> test.package_path
+
+let package_label = function
+  | Some package_path -> package_path
+  | None -> "root"
+
+let package_suffix package_path =
+  match package_path with
+  | Some package_path -> " (" ^ package_path ^ ")"
+  | None -> ""
+
+let target_display_name target =
+  target_name target ^ package_suffix (target_package_path target)
+
+let action_display_name (action : action) =
+  action.name ^ package_suffix action.package_path
+
+let command_tool_display_name (tool : command_tool) =
+  tool.name ^ package_suffix tool.package_path
+
+let ppx_tool_display_name (tool : ppx_tool) =
+  tool.name ^ package_suffix tool.package_path
 
 let target_packages = function
   | Library library -> library.packages
@@ -528,7 +559,8 @@ let parse_library path section name =
   in
   let* () = validate_identifier_list ~allow_empty:true path section.line "deps" deps in
   let* () = validate_package_list path section.line packages in
-  Ok (Library { name; dir; modules; deps; packages; options })
+  Ok
+    (Library { name; dir; package_path = None; modules; deps; packages; options })
 
 let parse_runnable path section name =
   let* () =
@@ -565,7 +597,7 @@ let parse_runnable path section name =
     error path section.line "main must be a file stem without path or extension"
   else if List.mem main modules then
     error path section.line "main should not be repeated in modules"
-  else Ok { name; dir; main; modules; deps; packages; options }
+  else Ok { name; dir; package_path = None; main; modules; deps; packages; options }
 
 let parse_executable path section name =
   let* executable = parse_runnable path section name in
@@ -600,7 +632,18 @@ let parse_action path section name =
     | None -> Ok ()
     | Some cwd -> validate_relative_path ~allow_dot:true path section.line "cwd" cwd
   in
-  Ok { name; argv; cwd; deps; outputs; env; stdin; sandbox }
+  Ok
+    {
+      name;
+      package_path = None;
+      argv;
+      cwd;
+      deps;
+      outputs;
+      env;
+      stdin;
+      sandbox;
+    }
 
 let parse_command_tool label path section name =
   let* () = allowed_fields path section [ "argv"; "cwd"; "env"; "deps" ] in
@@ -620,7 +663,7 @@ let parse_command_tool label path section name =
     | None -> Ok ()
     | Some cwd -> validate_relative_path ~allow_dot:true path section.line "cwd" cwd
   in
-  Ok { name; argv; cwd; env; deps }
+  Ok { name; package_path = None; argv; cwd; env; deps }
 
 let parse_ppx_tool path section name =
   let* () = allowed_fields path section [ "argv"; "deps" ] in
@@ -631,7 +674,7 @@ let parse_ppx_tool path section name =
   let* () =
     if argv = [] then error path section.line "ppx argv cannot be empty" else Ok ()
   in
-  Ok { name; argv; deps }
+  Ok { name; package_path = None; argv; deps }
 
 let parse_defaults path section =
   let* () =
@@ -878,26 +921,105 @@ let resolve_target_options (workspace : workspace) profile_name target =
       in
       Ok (merge_target_options with_profile override_options)
 
-let find_action (workspace : workspace) (name : string) =
-  List.find_opt (fun (action : action) -> action.name = name) workspace.actions
+let find_scoped tool_name package_path items get_name get_package_path =
+  let exact_match item =
+    get_name item = tool_name && get_package_path item = package_path
+  in
+  let root_match item = get_name item = tool_name && get_package_path item = None in
+  match package_path with
+  | Some _ -> (
+      match List.find_opt exact_match items with
+      | Some _ as item -> item
+      | None -> List.find_opt root_match items)
+  | None -> List.find_opt root_match items
 
-let find_preprocessor (workspace : workspace) (name : string) =
-  List.find_opt (fun (tool : command_tool) -> tool.name = name)
-    workspace.preprocessors
+let find_action (workspace : workspace) ?package_path (name : string) =
+  find_scoped name package_path workspace.actions
+    (fun (action : action) -> action.name)
+    (fun (action : action) -> action.package_path)
 
-let find_ppx_tool (workspace : workspace) (name : string) =
-  List.find_opt (fun (tool : ppx_tool) -> tool.name = name) workspace.ppx_tools
+let find_preprocessor (workspace : workspace) ?package_path (name : string) =
+  find_scoped name package_path workspace.preprocessors
+    (fun (tool : command_tool) -> tool.name)
+    (fun (tool : command_tool) -> tool.package_path)
+
+let find_ppx_tool (workspace : workspace) ?package_path (name : string) =
+  find_scoped name package_path workspace.ppx_tools
+    (fun (tool : ppx_tool) -> tool.name)
+    (fun (tool : ppx_tool) -> tool.package_path)
 
 let rebase_target_dir member_path dir =
-  Filename.concat member_path dir
+  if dir = "." then member_path else Filename.concat member_path dir
+
+let normalize_relative_path value =
+  let rec strip value =
+    if String_util.starts_with ~prefix:"./" value then
+      let next = String.sub value 2 (String.length value - 2) in
+      strip next
+    else value
+  in
+  strip value
+
+let rebase_relative_path ~allow_dot member_path value =
+  let value = normalize_relative_path value in
+  if allow_dot && value = "." then member_path else Filename.concat member_path value
+
+let rebase_command_argv member_path = function
+  | [] -> []
+  | prog :: args as argv ->
+      if Filename.is_relative prog && String.contains prog '/' then
+        rebase_relative_path ~allow_dot:false member_path prog :: args
+      else argv
 
 let rebase_target member_path = function
   | Library library ->
-      Library { library with dir = rebase_target_dir member_path library.dir }
+      Library
+        {
+          library with
+          dir = rebase_target_dir member_path library.dir;
+          package_path = Some member_path;
+        }
   | Executable executable ->
       Executable
-        { executable with dir = rebase_target_dir member_path executable.dir }
-  | Test test -> Test { test with dir = rebase_target_dir member_path test.dir }
+        {
+          executable with
+          dir = rebase_target_dir member_path executable.dir;
+          package_path = Some member_path;
+        }
+  | Test test ->
+      Test
+        {
+          test with
+          dir = rebase_target_dir member_path test.dir;
+          package_path = Some member_path;
+        }
+
+let rebase_action member_path (action : action) =
+  {
+    action with
+    package_path = Some member_path;
+    argv = rebase_command_argv member_path action.argv;
+    cwd =
+      Option.map (rebase_relative_path ~allow_dot:true member_path) action.cwd;
+    deps = List.map (rebase_relative_path ~allow_dot:false member_path) action.deps;
+  }
+
+let rebase_preprocessor member_path (tool : command_tool) =
+  {
+    tool with
+    package_path = Some member_path;
+    argv = rebase_command_argv member_path tool.argv;
+    cwd = Option.map (rebase_relative_path ~allow_dot:true member_path) tool.cwd;
+    deps = List.map (rebase_relative_path ~allow_dot:false member_path) tool.deps;
+  }
+
+let rebase_ppx_tool member_path (tool : ppx_tool) =
+  {
+    tool with
+    package_path = Some member_path;
+    argv = rebase_command_argv member_path tool.argv;
+    deps = List.map (rebase_relative_path ~allow_dot:false member_path) tool.deps;
+  }
 
 let member_error member_manifest_path message =
   Error (Printf.sprintf "%s: %s" member_manifest_path message)
@@ -1058,10 +1180,17 @@ let rec load path =
   else
     let root_workspace = loaded.workspace in
     let root_dir = Filename.dirname path in
-    let rec load_members merged_targets = function
+    let rec load_members merged_targets merged_actions merged_preprocessors
+        merged_ppx_tools = function
       | [] ->
           let merged_workspace =
-            { root_workspace with targets = List.rev merged_targets }
+            {
+              root_workspace with
+              targets = List.rev merged_targets;
+              actions = List.rev merged_actions;
+              preprocessors = List.rev merged_preprocessors;
+              ppx_tools = List.rev merged_ppx_tools;
+            }
           in
           let* () = validate_unique_target_names path merged_workspace.targets in
           Ok merged_workspace
@@ -1094,22 +1223,6 @@ let rec load path =
             else Ok ()
           in
           let* () =
-            if member_workspace.actions <> [] then
-              member_workspace_feature_error member_manifest_path "action sections"
-            else Ok ()
-          in
-          let* () =
-            if member_workspace.preprocessors <> [] then
-              member_workspace_feature_error member_manifest_path
-                "preprocess tool sections"
-            else Ok ()
-          in
-          let* () =
-            if member_workspace.ppx_tools <> [] then
-              member_workspace_feature_error member_manifest_path "ppx sections"
-            else Ok ()
-          in
-          let* () =
             if member_workspace.profiles <> [] then
               member_workspace_feature_error member_manifest_path "profile sections"
             else Ok ()
@@ -1117,6 +1230,22 @@ let rec load path =
           let rebased_targets =
             List.map (rebase_target member_path) member_workspace.targets
           in
-          load_members (List.rev_append rebased_targets merged_targets) rest
+          let rebased_actions =
+            List.map (rebase_action member_path) member_workspace.actions
+          in
+          let rebased_preprocessors =
+            List.map (rebase_preprocessor member_path) member_workspace.preprocessors
+          in
+          let rebased_ppx_tools =
+            List.map (rebase_ppx_tool member_path) member_workspace.ppx_tools
+          in
+          load_members
+            (List.rev_append rebased_targets merged_targets)
+            (List.rev_append rebased_actions merged_actions)
+            (List.rev_append rebased_preprocessors merged_preprocessors)
+            (List.rev_append rebased_ppx_tools merged_ppx_tools)
+            rest
     in
-    load_members (List.rev root_workspace.targets) loaded.members
+    load_members (List.rev root_workspace.targets) (List.rev root_workspace.actions)
+      (List.rev root_workspace.preprocessors) (List.rev root_workspace.ppx_tools)
+      loaded.members

@@ -55,6 +55,7 @@ type completion_mode =
   | Query of {
       previous : string list;
       current : string;
+      describe : bool;
     }
 
 type completion_options = {
@@ -69,6 +70,11 @@ type toolchain_options = { verbose : bool }
 type command_result =
   | Exit_code of int
   | Forward_status of Unix.process_status
+
+type completion_candidate = {
+  value : string;
+  hint : string option;
+}
 
 type option_doc = {
   usage : string;
@@ -384,12 +390,14 @@ let render_markdown docs =
 let command_flag_words doc =
   List.concat_map (fun option_doc -> option_doc.flags) doc.options
 
-let completion_query_command ?workspace_dir () =
+let completion_query_command ?workspace_dir ?(describe = false) () =
   "oasis completion"
   ^
-  match workspace_dir with
-  | Some dir -> " --workspace " ^ String_util.shell_quote dir ^ " --query"
-  | None -> " --query"
+  (match workspace_dir with
+  | Some dir -> " --workspace " ^ String_util.shell_quote dir
+  | None -> "")
+  ^ " --query"
+  ^ if describe then " --describe" else ""
 
 let render_bash_completion ?workspace_dir () =
   let query = completion_query_command ?workspace_dir () in
@@ -410,7 +418,7 @@ let render_bash_completion ?workspace_dir () =
     ]
 
 let render_zsh_completion ?workspace_dir () =
-  let query = completion_query_command ?workspace_dir () in
+  let query = completion_query_command ?workspace_dir ~describe:true () in
   String.concat "\n"
     [
       "#compdef oasis";
@@ -420,10 +428,17 @@ let render_zsh_completion ?workspace_dir () =
       "}";
       "_oasis() {";
       "  local current";
+      "  local value description";
       "  local -a previous suggestions";
       "  current=\"${words[CURRENT]}\"";
       "  previous=(\"${(@)words[2,CURRENT-1]}\")";
-      "  suggestions=(\"${(@f)$(_oasis_query \"$current\" \"${previous[@]}\")}\")";
+      "  while IFS=$'\\t' read -r value description; do";
+      "    if [[ -n \"$description\" ]]; then";
+      "      suggestions+=(\"${value}:${description}\")";
+      "    elif [[ -n \"$value\" ]]; then";
+      "      suggestions+=(\"${value}\")";
+      "    fi";
+      "  done < <(_oasis_query \"$current\" \"${previous[@]}\")";
       "  _describe 'value' suggestions";
       "}";
       "compdef _oasis oasis";
@@ -460,7 +475,7 @@ let render_fish_option command_name (option_doc : option_doc) =
       @ [ "-d"; String_util.shell_quote option_doc.description ])
 
 let render_fish_completion ?workspace_dir () =
-  let query = completion_query_command ?workspace_dir () in
+  let query = completion_query_command ?workspace_dir ~describe:true () in
   String.concat "\n"
     [
       "function __oasis_complete";
@@ -631,24 +646,27 @@ let parse_docs_args args =
   | _ -> Error "docs does not accept positional arguments"
 
 let parse_completion_args args =
-  let rec loop workspace_dir shell query current previous = function
+  let rec loop workspace_dir shell query describe current previous = function
     | [] ->
         if query then
           Ok
             {
               workspace_dir;
-              mode = Query { previous = List.rev previous; current };
+              mode = Query { previous = List.rev previous; current; describe };
             }
         else (
           match shell with
           | Some shell -> Ok { workspace_dir; mode = Render_script shell }
           | None -> Error "completion requires a shell name")
     | "--workspace" :: dir :: rest ->
-        loop dir shell query current previous rest
+        loop dir shell query describe current previous rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--query" :: rest -> loop workspace_dir shell true current previous rest
+    | "--query" :: rest -> loop workspace_dir shell true describe current previous rest
+    | "--describe" :: rest ->
+        if query then loop workspace_dir shell query true current previous rest
+        else Error "--describe is only supported with --query"
     | "--current" :: value :: rest ->
-        if query then loop workspace_dir shell query value previous rest
+        if query then loop workspace_dir shell query describe value previous rest
         else Error "--current is only supported with --query"
     | "--current" :: [] -> Error "--current requires a value"
     | "--" :: rest ->
@@ -657,20 +675,26 @@ let parse_completion_args args =
             {
               workspace_dir;
               mode =
-                Query { previous = List.rev_append previous rest; current };
+                Query
+                  {
+                    previous = List.rev_append previous rest;
+                    current;
+                    describe;
+                  };
             }
         else Error "completion accepts exactly one shell name"
     | "--help" :: _ when not query -> Error (command_usage completion_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | value :: rest ->
-        if query then loop workspace_dir shell query current (value :: previous) rest
+        if query then
+          loop workspace_dir shell query describe current (value :: previous) rest
         else
           match shell with
-          | None -> loop workspace_dir (Some value) query current previous rest
+          | None -> loop workspace_dir (Some value) query describe current previous rest
           | Some _ -> Error "completion accepts exactly one shell name"
   in
-  loop "." None false "" [] args
+  loop "." None false false "" [] args
 
 let parse_install_args (args : string list) : (install_options, string) result =
   let* default_backend_request = default_backend_request () in
@@ -776,10 +800,24 @@ let profile_names workspace =
 let all_target_names workspace =
   List.map Manifest.target_name workspace.Manifest.targets
 
+let candidate ?hint value = { value; hint }
+
+let target_candidate target =
+  candidate ?hint:(Manifest.target_package_path target) (Manifest.target_name target)
+
 let executable_target_names workspace =
   List.filter_map
     (function
       | Manifest.Executable executable -> Some executable.name
+      | Manifest.Library _ | Manifest.Test _ -> None)
+    workspace.Manifest.targets
+
+let executable_target_candidates workspace =
+  List.filter_map
+    (function
+      | Manifest.Executable executable ->
+          Some
+            (candidate ?hint:executable.package_path executable.name)
       | Manifest.Library _ | Manifest.Test _ -> None)
     workspace.Manifest.targets
 
@@ -790,11 +828,28 @@ let test_target_names workspace =
       | Manifest.Library _ | Manifest.Executable _ -> None)
     workspace.Manifest.targets
 
+let test_target_candidates workspace =
+  List.filter_map
+    (function
+      | Manifest.Test test -> Some (candidate ?hint:test.package_path test.name)
+      | Manifest.Library _ | Manifest.Executable _ -> None)
+    workspace.Manifest.targets
+
 let installable_target_names workspace =
   List.filter_map
     (function
       | Manifest.Library library -> Some library.name
       | Manifest.Executable executable -> Some executable.name
+      | Manifest.Test _ -> None)
+    workspace.Manifest.targets
+
+let installable_target_candidates workspace =
+  List.filter_map
+    (function
+      | Manifest.Library library ->
+          Some (candidate ?hint:library.package_path library.name)
+      | Manifest.Executable executable ->
+          Some (candidate ?hint:executable.package_path executable.name)
       | Manifest.Test _ -> None)
     workspace.Manifest.targets
 
@@ -814,62 +869,82 @@ let rec positional_argument_count = function
       positional_argument_count rest
   | _value :: rest -> 1 + positional_argument_count rest
 
-let positional_completion_words ?workspace command_name rest =
+let positional_completion_candidates ?workspace command_name rest =
   match workspace with
   | None -> (
       match command_name with
       | "completion" when positional_argument_count rest = 0 ->
-          completion_doc.completion_words
-      | _ -> [])
+          List.map (fun word -> candidate word) completion_doc.completion_words
+      | _ -> [] )
   | Some workspace -> (
       match command_name with
-      | "build" | "clean" | "explain" -> all_target_names workspace
+      | "build" | "clean" | "explain" ->
+          List.map target_candidate workspace.Manifest.targets
       | "run" ->
-          if positional_argument_count rest = 0 then executable_target_names workspace
+          if positional_argument_count rest = 0 then
+            executable_target_candidates workspace
           else []
-      | "test" -> test_target_names workspace
-      | "install" -> installable_target_names workspace
+      | "test" -> test_target_candidates workspace
+      | "install" -> installable_target_candidates workspace
       | "completion" when positional_argument_count rest = 0 ->
-          completion_doc.completion_words
+          List.map (fun word -> candidate word) completion_doc.completion_words
       | "docs" | "toolchain" -> []
       | _ -> [])
 
-let value_completion_words ?workspace = function
+let value_completion_candidates ?workspace = function
   | "--profile" -> (
       match workspace with
-      | Some workspace -> profile_names workspace
+      | Some workspace ->
+          List.map (fun word -> candidate word) (profile_names workspace)
       | None -> [])
-  | "--backend" -> backend_completion_words
+  | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
   | "--workspace" | "--prefix" | "--destdir" -> []
   | _ -> []
 
-let filter_completion_words ~current words =
-  String_util.dedup_preserve words
-  |> List.filter (fun word ->
-         current = "" || String_util.starts_with ~prefix:current word)
+let dedup_completion_candidates candidates =
+  let seen = Hashtbl.create (List.length candidates) in
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | ({ value; _ } as candidate) :: rest ->
+        if Hashtbl.mem seen value then loop acc rest
+        else (
+          Hashtbl.add seen value ();
+          loop (candidate :: acc) rest)
+  in
+  loop [] candidates
+
+let filter_completion_candidates ~current candidates =
+  dedup_completion_candidates candidates
+  |> List.filter (fun candidate ->
+         current = "" || String_util.starts_with ~prefix:current candidate.value)
 
 let completion_candidates workspace ~previous ~current =
   match previous with
-  | [] -> filter_completion_words ~current (List.map (fun doc -> doc.name) command_docs)
+  | [] ->
+      filter_completion_candidates ~current
+        (List.map (fun doc -> candidate doc.name) command_docs)
   | command_name :: rest -> (
       match find_command_doc command_name with
       | None ->
-          filter_completion_words ~current
-            (List.map (fun doc -> doc.name) command_docs)
+          filter_completion_candidates ~current
+            (List.map (fun doc -> candidate doc.name) command_docs)
       | Some doc ->
           if List.mem "--" rest then []
           else
             match List.rev previous with
             | option_name :: _ when option_expects_value option_name ->
-                filter_completion_words ~current
-                  (value_completion_words ?workspace option_name)
+                filter_completion_candidates ~current
+                  (value_completion_candidates ?workspace option_name)
             | _ ->
                 let flags = command_flag_words doc in
                 if String_util.starts_with ~prefix:"-" current then
-                  filter_completion_words ~current flags
+                  filter_completion_candidates ~current
+                    (List.map (fun flag -> candidate flag) flags)
                 else
-                  filter_completion_words ~current
-                    (positional_completion_words ?workspace:workspace command_name rest @ flags))
+                  filter_completion_candidates ~current
+                    (positional_completion_candidates ?workspace:workspace
+                       command_name rest
+                    @ List.map (fun flag -> candidate flag) flags))
 
 let executable_names workspace =
   List.filter_map
@@ -1046,9 +1121,13 @@ let run_completion (options : completion_options) =
               print_string script;
               Exit_code 0
           | Error message -> report_error message)
-      | Query { previous; current } ->
+      | Query { previous; current; describe } ->
           completion_candidates workspace ~previous ~current
-          |> List.iter print_endline;
+          |> List.iter (fun candidate ->
+                 match (describe, candidate.hint) with
+                 | true, Some hint ->
+                     print_endline (candidate.value ^ "\t" ^ hint)
+                 | _ -> print_endline candidate.value);
           Exit_code 0)
 
 let run_toolchain (_options : toolchain_options) =

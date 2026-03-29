@@ -129,6 +129,108 @@ deps = ["core"]
               "executables spanning member packages should run successfully";
             assert_string_equal "multi-package\n" run.output
               "cross-member dependency analysis should produce a working executable")) );
+    ( "uses package-local member actions, preprocessors, and ppx without leaking root tools",
+      (fun () ->
+        with_temp_dir "oasis-member-local-tools" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+
+[action.generate_version]
+argv = ["./root-tools/generate.sh"]
+outputs = ["version.ml"]
+
+[preprocess.expand]
+argv = ["./root-tools/expand.sh"]
+
+[ppx.rewrite]
+argv = ["./root-tools/rewrite.exe"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[action.generate_version]
+argv = ["./scripts/generate.sh"]
+cwd = "."
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+
+[preprocess.expand]
+argv = ["./scripts/expand.sh"]
+cwd = "scripts"
+deps = ["templates/banner.txt"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/config.txt"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate_version"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "packages/core/templates/version.txt"
+              "member-action\n";
+            ignore
+              (write_executable workspace "packages/core/scripts/generate.sh"
+                 "#!/bin/sh\nset -eu\nversion=$(cat templates/version.txt)\nprintf 'let value = \"%s\"\\n' \"$version\" > lib/version.ml\n");
+            write_source workspace "packages/core/templates/banner.txt"
+              "member-pre";
+            ignore
+              (write_executable workspace "packages/core/scripts/expand.sh"
+                 "#!/bin/sh\nset -eu\nbanner=$(cat ../templates/banner.txt)\nsed \"s/@@PREFIX@@/${banner}/g\"\n");
+            write_source workspace "packages/core/ppx/config.txt" "member-ppx\n";
+            let _ppx_binary =
+              compile_ppx workspace "packages/core/ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string ("member-ppx", loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "packages/core/ppx/rewrite.exe"
+            in
+            write_source workspace "packages/core/lib/core.ml"
+              {|let message = "@@PREFIX@@" ^ ":" ^ Version.value ^ ":" ^ "ppx-marker"|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline Core.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "member-local tools should build successfully without centralizing them in the root manifest";
+            assert_string_contains ~needle:"Built library core (packages/core)"
+              build.output
+              "build output should surface the member package path for libraries";
+            assert_string_contains ~needle:"Built executable demo (packages/app)"
+              build.output
+              "build output should surface the member package path for executables";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "member-local tool builds should produce a runnable executable";
+            assert_string_equal "member-pre:member-action:member-ppx\n" run.output
+              "member-local actions, preprocessors, and ppx tools should apply within their package scope")) );
     ( "builds a requested library without unrelated executables",
       (fun () ->
         with_fixture "hello" (fun workspace ->

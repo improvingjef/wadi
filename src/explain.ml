@@ -140,12 +140,17 @@ let render_section title items =
   let items = if items = [] then [ "none" ] else items in
   (title ^ ":") :: List.map (fun item -> "- " ^ item) items
 
-let render_report ~kind_name ~target_name ~profile ~status ~out_dir ~artifact
-    ~resolution_lines ~include_dirs ~module_order ~command_lines =
+let render_report ~kind_name ~target_name ~package_path ~profile ~status ~out_dir
+    ~artifact ~resolution_lines ~include_dirs ~module_order ~command_lines =
   String.concat "\n"
     ([
        "Target: " ^ target_name;
        "Kind: " ^ kind_name;
+       ("Package-path: "
+       ^
+       match package_path with
+       | Some package_path -> package_path
+       | None -> "root");
        "Profile: " ^ profile;
        "State: " ^ status_name status.build_status;
        "Artifact: " ^ artifact;
@@ -166,13 +171,21 @@ let json_string text = "\"" ^ String_util.json_escape text ^ "\""
 
 let json_array items = "[" ^ String.concat ", " items ^ "]"
 
-let render_json_report ~kind_name ~target_name ~profile ~status ~out_dir
-    ~artifact ~resolution_lines ~include_dirs ~module_order ~command_lines =
+let render_json_report ~kind_name ~target_name ~package_path ~profile ~status
+    ~out_dir ~artifact ~resolution_lines ~include_dirs ~module_order
+    ~command_lines =
   String.concat "\n"
     [
       "{";
       "  \"target\": " ^ json_string target_name ^ ",";
       "  \"kind\": " ^ json_string kind_name ^ ",";
+      "  \"package_path\": "
+      ^
+      json_string
+        (match package_path with
+        | Some package_path -> package_path
+        | None -> "root")
+      ^ ",";
       "  \"profile\": " ^ json_string profile ^ ",";
       "  \"state\": " ^ json_string (status_name status.build_status) ^ ",";
       "  \"artifact\": " ^ json_string artifact ^ ",";

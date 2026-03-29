@@ -133,6 +133,112 @@ let cases =
               ~needle:"inputs and outputs matched the recorded fingerprint"
               second_explain.output
               "reused targets should explain the cache hit")) );
+    ( "surfaces member package paths and local tool scopes in explain output",
+      (fun () ->
+        with_temp_dir "oasis-explain-member-paths" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[action.generate_version]
+argv = ["./scripts/generate.sh"]
+cwd = "."
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+
+[preprocess.expand]
+argv = ["./scripts/expand.sh"]
+cwd = "scripts"
+deps = ["templates/banner.txt"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/config.txt"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate_version"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "packages/core/templates/version.txt"
+              "member-action\n";
+            ignore
+              (write_executable workspace "packages/core/scripts/generate.sh"
+                 "#!/bin/sh\nset -eu\nversion=$(cat templates/version.txt)\nprintf 'let value = \"%s\"\\n' \"$version\" > lib/version.ml\n");
+            write_source workspace "packages/core/templates/banner.txt"
+              "member-pre";
+            ignore
+              (write_executable workspace "packages/core/scripts/expand.sh"
+                 "#!/bin/sh\nset -eu\nbanner=$(cat ../templates/banner.txt)\nsed \"s/@@PREFIX@@/${banner}/g\"\n");
+            write_source workspace "packages/core/ppx/config.txt" "member-ppx\n";
+            let _ppx_binary =
+              compile_ppx workspace "packages/core/ppx/rewrite.ml"
+                {|
+open Ast_helper
+open Ast_mapper
+open Parsetree
+
+let expr mapper expression =
+  match expression.pexp_desc with
+  | Pexp_constant
+      { pconst_desc = Pconst_string ("ppx-marker", _, delimiter); pconst_loc = loc } ->
+      Exp.constant
+        {
+          pconst_desc = Pconst_string ("member-ppx", loc, delimiter);
+          pconst_loc = loc;
+        }
+  | _ -> default_mapper.expr mapper expression
+
+let () =
+  run_main (fun _argv -> { default_mapper with expr })
+|}
+                "packages/core/ppx/rewrite.exe"
+            in
+            write_source workspace "packages/core/lib/core.ml"
+              {|let message = "@@PREFIX@@" ^ ":" ^ Version.value ^ ":" ^ "ppx-marker"|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline Core.message|};
+            let build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 build.status
+              "member-local tool targets should build before explain is read";
+            let explain = run_oasis ~cwd:workspace [ "explain"; "core" ] in
+            assert_int_equal 0 explain.status
+              "explain should succeed for a built member target";
+            assert_string_contains ~needle:"Package-path: packages/core"
+              explain.output
+              "text explain output should surface the member package path";
+            assert_string_contains
+              ~needle:"actions: generate_version (packages/core)"
+              explain.output
+              "text explain output should show the scoped member action name";
+            assert_string_contains
+              ~needle:"preprocessors: expand (packages/core)"
+              explain.output
+              "text explain output should show the scoped member preprocessor name";
+            assert_string_contains ~needle:"ppx: rewrite (packages/core)"
+              explain.output
+              "text explain output should show the scoped member ppx name";
+            let json_explain =
+              run_oasis ~cwd:workspace [ "explain"; "--json"; "core" ]
+            in
+            assert_int_equal 0 json_explain.status
+              "JSON explain should succeed for a built member target";
+            assert_string_contains ~needle:"\"package_path\": \"packages/core\""
+              json_explain.output
+              "JSON explain output should record the member package path")) );
     ( "persists a machine-readable explain sibling for automation",
       (fun () ->
         with_fixture "hello" (fun workspace ->

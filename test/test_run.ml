@@ -239,6 +239,61 @@ main = "main"
                   "completion queries should suggest the default profile name";
                 assert_string_contains ~needle:"dev\n" profile_query.output
                   "completion queries should suggest additional profile names")) ));
+    ( "returns member package paths in described completion queries",
+      (fun () ->
+        with_temp_dir "oasis-cli-completion-describe" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+
+[library.shared]
+dir = "shared"
+modules = ["shared"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+deps = ["shared"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "shared/shared.ml" {|let value = "shared"|};
+            write_source workspace "packages/core/lib/core.ml"
+              {|let value = Shared.value|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline Core.value|};
+            with_temp_dir "oasis-cli-completion-describe-cwd" (fun outside ->
+                let query =
+                  run_oasis ~cwd:outside
+                    [
+                      "completion";
+                      "--workspace";
+                      workspace;
+                      "--query";
+                      "--describe";
+                      "--current";
+                      "";
+                      "--";
+                      "build";
+                    ]
+                in
+                assert_int_equal 0 query.status
+                  "described completion queries should succeed";
+                assert_string_contains ~needle:"shared\n" query.output
+                  "root targets should still be listed plainly";
+                assert_string_contains ~needle:"core\tpackages/core\n" query.output
+                  "member library completions should include their package path";
+                assert_string_contains ~needle:"demo\tpackages/app\n" query.output
+                  "member executable completions should include their package path")) ));
     ( "queries top-level command names outside a workspace",
       (fun () ->
         with_temp_dir "oasis-cli-query-top-level" (fun workspace ->
@@ -280,6 +335,9 @@ main = "main"
             assert_string_contains ~needle:"oasis completion --query"
               completion.output
               "zsh completion should query the live workspace at runtime";
+            assert_string_contains ~needle:"--describe"
+              completion.output
+              "zsh completion should request described runtime suggestions";
             assert_string_contains ~needle:"words[2,CURRENT-1]" completion.output
               "zsh completion should forward prior words to the query protocol";
             assert_string_contains ~needle:"_describe 'value' suggestions"
@@ -301,7 +359,10 @@ main = "main"
               "fish completion should forward committed words to the query protocol";
             assert_string_contains ~needle:"oasis completion --query"
               completion.output
-              "fish completion should query the live workspace at runtime")) );
+              "fish completion should query the live workspace at runtime";
+            assert_string_contains ~needle:"--describe"
+              completion.output
+              "fish completion should request described runtime suggestions")) );
     ( "binds generated completion scripts to an explicit workspace when requested",
       (fun () ->
         with_temp_dir "oasis-cli-completion-workspace-script" (fun workspace ->

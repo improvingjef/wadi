@@ -306,6 +306,104 @@ deps = ["core"]
                 assert_string_equal "packages/app/app" demo.dir
                   "member executables should be rebased under the member path"
             | _ -> fail "expected merged root and member targets")) );
+    ( "parses package-local member tools with rebased paths",
+      (fun () ->
+        with_temp_dir "oasis-member-tools" (fun workspace_root ->
+            write_manifest workspace_root
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core"]
+
+[library.shared]
+dir = "shared"
+modules = ["shared"]
+|};
+            write_workspace_file workspace_root "packages/core/oasis.toml"
+              {|
+[action.generate]
+argv = ["./scripts/generate.sh"]
+cwd = "."
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+
+[preprocess.expand]
+argv = ["./scripts/expand.sh"]
+cwd = "scripts"
+deps = ["templates/banner.txt"]
+
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/config.txt"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+deps = ["shared"]
+actions = ["generate"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+|};
+            let workspace = expect_ok (Manifest.load (manifest_path workspace_root)) in
+            let member_target =
+              List.find_opt
+                (function
+                  | Manifest.Library library -> library.name = "core"
+                  | Manifest.Executable _ | Manifest.Test _ -> false)
+                workspace.Manifest.targets
+            in
+            (match member_target with
+            | Some (Manifest.Library library) -> (
+                match library.package_path with
+                | Some package_path ->
+                    assert_string_equal "packages/core" package_path
+                      "member targets should record their package path"
+                | None -> fail "member targets should not be treated as root targets");
+                assert_string_equal "packages/core/lib" library.dir
+                  "member target dirs should be rebased under the member path"
+            | Some _ -> fail "expected the member target to be a library"
+            | None -> fail "expected to find the rebased member library");
+            let action =
+              match Manifest.find_action workspace ~package_path:"packages/core" "generate" with
+              | Some action -> action
+              | None -> fail "expected to resolve the member-local action"
+            in
+            let preprocessor =
+              match
+                Manifest.find_preprocessor workspace ~package_path:"packages/core"
+                  "expand"
+              with
+              | Some tool -> tool
+              | None -> fail "expected to resolve the member-local preprocessor"
+            in
+            let ppx_tool =
+              match Manifest.find_ppx_tool workspace ~package_path:"packages/core" "rewrite" with
+              | Some tool -> tool
+              | None -> fail "expected to resolve the member-local ppx tool"
+            in
+            assert_string_equal "packages/core/scripts/generate.sh"
+              (List.hd action.Manifest.argv)
+              "member action programs should be rebased under the member path";
+            assert_string_equal "packages/core" (Option.get action.Manifest.cwd)
+              "member action cwd '.' should rebase to the member root";
+            assert_string_equal "packages/core/templates/version.txt"
+              (List.hd action.Manifest.deps)
+              "member action deps should be rebased under the member path";
+            assert_string_equal "packages/core/scripts/expand.sh"
+              (List.hd preprocessor.Manifest.argv)
+              "member preprocessors should rebase their program paths";
+            assert_string_equal "packages/core/scripts"
+              (Option.get preprocessor.Manifest.cwd)
+              "member preprocessors should rebase their cwd";
+            assert_string_equal "packages/core/templates/banner.txt"
+              (List.hd preprocessor.Manifest.deps)
+              "member preprocessors should rebase their deps";
+            assert_string_equal "packages/core/ppx/rewrite.exe"
+              (List.hd ppx_tool.Manifest.argv)
+              "member ppx tools should rebase their program paths";
+            assert_string_equal "packages/core/ppx/config.txt"
+              (List.hd ppx_tool.Manifest.deps)
+              "member ppx tools should rebase their deps")) );
     ( "rejects workspace-wide sections in member manifests",
       (fun () ->
         with_temp_dir "oasis-member-defaults" (fun workspace_root ->

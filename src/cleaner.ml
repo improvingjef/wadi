@@ -7,7 +7,7 @@ let oasis_root = Layout.artifact_root
 
 let describe_target target =
   Printf.sprintf "%s %s" (Manifest.target_kind_name target)
-    (Manifest.target_name target)
+    (Manifest.target_display_name target)
 
 let resolve_targets workspace requested_targets =
   let index = Hashtbl.create (List.length workspace.Manifest.targets) in

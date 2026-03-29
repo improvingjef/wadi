@@ -58,6 +58,7 @@ type action_execution =
 
 type action_result = {
   name : string;
+  package_path : string option;
   fingerprint : string;
   output_paths : string list;
   execution : action_execution;
@@ -597,6 +598,7 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
     Ok
       {
         name = action.name;
+        package_path = action.package_path;
         fingerprint;
         output_paths;
         execution = Action_cached;
@@ -643,6 +645,7 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
         Ok
           {
             name = action.name;
+            package_path = action.package_path;
             fingerprint;
             output_paths;
             execution =
@@ -672,13 +675,21 @@ let plan_action ~workspace_root ~out_dir ~target_dir ~target_env options
               Printf.sprintf "missing generated output: %s (%s)" path action.name)
             missing_outputs)
   in
-  Ok { name = action.name; fingerprint; output_paths; execution }
+  Ok
+    {
+      name = action.name;
+      package_path = action.package_path;
+      fingerprint;
+      output_paths;
+      execution;
+    }
 
 let resolve_pipeline ~workspace_root workspace ~profile target =
   let* options = Manifest.resolve_target_options workspace profile target in
+  let package_path = Manifest.target_package_path target in
   let* actions =
     collect_results options.actions (fun name ->
-        match Manifest.find_action workspace name with
+        match Manifest.find_action workspace ?package_path name with
         | Some action -> Ok action
         | None ->
             Error
@@ -687,7 +698,7 @@ let resolve_pipeline ~workspace_root workspace ~profile target =
   in
   let* preprocessors =
     collect_results options.preprocess (fun name ->
-        match Manifest.find_preprocessor workspace name with
+        match Manifest.find_preprocessor workspace ?package_path name with
         | Some tool -> Ok tool
         | None ->
             Error
@@ -696,7 +707,7 @@ let resolve_pipeline ~workspace_root workspace ~profile target =
   in
   let* ppx_tools =
     collect_results options.ppx (fun name ->
-        match Manifest.find_ppx_tool workspace name with
+        match Manifest.find_ppx_tool workspace ?package_path name with
         | Some tool -> Ok tool
         | None ->
             Error
@@ -1081,7 +1092,10 @@ let target_extra_lines ~workspace_root ~profile pipeline action_results =
   let action_lines =
     List.map
       (fun action_result ->
-        "action " ^ action_result.name ^ " "
+        "action "
+        ^ action_result.name
+        ^ Manifest.package_suffix action_result.package_path
+        ^ " "
         ^ Digest.to_hex (Digest.string action_result.fingerprint))
       action_results
   in
@@ -1109,26 +1123,28 @@ let joined_names names =
   | names -> String.concat ", " names
 
 let render_action_resolution_lines (action : Manifest.action) =
+  let name = Manifest.action_display_name action in
   [
-    "action " ^ action.name ^ " outputs: " ^ joined_names action.outputs;
-    "action " ^ action.name ^ " deps: " ^ joined_names action.deps;
+    "action " ^ name ^ " outputs: " ^ joined_names action.outputs;
+    "action " ^ name ^ " deps: " ^ joined_names action.deps;
   ]
   @
   (match action.cwd with
-  | Some cwd -> [ "action " ^ action.name ^ " cwd: " ^ cwd ]
+  | Some cwd -> [ "action " ^ name ^ " cwd: " ^ cwd ]
   | None -> [])
 
 let render_preprocessor_resolution_lines (tool : Manifest.command_tool) =
+  let name = Manifest.command_tool_display_name tool in
   [
-    "preprocess " ^ tool.name ^ " deps: " ^ joined_names tool.deps;
+    "preprocess " ^ name ^ " deps: " ^ joined_names tool.deps;
   ]
   @
   (match tool.cwd with
-  | Some cwd -> [ "preprocess " ^ tool.name ^ " cwd: " ^ cwd ]
+  | Some cwd -> [ "preprocess " ^ name ^ " cwd: " ^ cwd ]
   | None -> [])
 
 let render_ppx_resolution_lines (tool : Manifest.ppx_tool) =
-  [ "ppx " ^ tool.name ^ " deps: " ^ joined_names tool.deps ]
+  [ "ppx " ^ Manifest.ppx_tool_display_name tool ^ " deps: " ^ joined_names tool.deps ]
 
 let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     ~package_resolution (pipeline : resolved_pipeline) =
@@ -1172,12 +1188,12 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     "actions: "
     ^ joined_names
         (List.map
-           (fun (action : Manifest.action) -> action.name)
+           Manifest.action_display_name
            pipeline.actions);
     "preprocessors: "
     ^ joined_names
         (List.map
-           (fun (tool : Manifest.command_tool) -> tool.name)
+           Manifest.command_tool_display_name
            pipeline.preprocessors);
   ]
   @ List.concat_map render_action_resolution_lines pipeline.actions
@@ -1186,7 +1202,7 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     "ppx: "
     ^ joined_names
         (List.map
-           (fun (tool : Manifest.ppx_tool) -> tool.name)
+           Manifest.ppx_tool_display_name
            pipeline.ppx_tools);
   ]
   @ List.concat_map render_ppx_resolution_lines pipeline.ppx_tools
@@ -1203,7 +1219,10 @@ let target_command_lines ~workspace_root pipeline action_results
     ~module_order_command ~compile_commands ~link_command =
   List.map
     (fun (action_result : action_result) ->
-      "action " ^ action_result.name ^ ": "
+      "action "
+      ^ action_result.name
+      ^ Manifest.package_suffix action_result.package_path
+      ^ ": "
       ^
       match action_result.execution with
       | Action_cached -> "cached"
@@ -1377,12 +1396,14 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let report =
     Explain.render_report ~kind_name:"library" ~target_name:library.name
+      ~package_path:library.package_path
       ~profile ~status ~out_dir ~artifact:archive
       ~resolution_lines ~include_dirs ~module_order:ordered_modules
       ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:"library" ~target_name:library.name
+      ~package_path:library.package_path
       ~profile ~status ~out_dir ~artifact:archive
       ~resolution_lines ~include_dirs ~module_order:ordered_modules
       ~command_lines
@@ -1412,6 +1433,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
       workspace library library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
+  let display_name = library.name ^ Manifest.package_suffix library.package_path in
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
       description.json_report;
@@ -1428,7 +1450,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
          | Explain.Reused -> "Up to date library %s -> %s"
          | Explain.Regenerated -> "Regenerated action outputs for library %s -> %s"
          | Explain.Rebuilt -> "Built library %s -> %s")
-         library.name description.archive);
+         display_name description.archive);
     Ok
       (Built_library
          { name = library.name; out_dir = description.out_dir; archive = description.archive }))
@@ -1462,7 +1484,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
         packages = description.effective_packages;
       };
     print_endline
-      (Printf.sprintf "Built library %s -> %s" library.name description.archive);
+      (Printf.sprintf "Built library %s -> %s" display_name description.archive);
     Ok
       (Built_library
          { name = library.name; out_dir = description.out_dir; archive = description.archive }))
@@ -1649,14 +1671,16 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let report =
     Explain.render_report ~kind_name:(runnable_kind_name kind)
-      ~target_name:runnable.name ~profile ~status ~out_dir ~artifact:binary
-      ~resolution_lines ~include_dirs ~module_order:source_order
+      ~target_name:runnable.name ~package_path:runnable.package_path ~profile
+      ~status ~out_dir ~artifact:binary ~resolution_lines ~include_dirs
+      ~module_order:source_order
       ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:(runnable_kind_name kind)
-      ~target_name:runnable.name ~profile ~status ~out_dir ~artifact:binary
-      ~resolution_lines ~include_dirs ~module_order:source_order
+      ~target_name:runnable.name ~package_path:runnable.package_path ~profile
+      ~status ~out_dir ~artifact:binary ~resolution_lines ~include_dirs
+      ~module_order:source_order
       ~command_lines
   in
   Ok
@@ -1684,6 +1708,9 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
       ~kind workspace runnable order index library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
+  let display_name =
+    runnable.name ^ Manifest.package_suffix runnable.package_path
+  in
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
       description.json_report;
@@ -1694,7 +1721,7 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
          | Explain.Regenerated ->
              "Regenerated action outputs for %s %s -> %s"
          | Explain.Rebuilt -> "Built %s %s -> %s")
-         (runnable_kind_name kind) runnable.name description.binary);
+         (runnable_kind_name kind) display_name description.binary);
     Ok
       (match kind with
       | Executable_kind ->
@@ -1736,7 +1763,7 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
       description.json_report;
     print_endline
       (Printf.sprintf "Built %s %s -> %s" (runnable_kind_name kind)
-         runnable.name description.binary);
+         display_name description.binary);
     Ok
       (match kind with
       | Executable_kind ->
