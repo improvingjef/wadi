@@ -73,4 +73,45 @@ exit 0;;
               "repl should report the inferred executable target";
             assert_string_contains ~needle:"helper" repl.output
               "repl should link helper modules from runnable targets")) );
+    ( "reuses cached toplevel binaries when repl inputs are unchanged",
+      (fun () ->
+        with_temp_dir "oasis-repl-cache" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let value = "cached"|};
+            let script_path = Filename.concat workspace "repl-script.ml" in
+            Fs.write_file script_path
+              {|print_endline Core.value;;
+exit 0;;
+|};
+            let first =
+              run_oasis ~cwd:workspace
+                [ "repl"; "core"; "--"; "-noinit"; "-noprompt"; script_path ]
+            in
+            assert_int_equal 0 first.status
+              "the first repl launch should build a toplevel";
+            assert_string_contains
+              ~needle:"Built repl toplevel for library core ->"
+              first.output
+              "the first repl launch should report a built toplevel";
+            let second =
+              run_oasis ~cwd:workspace
+                [ "repl"; "core"; "--"; "-noinit"; "-noprompt"; script_path ]
+            in
+            assert_int_equal 0 second.status
+              "the second repl launch should still succeed";
+            assert_string_contains
+              ~needle:"Up to date repl toplevel for library core ->"
+              second.output
+              "unchanged repl launches should reuse the cached toplevel";
+            assert_string_not_contains
+              ~needle:"Built repl toplevel for library core ->"
+              second.output
+              "unchanged repl launches should skip the relink";
+            assert_string_contains ~needle:"cached" second.output
+              "reused repl launches should still execute the script successfully")) );
   ]

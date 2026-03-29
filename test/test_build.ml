@@ -292,6 +292,52 @@ let value = "ordered"
               "ordered fixture executable should run successfully";
             assert_string_equal "ordered\n" run.output
               "inferred module order should produce a working executable")) );
+    ( "builds wrapped libraries with a generated namespace module",
+      (fun () ->
+        with_temp_dir "oasis-wrapped-library" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+wrapped = true
+dir = "lib"
+modules = ["greeting"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/greeting.ml" {|let message = "wrapped"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Core.Greeting.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "wrapped libraries should build successfully";
+            assert_file_exists
+              (Filename.concat (Layout.library_out_dir workspace "core") "core.cmi");
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables should compile against the generated wrapper module";
+            assert_string_equal "wrapped\n" run.output
+              "wrapped libraries should expose child modules through the namespace wrapper")) );
+    ( "rejects wrapped libraries that reuse the reserved wrapper stem",
+      (fun () ->
+        with_temp_dir "oasis-wrapped-conflict" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+wrapped = true
+dir = "lib"
+modules = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let value = "conflict"|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_true (build.status <> 0)
+              "wrapped libraries should reject module lists that collide with the generated wrapper";
+            assert_string_contains
+              ~needle:"reserved wrapper stem 'core'"
+              build.output
+              "wrapped-library collisions should explain the reserved stem")) );
     ( "reuses artifacts when inputs are unchanged",
       (fun () ->
         with_fixture "hello" (fun workspace ->

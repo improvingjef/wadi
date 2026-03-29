@@ -299,14 +299,22 @@ let library_plan ~session ~workspace_root ~profile workspace index library =
   let* packages = effective_packages index target in
   let* package_resolution = Toolchain.resolve_packages ~session packages in
   let* pipeline = Builder.resolve_pipeline ~workspace_root workspace ~profile target in
+  let* () =
+    Builder.validate_wrapped_library_source_conflicts ~workspace_root library
+      pipeline.actions
+  in
   let* _action_results =
     Builder.run_actions ~mode:Builder.Materialize ~workspace_root ~out_dir ~target
       ~pipeline
   in
+  let* () =
+    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize ~out_dir
+      library
+  in
   let* sources =
-    Builder.source_descriptors ~workspace_root
-      ~generated_root:(Builder.generated_root out_dir)
-      ~planned_generated_outputs:[] ~dir:library.dir library.modules
+    Builder.library_source_descriptors ~workspace_root ~out_dir
+      ~planned_generated_outputs:(Builder.wrapped_library_generated_outputs library)
+      library
   in
   let* prepared_sources =
     Builder.prepare_sources ~mode:Builder.Materialize ~workspace_root ~out_dir

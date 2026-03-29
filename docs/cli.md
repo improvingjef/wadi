@@ -126,18 +126,20 @@ Print the exact subprocess environment a build, run, test, or install step would
 
 Usage:
 
-`oasis env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]`
+`oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
 - `--json`: Print machine-readable JSON output instead of the text report.
+- `--changed-only`: Show only environment bindings that differ from the inherited host environment.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis env build`
 - `oasis env --profile release build demo`
 - `oasis env --json run demo`
+- `oasis env --changed-only build demo`
 - `oasis env run demo`
 - `oasis env test unit`
 

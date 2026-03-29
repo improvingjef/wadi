@@ -177,6 +177,44 @@ deps = ["core"]
               ~needle:"$(BIN_DIR)/suite: $(BOOTSTRAP_MK) $(TEST_OBJS) | $(BIN_DIR)"
               makefile
               "bootstrap generation should make test links depend on bootstrap metadata")) );
+    ( "includes generated wrapper modules for wrapped libraries in bootstrap plans",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-wrapped" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+wrapped = true
+dir = "src"
+modules = ["alpha"]
+
+[executable.demo]
+dir = "src"
+main = "main"
+deps = ["core"]
+
+[test.suite]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+|};
+            write_source workspace "src/alpha.ml" {|let value = "alpha"|};
+            write_source workspace "src/main.ml"
+              {|let () = print_endline Core.Alpha.value|};
+            write_source workspace "test/test_main.ml"
+              {|let () = print_endline Core.Alpha.value|};
+            let makefile = expect_ok (render_bootstrap workspace) in
+            let wrapper_path =
+              "_bootstrap/materialized/default/library-core/generated/core.ml"
+            in
+            assert_file_exists (Filename.concat workspace wrapper_path);
+            assert_string_contains
+              ~needle:"COMMON_OBJS := $(OBJ_DIR)/alpha.$(OBJ_EXT) $(OBJ_DIR)/core.$(OBJ_EXT)"
+              makefile
+              "wrapped libraries should add the generated wrapper module to bootstrap object lists";
+            assert_string_contains
+              ~needle:("$(OBJ_DIR)/core.$(OBJ_EXT): " ^ wrapper_path ^ " $(BOOTSTRAP_MK) $(OBJ_DIR)/alpha.$(OBJ_EXT) | $(OBJ_DIR)")
+              makefile
+              "bootstrap generation should compile the generated wrapper after its child modules")) );
     ( "renders the full bootstrap makefile through the compiled oasis binary",
       (fun () ->
         with_temp_dir "oasis-bootstrap-compiled" (fun workspace ->

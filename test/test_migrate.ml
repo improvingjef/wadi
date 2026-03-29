@@ -52,6 +52,8 @@ let cases =
               ~needle:"[library.core]\npublic_name = \"migrate_demo.core\"\n"
               migrate.output
               "migrate should preserve dune public names as manifest fields";
+            assert_string_contains ~needle:"wrapped = true\n" migrate.output
+              "migrate should preserve dune's default wrapped-library behavior";
             assert_string_contains ~needle:"dir = \"lib\"\n" migrate.output
               "migrate should preserve stanza directories";
             assert_string_contains ~needle:"packages = [\"unix\"]\n"
@@ -65,6 +67,25 @@ let cases =
               ~needle:"[test.unit]\ndir = \"test\"\nmain = \"unit\"\ndeps = [\"core\"]\npackages = [\"ounit2\"]\n"
               migrate.output
               "migrate should translate dune tests into oasis test targets")) );
+    ( "preserves explicit dune wrapped=false libraries",
+      (fun () ->
+        with_temp_dir "oasis-migrate-wrapped-false" (fun workspace ->
+            write_workspace_file workspace "lib/dune"
+              {|
+(library
+ (name core)
+ (wrapped false))
+|};
+            write_source workspace "lib/core.ml" {|let value = "core"|};
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should handle explicit dune wrapped flags";
+            assert_string_not_contains ~needle:"wrapped = true" migrate.output
+              "wrapped=false dune libraries should not opt into generated wrappers";
+            assert_string_contains
+              ~needle:"[library.core]\ndir = \"lib\"\nmodules = [\"core\"]\n"
+              migrate.output
+              "wrapped=false dune libraries should still migrate as normal libraries")) );
     ( "infers helper modules for dune executables groups",
       (fun () ->
         with_temp_dir "oasis-migrate-executables" (fun workspace ->
@@ -167,7 +188,7 @@ version = 1
                   migrate.output
                   "migrate should turn dune rules into oasis actions";
                 assert_string_contains
-                  ~needle:"[library.core]\npublic_name = \"migrate_demo.core\"\ndir = \".\"\nmodules = [\"core\", \"version\"]\nactions = [\"dune_action_3\"]\npreprocess = [\"dune_preprocess_1\"]\npackages = [\"unix\"]\n"
+                  ~needle:"[library.core]\npublic_name = \"migrate_demo.core\"\nwrapped = true\ndir = \".\"\nmodules = [\"core\", \"version\"]\nactions = [\"dune_action_3\"]\npreprocess = [\"dune_preprocess_1\"]\npackages = [\"unix\"]\n"
                   migrate.output
                   "migrate should preserve public library metadata and attach generated tools";
                 assert_string_contains

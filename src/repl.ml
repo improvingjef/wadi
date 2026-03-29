@@ -5,12 +5,22 @@ type plan = {
   env : (string * string) list;
   link_inputs : string list;
   toplevel_path : string;
+  stamp_path : string;
+  fingerprint : string;
 }
 
 let ( let* ) = Result.bind
 
+type toplevel_build_status =
+  | Built
+  | Reused
+
 let include_args include_dirs =
   List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
+
+let append_line buffer line =
+  Buffer.add_string buffer line;
+  Buffer.add_char buffer '\n'
 
 let resolve_profile workspace = function
   | Some profile when String.trim profile <> "" -> profile
@@ -82,6 +92,37 @@ let helper_object_files (description : Builder.runnable_description) main =
 let toplevel_path ~workspace_root ~profile target =
   Layout.repl_binary ~profile workspace_root (Manifest.target_name target)
 
+let toplevel_stamp_path ~workspace_root ~profile target =
+  Layout.repl_stamp_path ~profile workspace_root (Manifest.target_name target)
+
+let toplevel_fingerprint ~session ~compiler_version target include_dirs
+    package_resolution env link_inputs =
+  let buffer = Buffer.create 256 in
+  append_line buffer ("compiler-version " ^ compiler_version);
+  append_line buffer ("tool ocamlmktop " ^ Toolchain.ocamlmktop_cmd ());
+  append_line buffer ("target-kind " ^ Manifest.target_kind_name target);
+  append_line buffer ("target-name " ^ Manifest.target_name target);
+  List.iter (append_line buffer)
+    (Toolchain.fingerprint_lines ~session package_resolution);
+  List.iter
+    (fun dir -> append_line buffer ("include-dir " ^ dir))
+    include_dirs;
+  List.iter
+    (fun (name, value) -> append_line buffer ("env " ^ name ^ "=" ^ value))
+    env;
+  let* () =
+    List.fold_left
+      (fun result path ->
+        let* () = result in
+        if Fs.exists path then (
+          append_line buffer
+            ("input " ^ path ^ " " ^ Digest.to_hex (Digest.file path));
+          Ok ())
+        else Error (Printf.sprintf "repl input does not exist: %s" path))
+      (Ok ()) link_inputs
+  in
+  Ok (Buffer.contents buffer)
+
 let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
@@ -124,17 +165,29 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
             Builder.collect_dependency_closure index (Hashtbl.create 8)
               [ library.name ]
           in
+          let link_inputs =
+            library_outputs_for_names order closure library_outputs
+          in
+          let* fingerprint =
+            toplevel_fingerprint ~session ~compiler_version
+              (Manifest.Library library) description.include_dirs
+              description.package_resolution description.pipeline.options.env
+              link_inputs
+          in
           Ok
             {
               target = Manifest.Library library;
               include_dirs = description.include_dirs;
               package_resolution = description.package_resolution;
               env = description.pipeline.options.env;
-              link_inputs =
-                library_outputs_for_names order closure library_outputs;
+              link_inputs;
               toplevel_path =
                 toplevel_path ~workspace_root ~profile
                   (Manifest.Library library);
+              stamp_path =
+                toplevel_stamp_path ~workspace_root ~profile
+                  (Manifest.Library library);
+              fingerprint;
             }
         else loop rest
     | Manifest.Executable executable :: rest ->
@@ -145,23 +198,35 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
             ~kind:Builder.Executable_kind workspace executable order index
             library_outputs
         in
+        let closure =
+          Builder.collect_dependency_closure index (Hashtbl.create 8)
+            executable.deps
+        in
+        let link_inputs =
+          library_outputs_for_names order closure library_outputs
+          @ helper_object_files description executable.main
+        in
+        let* fingerprint =
+          toplevel_fingerprint ~session ~compiler_version
+            (Manifest.Executable executable) description.include_dirs
+            description.package_resolution description.pipeline.options.env
+            link_inputs
+        in
         if executable.name = requested_name then
-          let closure =
-            Builder.collect_dependency_closure index (Hashtbl.create 8)
-              executable.deps
-          in
           Ok
             {
               target = Manifest.Executable executable;
               include_dirs = description.include_dirs;
               package_resolution = description.package_resolution;
               env = description.pipeline.options.env;
-              link_inputs =
-                library_outputs_for_names order closure library_outputs
-                @ helper_object_files description executable.main;
+              link_inputs;
               toplevel_path =
                 toplevel_path ~workspace_root ~profile
                   (Manifest.Executable executable);
+              stamp_path =
+                toplevel_stamp_path ~workspace_root ~profile
+                  (Manifest.Executable executable);
+              fingerprint;
             }
         else loop rest
     | Manifest.Test test :: rest ->
@@ -171,39 +236,66 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
             ~backend ~compiler_version ~profile ~kind:Builder.Test_kind
             workspace test order index library_outputs
         in
+        let closure =
+          Builder.collect_dependency_closure index (Hashtbl.create 8) test.deps
+        in
+        let link_inputs =
+          library_outputs_for_names order closure library_outputs
+          @ helper_object_files description test.main
+        in
+        let* fingerprint =
+          toplevel_fingerprint ~session ~compiler_version (Manifest.Test test)
+            description.include_dirs description.package_resolution
+            description.pipeline.options.env link_inputs
+        in
         if test.name = requested_name then
-          let closure =
-            Builder.collect_dependency_closure index (Hashtbl.create 8) test.deps
-          in
           Ok
             {
               target = Manifest.Test test;
               include_dirs = description.include_dirs;
               package_resolution = description.package_resolution;
               env = description.pipeline.options.env;
-              link_inputs =
-                library_outputs_for_names order closure library_outputs
-                @ helper_object_files description test.main;
+              link_inputs;
               toplevel_path =
                 toplevel_path ~workspace_root ~profile (Manifest.Test test);
+              stamp_path =
+                toplevel_stamp_path ~workspace_root ~profile (Manifest.Test test);
+              fingerprint;
             }
         else loop rest
   in
   loop order
 
 let build_toplevel ~verbose (plan : plan) =
-  let () = Fs.ensure_dir (Filename.dirname plan.toplevel_path) in
-  Toolchain.ensure_success_ocamlmktop ~env:plan.env ~verbose
-    plan.package_resolution
-    (include_args plan.include_dirs
-    @ Toolchain.link_args plan.package_resolution
-    @ [ "-o"; plan.toplevel_path ]
-    @ plan.link_inputs)
+  if
+    Fs.exists plan.toplevel_path && Fs.exists plan.stamp_path
+    && Fs.read_file plan.stamp_path = plan.fingerprint
+  then Ok Reused
+  else
+    let () = Fs.ensure_dir (Filename.dirname plan.toplevel_path) in
+    let* _ =
+      Toolchain.ensure_success_ocamlmktop ~env:plan.env ~verbose
+        plan.package_resolution
+        (include_args plan.include_dirs
+        @ Toolchain.link_args plan.package_resolution
+        @ [ "-o"; plan.toplevel_path ]
+        @ plan.link_inputs)
+    in
+    Fs.write_file plan.stamp_path plan.fingerprint;
+    Ok Built
 
 let run ~workspace_root ~verbose ?profile ?target ~args workspace =
   let* plan = target_plan ~workspace_root ~verbose ?profile workspace target in
-  let* _ = build_toplevel ~verbose plan in
+  let* build_status = build_toplevel ~verbose plan in
   let runtime_args = include_args plan.include_dirs @ args in
+  print_endline
+    (Printf.sprintf
+       (match build_status with
+       | Built -> "Built repl toplevel for %s %s -> %s"
+       | Reused -> "Up to date repl toplevel for %s %s -> %s")
+       (Manifest.target_kind_name plan.target)
+       (Manifest.target_display_name plan.target)
+       plan.toplevel_path);
   print_endline
     (Printf.sprintf "Launching repl for %s %s -> %s"
        (Manifest.target_kind_name plan.target)

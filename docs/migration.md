@@ -12,8 +12,8 @@ oasis migrate --stdout
 
 That command scans `dune-project` plus every `dune` file it can find, emits a
 reviewable `oasis.toml`, translates common `preprocess`, `pps`, `public_name`,
-and `rule` forms into real oasis sections, and leaves review comments only for
-the pieces it still cannot translate cleanly.
+`wrapped`, and `rule` forms into real oasis sections, and leaves review comments
+only for the pieces it still cannot translate cleanly.
 
 ## Command Mapping
 
@@ -41,6 +41,7 @@ Oasis:
 
 ```toml
 [library.core]
+wrapped = true
 dir = "lib"
 public_name = "demo.core"
 modules = ["alpha", "beta"]
@@ -116,6 +117,8 @@ ppx = ["rewrite"]
 
 Important rules:
 
+- Dune libraries are wrapped by default. `oasis migrate` preserves that with
+  `wrapped = true` unless the dune stanza explicitly says `(wrapped false)`.
 - `action.outputs` are relative to the target directory, not the workspace root.
 - `preprocess.deps` and `ppx.deps` are explicit auxiliary inputs and participate
   in rebuild detection and `oasis explain`.

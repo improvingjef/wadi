@@ -154,4 +154,43 @@ env = ["TARGET=demo"]
             assert_string_contains ~needle:"\"TARGET\": \"demo\""
               report.output
               "env JSON should include target-local bindings")) );
+    ( "filters env reports down to changed bindings only",
+      (fun () ->
+        with_temp_dir "oasis-env-changed" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+env = ["MODE=default", "SHARED=default"]
+
+[profile.release]
+env = ["MODE=release", "PROFILE=release"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+env = ["TARGET=demo"]
+|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            let report =
+              run_oasis_with_env ~cwd:workspace
+                ~env:[ ("HOST_ONLY", "from-host"); ("SHARED", "default") ]
+                [ "env"; "--changed-only"; "--profile"; "release"; "run"; "demo" ]
+            in
+            assert_int_equal 0 report.status
+              "env --changed-only should render successfully";
+            assert_string_contains ~needle:"View: changed-only\n" report.output
+              "changed-only env output should label the filtered view";
+            assert_string_contains ~needle:"MODE=release\n" report.output
+              "changed-only env output should keep overridden profile bindings";
+            assert_string_contains ~needle:"PROFILE=release\n" report.output
+              "changed-only env output should keep added profile bindings";
+            assert_string_contains ~needle:"TARGET=demo\n" report.output
+              "changed-only env output should keep target-local bindings";
+            assert_string_not_contains ~needle:"HOST_ONLY=from-host\n"
+              report.output
+              "changed-only env output should omit unchanged inherited host bindings";
+            assert_string_not_contains ~needle:"SHARED=default\n" report.output
+              "changed-only env output should omit bindings that match the inherited host value";
+            assert_string_not_contains ~needle:"Context: runtime\n" report.output
+              "empty runtime contexts should be omitted in changed-only mode")) );
   ]

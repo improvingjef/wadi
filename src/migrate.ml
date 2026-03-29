@@ -11,6 +11,7 @@ type raw_target = {
   kind : raw_target_kind;
   name : string;
   public_name : string option;
+  wrapped : bool;
   dir : string;
   main : string option;
   modules : string list option;
@@ -192,6 +193,22 @@ let optional_atom_field name fields =
       Error
         (Printf.sprintf "field '%s' must contain exactly one atom/string" name)
   | None -> Ok None
+
+let parse_bool_field name = function
+  | "true" -> Ok true
+  | "false" -> Ok false
+  | value ->
+      Error
+        (Printf.sprintf
+           "field '%s' must be true or false, not %S" name value)
+
+let optional_bool_field name fields =
+  let* value = optional_atom_field name fields in
+  match value with
+  | None -> Ok None
+  | Some value ->
+      let* parsed = parse_bool_field name value in
+      Ok (Some parsed)
 
 let optional_atom_list_field name fields =
   let* values = field_atoms name fields in
@@ -714,6 +731,7 @@ let parse_library ~workspace_root ~dune_path acc fields =
   let name = required_atom_field "name" fields in
   let* name = name in
   let* public_name = optional_atom_field "public_name" fields in
+  let* wrapped = optional_bool_field "wrapped" fields in
   let dir = relative_dir workspace_root dune_path in
   let inferred_modules = source_stems_in_dir (Filename.dirname dune_path) in
   let* modules = field_atoms "modules" fields in
@@ -733,6 +751,7 @@ let parse_library ~workspace_root ~dune_path acc fields =
           kind = Library;
           name;
           public_name;
+          wrapped = Option.value ~default:true wrapped;
           dir;
           main = None;
           modules = Some modules;
@@ -796,6 +815,7 @@ let parse_runnable_group kind_label raw_kind ~workspace_root ~dune_path acc fiel
                  kind = raw_kind;
                  name;
                  public_name;
+                 wrapped = false;
                  dir;
                  main = Some name;
                  modules = Some helper_modules;
@@ -952,6 +972,7 @@ let render_target alias_index (target : raw_target) =
           (match target.public_name with
           | Some public_name -> "public_name = " ^ toml_string public_name
           | None -> "");
+          (if target.wrapped then "wrapped = true" else "");
           "dir = " ^ toml_string target.dir;
           "modules = "
           ^

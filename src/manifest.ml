@@ -1,6 +1,7 @@
 type value =
   | String of string
   | Int of int
+  | Bool of bool
   | Strings of string list
 
 type env_binding = string * string
@@ -22,6 +23,7 @@ type target_options = {
 type library = {
   name : string;
   public_name : string option;
+  wrapped : bool;
   dir : string;
   package_path : string option;
   modules : string list;
@@ -289,6 +291,8 @@ let parse_value path line text =
   else if String_util.starts_with ~prefix:"[" text then
     let* values = parse_string_array path line text in
     Ok (Strings values)
+  else if text = "true" then Ok (Bool true)
+  else if text = "false" then Ok (Bool false)
   else
     match int_of_string_opt text with
     | Some number -> Ok (Int number)
@@ -351,6 +355,14 @@ let required_strings path section field =
   | Some binding ->
       error path binding.line
         (Printf.sprintf "field '%s' must be an array of strings" field)
+
+let optional_bool path section field =
+  match find_binding field section.bindings with
+  | None -> Ok None
+  | Some { value = Bool value; _ } -> Ok (Some value)
+  | Some binding ->
+      error path binding.line
+        (Printf.sprintf "field '%s' must be a boolean" field)
 
 let allowed_fields path section fields =
   match
@@ -552,6 +564,7 @@ let parse_library path section name =
     allowed_fields path section
       [
         "public_name";
+        "wrapped";
         "dir";
         "modules";
         "deps";
@@ -566,6 +579,12 @@ let parse_library path section name =
       ]
   in
   let* public_name = optional_string path section "public_name" in
+  let* wrapped =
+    match optional_bool path section "wrapped" with
+    | Ok (Some value) -> Ok value
+    | Ok None -> Ok false
+    | Error _ as error -> error
+  in
   let* dir = required_string path section "dir" in
   let* modules = required_strings path section "modules" in
   let* deps = optional_strings path section "deps" in
@@ -582,6 +601,7 @@ let parse_library path section name =
        {
          name;
          public_name;
+         wrapped;
          dir;
          package_path = None;
          modules;

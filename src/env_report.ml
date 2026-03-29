@@ -15,6 +15,7 @@ type report = {
   subtool : subtool;
   profile : string;
   requested : string list;
+  changed_only : bool;
   contexts : context list;
 }
 
@@ -170,15 +171,33 @@ let full_env bindings =
   Process.merged_environment_bindings bindings
   |> List.sort (fun (left, _) (right, _) -> String.compare left right)
 
-let context target label bindings =
-  { target; label; env = full_env bindings }
+let host_env () = full_env []
+
+let changed_env ~host_env bindings =
+  let host_index = Hashtbl.create (List.length host_env) in
+  List.iter (fun (name, value) -> Hashtbl.replace host_index name value) host_env;
+  List.filter
+    (fun (name, value) ->
+      match Hashtbl.find_opt host_index name with
+      | Some host_value when host_value = value -> false
+      | Some _ | None -> true)
+    (full_env bindings)
+
+let context ~changed_only ~host_env target label bindings =
+  {
+    target;
+    label;
+    env =
+      if changed_only then changed_env ~host_env bindings else full_env bindings;
+  }
 
 let target_label target =
   Printf.sprintf "%s %s"
     (Manifest.target_kind_name target)
     (Manifest.target_display_name target)
 
-let build_contexts ~workspace_root ~profile workspace order =
+let build_contexts ~workspace_root ~profile ~changed_only ~host_env workspace
+    order =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
     | target :: rest ->
@@ -191,16 +210,16 @@ let build_contexts ~workspace_root ~profile workspace order =
           pipeline.options.env
         in
         let contexts =
-          [ context label "compiler-linker" target_env ]
+          [ context ~changed_only ~host_env label "compiler-linker" target_env ]
           @ List.map
               (fun (action : Manifest.action) ->
-                context label
+                context ~changed_only ~host_env label
                   ("action " ^ Manifest.action_display_name action)
                   (Manifest.merge_env_bindings target_env action.env))
               pipeline.actions
           @ List.map
               (fun (tool : Manifest.command_tool) ->
-                context label
+                context ~changed_only ~host_env label
                   ("preprocess " ^ Manifest.command_tool_display_name tool)
                   (Manifest.merge_env_bindings target_env tool.env))
               pipeline.preprocessors
@@ -209,8 +228,10 @@ let build_contexts ~workspace_root ~profile workspace order =
   in
   loop [] order
 
-let report ~workspace_root ?profile workspace subtool requested_targets =
+let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
+    requested_targets =
   let profile = resolve_profile workspace profile in
+  let host_env = host_env () in
   let* requested, runtime_contexts =
     match subtool with
     | Build ->
@@ -231,7 +252,7 @@ let report ~workspace_root ?profile workspace subtool requested_targets =
           let* executable = resolve_run_target workspace requested_target in
           Ok
             ( [ executable.name ],
-              [ context
+              [ context ~changed_only ~host_env
                   (Printf.sprintf "executable %s"
                      (Manifest.target_display_name (Manifest.Executable executable)))
                   "runtime" [] ] )
@@ -241,7 +262,7 @@ let report ~workspace_root ?profile workspace subtool requested_targets =
           ( List.map (fun (test : Manifest.test_target) -> test.name) tests,
             List.map
               (fun (test : Manifest.test_target) ->
-                context
+                context ~changed_only ~host_env
                   (Printf.sprintf "test %s"
                      (Manifest.target_display_name (Manifest.Test test)))
                   "runtime" [])
@@ -251,7 +272,15 @@ let report ~workspace_root ?profile workspace subtool requested_targets =
         Ok (List.map Manifest.target_name targets, [])
   in
   let* order = Builder.resolve_build_order workspace requested in
-  let* build_contexts = build_contexts ~workspace_root ~profile workspace order in
+  let* build_contexts =
+    build_contexts ~workspace_root ~profile ~changed_only ~host_env workspace
+      order
+  in
+  let contexts = build_contexts @ runtime_contexts in
+  let contexts =
+    if changed_only then List.filter (fun (context : context) -> context.env <> []) contexts
+    else contexts
+  in
   Ok
     {
       workspace_name = workspace.Manifest.name;
@@ -259,7 +288,8 @@ let report ~workspace_root ?profile workspace subtool requested_targets =
       profile;
       requested =
         if requested_targets = [] then requested else requested_targets;
-      contexts = build_contexts @ runtime_contexts;
+      changed_only;
+      contexts;
     }
 
 let render_context (context : context) =
@@ -284,6 +314,8 @@ let render_report (report : report) =
            | None -> "unnamed");
            "Subtool: " ^ subtool_name report.subtool;
            "Profile: " ^ report.profile;
+           "View: "
+           ^ if report.changed_only then "changed-only" else "full";
            "Requested-targets: "
            ^
            (match report.requested with
@@ -337,6 +369,10 @@ let render_json_report (report : report) =
       "  \"workspace\": " ^ json_string_or_null report.workspace_name ^ ",";
       "  \"subtool\": " ^ json_string (subtool_name report.subtool) ^ ",";
       "  \"profile\": " ^ json_string report.profile ^ ",";
+      "  \"view\": "
+      ^ json_string
+          (if report.changed_only then "changed-only" else "full")
+      ^ ",";
       "  \"requested_targets\": " ^ json_string_list report.requested ^ ",";
       "  \"contexts\": " ^ contexts;
       "}";

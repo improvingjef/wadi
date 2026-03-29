@@ -76,6 +76,10 @@ let repl_root workspace_root = repl_root_for_profile workspace_root default_prof
 let repl_binary ?(profile = default_profile) workspace_root name =
   Filename.concat (repl_root_for_profile workspace_root profile) (name ^ ".top")
 
+let repl_stamp_path ?(profile = default_profile) workspace_root name =
+  Filename.concat (repl_root_for_profile workspace_root profile)
+    (name ^ ".top.stamp")
+
 let install_bin_dir prefix = Filename.concat prefix relative_install_bin_dir
 
 let relative_install_library_dir name = Filename.concat "lib" name

@@ -23,6 +23,7 @@ members = ["packages/core"]     # optional
 dir = "lib"
 modules = ["alpha", "beta"]
 public_name = "demo.core"
+wrapped = true
 deps = ["base"]
 packages = ["unix", "str"]
 actions = ["generate_version"]
@@ -56,6 +57,11 @@ Rules:
 - `modules` entries are stems only. No paths. No extensions.
 - `deps` may only reference workspace libraries.
 - `public_name` controls the staged install name for libraries, `META` files, and executables.
+- `wrapped = true` generates a namespace wrapper module named after the library
+  stem, so `core` exposes `Core.Alpha`, `Core.Beta`, and so on.
+- Wrapped libraries reserve the library-name stem for the generated wrapper. Do
+  not list it in `modules`, generate it from an action, or check in
+  `dir/<library>.ml` or `dir/<library>.mli`.
 
 ## Actions
 

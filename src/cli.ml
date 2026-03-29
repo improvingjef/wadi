@@ -48,6 +48,7 @@ type env_options = {
   subtool : Env_report.subtool;
   targets : string list;
   json : bool;
+  changed_only : bool;
 }
 
 type repl_options = {
@@ -218,6 +219,14 @@ let json_option =
     description = "Print machine-readable JSON output instead of the text report.";
   }
 
+let changed_only_option =
+  {
+    usage = "--changed-only";
+    flags = [ "--changed-only" ];
+    description =
+      "Show only environment bindings that differ from the inherited host environment.";
+  }
+
 let current_option =
   {
     usage = "--current";
@@ -359,16 +368,24 @@ let env_doc =
     summary =
       "Print the exact subprocess environment a build, run, test, or install step would inherit.";
     signature =
-      "oasis env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]";
+      "oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]";
     examples =
       [
         "oasis env build";
         "oasis env --profile release build demo";
         "oasis env --json run demo";
+        "oasis env --changed-only build demo";
         "oasis env run demo";
         "oasis env test unit";
       ];
-    options = [ workspace_option; profile_option; json_option; help_option ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        json_option;
+        changed_only_option;
+        help_option;
+      ];
     completion_words = [ "build"; "run"; "test"; "install" ];
   }
 
@@ -937,7 +954,7 @@ let parse_deps_args (args : string list) : (deps_options, string) result =
   loop { workspace_dir = "."; targets = [] } args
 
 let parse_env_args (args : string list) : (env_options, string) result =
-  let rec loop workspace_dir profile json subtool targets = function
+  let rec loop workspace_dir profile json changed_only subtool targets = function
     | [] -> (
         match subtool with
         | None -> Error "env requires a subtool name"
@@ -949,13 +966,18 @@ let parse_env_args (args : string list) : (env_options, string) result =
                 subtool;
                 targets = List.rev targets;
                 json;
+                changed_only;
               } )
-    | "--workspace" :: dir :: rest -> loop dir profile json subtool targets rest
+    | "--workspace" :: dir :: rest ->
+        loop dir profile json changed_only subtool targets rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | "--profile" :: value :: rest ->
-        loop workspace_dir (Some value) json subtool targets rest
+        loop workspace_dir (Some value) json changed_only subtool targets rest
     | "--profile" :: [] -> Error "--profile requires a name"
-    | "--json" :: rest -> loop workspace_dir profile true subtool targets rest
+    | "--json" :: rest ->
+        loop workspace_dir profile true changed_only subtool targets rest
+    | "--changed-only" :: rest ->
+        loop workspace_dir profile json true subtool targets rest
     | "--help" :: _ -> Error (command_usage env_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -963,13 +985,15 @@ let parse_env_args (args : string list) : (env_options, string) result =
         match subtool with
         | None ->
             let* subtool = Env_report.parse_subtool value in
-            loop workspace_dir profile json (Some subtool) targets rest
+            loop workspace_dir profile json changed_only (Some subtool) targets
+              rest
         | Some Env_report.Run when targets <> [] ->
             Error "env run accepts at most one target"
         | Some _ ->
-            loop workspace_dir profile json subtool (value :: targets) rest)
+            loop workspace_dir profile json changed_only subtool
+              (value :: targets) rest)
   in
-  loop "." None false None [] args
+  loop "." None false false None [] args
 
 let parse_repl_args (args : string list) : (repl_options, string) result =
   let rec loop (options : repl_options) = function
@@ -1555,7 +1579,8 @@ let run_env (options : env_options) =
   | Ok workspace -> (
       match
         Env_report.report ~workspace_root:options.workspace_dir
-          ?profile:options.profile workspace options.subtool options.targets
+          ?profile:options.profile ~changed_only:options.changed_only workspace
+          options.subtool options.targets
       with
       | Ok report ->
           print_string

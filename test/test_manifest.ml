@@ -166,6 +166,23 @@ deps = ["patterns"]
             assert_string_equal "unix" (List.hd executable.packages)
               "executables should parse direct package requirements"
         | _ -> fail "unexpected target layout in parsed workspace")) ;
+    ( "parses wrapped library declarations",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[library.core]
+wrapped = true
+dir = "lib"
+modules = ["greeting"]
+|})
+        in
+        match workspace.Manifest.targets with
+        | [ Manifest.Library library ] ->
+            assert_true library.wrapped
+              "library wrapped mode should parse from boolean manifest fields"
+        | _ -> fail "expected a single wrapped library target")) ;
     ( "parses defaults, tools, and profile target overrides",
       (fun () ->
         let workspace =
