@@ -15,6 +15,10 @@ let write_executable workspace relative_path contents =
 let run_bootstrap_loader ?(env = []) () =
   Process.run_capture ~env "ocaml" [ "scripts/render_bootstrap_mod_use.ml" ]
 
+let run_seed_metadata_loader ?(env = []) () =
+  Process.run_capture ~env "ocaml"
+    [ "scripts/render_bootstrap_mod_use.ml"; "--format"; "seed-metadata" ]
+
 let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full) workspace =
   let args =
     [
@@ -146,7 +150,7 @@ deps = ["core"]
               {|let () = Test_helper.run ()|};
             let makefile = expect_ok (render_bootstrap workspace) in
             assert_string_contains
-              ~needle:"$(BOOTSTRAP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) scripts/render_bootstrap_mod_use.ml src/alpha.ml src/beta.ml src/cli.ml src/main.ml test/test_helper.ml test/test_main.ml"
+              ~needle:"$(BOOTSTRAP_MK): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_GENERATOR) src/alpha.ml src/beta.ml src/cli.ml src/main.ml test/test_helper.ml test/test_main.ml"
               makefile
               "bootstrap generation should track the manifest-driven inputs that require a regenerated makefile";
             assert_string_contains
@@ -293,13 +297,107 @@ deps = ["core"]
           makefile
           "the top-level Makefile should define a compiled bootstrap seed binary";
         assert_string_contains
+          ~needle:"include $(BOOTSTRAP_SEED_METADATA)"
+          makefile
+          "bootstrap should read cached seed metadata instead of probing the interpreter at runtime";
+        assert_string_not_contains
+          ~needle:"$(shell BOOTSTRAP_MODULE_MANIFEST=$(BOOTSTRAP_MANIFEST) $(OCAML) $(BOOTSTRAP_SOURCE_HELPER)"
+          makefile
+          "cold-start bootstrap should not shell out through the OCaml toplevel to discover seed metadata";
+        assert_string_contains
           ~needle:"$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope app"
           makefile
           "app-only bootstrap generation should run through the compiled seed binary";
+        assert_string_contains
+          ~needle:"-I $(OBJ_DIR) -c \"$$src\" -o $(OBJ_DIR)/$$stem.$(OBJ_EXT)"
+          makefile
+          "bootstrap seed compilation should populate the shared object directory for reuse by the final app build";
+        assert_string_contains
+          ~needle:"touch \"$$path\""
+          makefile
+          "bootstrap makefile generation should refresh shared object mtimes so the final app/test build reuses the seed compile outputs";
         assert_string_not_contains
           ~needle:"ocaml scripts/generate_bootstrap_makefile.ml"
           makefile
           "cold-start bootstrap should no longer evaluate the planner through the OCaml toplevel")) ;
+    ( "uses the compiled seed binary for full bootstrap generation without recursive app builds",
+      (fun () ->
+        let makefile = Fs.read_file (Filename.concat (Sys.getcwd ()) "Makefile") in
+        assert_string_contains
+          ~needle:"$(BOOTSTRAP_SEED_BIN) --manifest $(BOOTSTRAP_MANIFEST) --scope full"
+          makefile
+          "full bootstrap generation should run through the compiled seed binary";
+        assert_string_not_contains
+          ~needle:"$(MAKE) BOOTSTRAP_SCOPE=app $(BIN_DIR)/oasis"
+          makefile
+          "full bootstrap generation should not recurse through a separate app bootstrap build";
+        assert_string_not_contains
+          ~needle:"$(BIN_DIR)/oasis $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --scope full"
+          makefile
+          "full bootstrap generation should not require a freshly built app binary before the makefile exists")) ;
+    ( "keeps cached bootstrap seed metadata in sync with the manifest-driven loader",
+      (fun () ->
+        let generated =
+          run_seed_metadata_loader
+            ~env:[ ("BOOTSTRAP_MODULE_MANIFEST", manifest_path (Sys.getcwd ())) ]
+            ()
+        in
+        assert_int_equal 0 generated.status
+          "the bootstrap seed metadata helper should render successfully";
+        let cached =
+          Fs.read_file
+            (Filename.concat (Sys.getcwd ()) "scripts/bootstrap_seed_metadata.mk")
+        in
+        assert_string_equal generated.output cached
+          "the cached bootstrap seed metadata should stay in sync with the manifest-driven helper")) ;
+    ( "benchmarks bootstrap latency and emits machine-readable summaries",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-benchmark" (fun workspace ->
+            let fake_make = Filename.concat workspace "fake-make.sh" in
+            write_workspace_file workspace "Makefile" "all:\n\t@:\n";
+            write_workspace_file workspace "fake-make.sh"
+              {|
+#!/bin/sh
+set -eu
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    clean)
+      rm -rf _bootstrap
+      exit 0
+      ;;
+    _bootstrap/bin/oasis)
+      mkdir -p _bootstrap/bin
+      : > _bootstrap/bin/oasis
+      ;;
+    _bootstrap/bin/test_runner)
+      mkdir -p _bootstrap/bin
+      : > _bootstrap/bin/test_runner
+      ;;
+  esac
+  shift
+done
+|};
+            Unix.chmod fake_make 0o755;
+            let benchmark =
+              Process.run_capture
+                ~env:[ ("MAKE", fake_make) ]
+                ~cwd:(Sys.getcwd ()) "scripts/benchmark_bootstrap.sh"
+                [
+                  "--workspace";
+                  workspace;
+                  "--json";
+                ]
+            in
+            assert_int_equal 0 benchmark.status
+              "the bootstrap benchmark harness should succeed";
+            assert_string_contains ~needle:"\"workspace\": " benchmark.output
+              "benchmark JSON should record the measured workspace";
+            assert_string_contains ~needle:"\"name\": \"cold_app\"" benchmark.output
+              "benchmark JSON should include the cold app bootstrap phase";
+            assert_string_contains ~needle:"\"name\": \"cold_full\"" benchmark.output
+              "benchmark JSON should include the cold full bootstrap phase";
+            assert_string_contains ~needle:"\"name\": \"warm_app\"" benchmark.output
+              "benchmark JSON should include the warm app bootstrap phase")) );
     ( "emits interface-aware and package-aware bootstrap rules",
       (fun () ->
         with_temp_dir "oasis-bootstrap-packages" (fun workspace ->

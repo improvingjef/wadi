@@ -625,12 +625,7 @@ let render_makefile_from_plan ~workspace_root plan =
       ("# Bootstrap profile: " ^ plan.profile);
       "";
       rule_header "$(BOOTSTRAP_MK)"
-        ([
-           "$(BOOTSTRAP_MANIFEST)";
-           "$(BOOTSTRAP_GENERATOR)";
-           "scripts/render_bootstrap_mod_use.ml";
-         ]
-        @ plan.inputs);
+        ([ "$(BOOTSTRAP_MANIFEST)"; "$(BOOTSTRAP_GENERATOR)" ] @ plan.inputs);
       "";
     ]
     @ target_variable_lines ~workspace_root "COMMON" plan.common

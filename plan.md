@@ -81,7 +81,7 @@
 ## the single biggest blocker for real world migration
 73a. [x] Implement library namespace wrapping so a library named `foo` generates a wrapper module that re-exports all child modules as `Foo.Child_module`. This is required for compatibility with any dune-built OCaml project that uses `(libraries ...)` namespacing and is the single biggest blocker for real-world migration.
 
-20. [ ] Benchmark build latency and tighten startup and execution overhead.
+20. [x] Benchmark build latency and tighten startup and execution overhead.
 67. [ ] Implement `oasis migrate` to parse dune/dune-project s-expressions and emit an equivalent `oasis.toml`, automating the migration path from Dune workspaces.
 68. [x] Package generated shell completion scripts (bash, zsh, fish) for distribution so users can install them via opam or system package managers without running `oasis completion` manually.
 69. [ ] Publish an `oasis.opam` package to the opam repository so OCaml developers can install oasis through their existing toolchain with `opam install oasis`.
@@ -102,5 +102,7 @@
 93. [ ] Teach `oasis migrate` to recognize explicit wrapped-library module lists that intentionally keep a checked-in `Foo.ml` wrapper, not just the source-inferred wrapper case.
 94. [x] Extend `oasis env` with a `bench` mode so benchmark subprocess environments are inspectable with the same ergonomics as build, run, test, and install.
 95. [ ] Add dedicated `[bench.*]` target declarations if executable-only benchmarking becomes too limiting for real-world suites that need per-benchmark metadata or non-default argv.
-96. [ ] Replace the remaining `$(shell $(OCAML) scripts/render_bootstrap_mod_use.ml ...)` cold-start metadata probe with a compiled or cached helper so bootstrap source discovery no longer needs the OCaml interpreter even after the planner itself is compiled.
-97. [ ] Collapse duplicate cold-start compilation between `oasis-seed` and the subsequent app bootstrap build so removing the toplevel planner path does not replace one bootstrap tax with two full compiles of the core modules.
+96. [x] Replace the remaining `$(shell $(OCAML) scripts/render_bootstrap_mod_use.ml ...)` cold-start metadata probe with a compiled or cached helper so bootstrap source discovery no longer needs the OCaml interpreter even after the planner itself is compiled.
+97. [x] Collapse duplicate cold-start compilation between `oasis-seed` and the subsequent app bootstrap build so removing the toplevel planner path does not replace one bootstrap tax with two full compiles of the core modules.
+98. [ ] Teach the compiled bootstrap planner to refresh `scripts/bootstrap_seed_metadata.mk` directly so the legacy metadata helper script can disappear instead of surviving as a generator-only maintenance path.
+99. [ ] Gate shared `oasis-seed` object reuse on profile-sensitive compile inputs so future bootstrap-profile flags, env, preprocessors, or PPX on the core library cannot silently reuse mismatched seed artifacts.
