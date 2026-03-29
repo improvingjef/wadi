@@ -79,6 +79,16 @@ let with_temp_dir prefix f =
   Unix.mkdir path 0o755;
   Fun.protect ~finally:(fun () -> Fs.remove_tree path) (fun () -> f path)
 
+let with_env name value f =
+  let previous = Sys.getenv_opt name in
+  Unix.putenv name value;
+  Fun.protect
+    ~finally:(fun () ->
+      match previous with
+      | Some previous_value -> Unix.putenv name previous_value
+      | None -> Unix.putenv name "")
+    f
+
 let fixture_root name =
   Filename.concat (Filename.concat (Sys.getcwd ()) "test/fixtures") name
 

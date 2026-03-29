@@ -27,78 +27,90 @@ type command_result =
   | Exit_code of int
   | Forward_status of Unix.process_status
 
-let usage () =
-  String.concat "\n"
-    [
-      "Usage:";
-      "  oasis build [--workspace DIR] [--verbose] [TARGET ...]";
-      "  oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]";
-      "  oasis test [--workspace DIR] [--verbose] [TARGET ...]";
-      "  oasis clean [--workspace DIR] [--verbose] [TARGET ...]";
-      "";
-      "Examples:";
-      "  oasis build";
-      "  oasis build hello";
-      "  oasis build --workspace examples/hello --verbose";
-      "  oasis run";
-      "  oasis run hello";
-      "  oasis run hello -- --loud";
-      "  oasis test";
-      "  oasis test unit";
-      "  oasis clean";
-      "  oasis clean hello";
-    ]
+type command_doc = {
+  name : string;
+  signature : string;
+  examples : string list;
+}
 
-let build_usage () =
-  String.concat "\n"
-    [
-      "Usage:";
-      "  oasis build [--workspace DIR] [--verbose] [TARGET ...]";
-      "";
-      "Examples:";
-      "  oasis build";
-      "  oasis build hello";
-      "  oasis build --workspace examples/hello --verbose";
-    ]
+type command =
+  | Command : {
+      doc : command_doc;
+      parse : string list -> ('options, string) result;
+      run : 'options -> command_result;
+    }
+      -> command
 
-let run_usage () =
-  String.concat "\n"
-    [
-      "Usage:";
-      "  oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]";
-      "";
-      "Examples:";
-      "  oasis run";
-      "  oasis run hello";
-      "  oasis run hello -- --loud";
-      "  oasis run -- --port 8080";
-    ]
+let build_doc =
+  {
+    name = "build";
+    signature = "oasis build [--workspace DIR] [--verbose] [TARGET ...]";
+    examples =
+      [
+        "oasis build";
+        "oasis build hello";
+        "oasis build --workspace examples/hello --verbose";
+      ];
+  }
 
-let test_usage () =
-  String.concat "\n"
-    [
-      "Usage:";
-      "  oasis test [--workspace DIR] [--verbose] [TARGET ...]";
-      "";
-      "Examples:";
-      "  oasis test";
-      "  oasis test unit";
-      "  oasis test unit integration";
-      "  oasis test --workspace examples/hello --verbose";
-    ]
+let run_doc =
+  {
+    name = "run";
+    signature = "oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]";
+    examples =
+      [
+        "oasis run";
+        "oasis run hello";
+        "oasis run hello -- --loud";
+        "oasis run -- --port 8080";
+      ];
+  }
 
-let clean_usage () =
+let test_doc =
+  {
+    name = "test";
+    signature = "oasis test [--workspace DIR] [--verbose] [TARGET ...]";
+    examples =
+      [
+        "oasis test";
+        "oasis test unit";
+        "oasis test unit integration";
+        "oasis test --workspace examples/hello --verbose";
+      ];
+  }
+
+let clean_doc =
+  {
+    name = "clean";
+    signature = "oasis clean [--workspace DIR] [--verbose] [TARGET ...]";
+    examples =
+      [
+        "oasis clean";
+        "oasis clean hello";
+        "oasis clean hello greeting";
+        "oasis clean --workspace examples/hello --verbose";
+      ];
+  }
+
+let render_usage docs =
   String.concat "\n"
-    [
-      "Usage:";
-      "  oasis clean [--workspace DIR] [--verbose] [TARGET ...]";
-      "";
-      "Examples:";
-      "  oasis clean";
-      "  oasis clean hello";
-      "  oasis clean hello greeting";
-      "  oasis clean --workspace examples/hello --verbose";
-    ]
+    ([
+       "Usage:";
+     ]
+    @ List.map (fun doc -> "  " ^ doc.signature) docs
+    @ [
+        "";
+        "Examples:";
+      ]
+    @ List.concat_map
+        (fun doc -> List.map (fun example -> "  " ^ example) doc.examples)
+        docs)
+
+let command_docs = [ build_doc; run_doc; test_doc; clean_doc ]
+
+let usage () = render_usage command_docs
+
+let command_usage doc = render_usage [ doc ]
 
 let report_error message =
   prerr_endline ("oasis: " ^ message);
@@ -112,7 +124,7 @@ let parse_build_args (args : string list) : (build_options, string) result =
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
-    | "--help" :: _ -> Error (build_usage ())
+    | "--help" :: _ -> Error (command_usage build_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
@@ -128,7 +140,7 @@ let parse_run_args args =
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
-    | "--help" :: _ -> Error (run_usage ())
+    | "--help" :: _ -> Error (command_usage run_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> (
@@ -149,7 +161,7 @@ let parse_test_args (args : string list) : (test_options, string) result =
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
-    | "--help" :: _ -> Error (test_usage ())
+    | "--help" :: _ -> Error (command_usage test_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
@@ -164,7 +176,7 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
-    | "--help" :: _ -> Error (clean_usage ())
+    | "--help" :: _ -> Error (command_usage clean_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
@@ -297,22 +309,31 @@ let run_clean (options : clean_options) =
         | Ok () -> Exit_code 0
         | Error message -> report_error message)
 
+let commands =
+  [
+    Command { doc = build_doc; parse = parse_build_args; run = run_build };
+    Command { doc = run_doc; parse = parse_run_args; run = run_executable };
+    Command { doc = test_doc; parse = parse_test_args; run = run_tests };
+    Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
+  ]
+
+let dispatch_command command args =
+  match command with
+  | Command { parse; run; _ } -> (
+      match parse args with
+      | Error message -> report_error message
+      | Ok options -> run options)
+
+let find_command name =
+  List.find_opt
+    (function
+      | Command { doc; _ } -> doc.name = name)
+    commands
+
 let run argv =
   match Array.to_list argv with
-  | _program :: "build" :: args -> (
-      match parse_build_args args with
-      | Error message -> report_error message
-      | Ok options -> run_build options)
-  | _program :: "run" :: args -> (
-      match parse_run_args args with
-      | Error message -> report_error message
-      | Ok options -> run_executable options)
-  | _program :: "test" :: args -> (
-      match parse_test_args args with
-      | Error message -> report_error message
-      | Ok options -> run_tests options)
-  | _program :: "clean" :: args -> (
-      match parse_clean_args args with
-      | Error message -> report_error message
-      | Ok options -> run_clean options)
+  | _program :: command_name :: args -> (
+      match find_command command_name with
+      | Some command -> dispatch_command command args
+      | None -> report_error (usage ()))
   | _ -> report_error (usage ())

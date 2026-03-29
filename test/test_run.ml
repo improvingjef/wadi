@@ -95,4 +95,35 @@ main = "main"
             assert_string_contains ~needle:"Built executable sigterm"
               run.output
               "run should still surface the build phase before the executable exits")) );
+    ( "prints top-level usage from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-usage" (fun workspace ->
+            let run = run_oasis ~cwd:workspace [] in
+            assert_true (run.status <> 0)
+              "invoking oasis without a command should print usage";
+            assert_string_contains
+              ~needle:"oasis build [--workspace DIR] [--verbose] [TARGET ...]"
+              run.output "top-level usage should include the build command";
+            assert_string_contains
+              ~needle:"oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]"
+              run.output "top-level usage should include the run command";
+            assert_string_contains
+              ~needle:"oasis test [--workspace DIR] [--verbose] [TARGET ...]"
+              run.output "top-level usage should include the test command";
+            assert_string_contains
+              ~needle:"oasis clean [--workspace DIR] [--verbose] [TARGET ...]"
+              run.output "top-level usage should include the clean command")) );
+    ( "prints command-specific help from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-help" (fun workspace ->
+            let help = run_oasis ~cwd:workspace [ "build"; "--help" ] in
+            assert_true (help.status <> 0)
+              "build --help should short-circuit with usage text";
+            assert_string_contains
+              ~needle:"oasis build [--workspace DIR] [--verbose] [TARGET ...]"
+              help.output "build help should include the build signature";
+            assert_string_not_contains
+              ~needle:"oasis run [--workspace DIR] [--verbose] [TARGET] [-- ARG ...]"
+              help.output
+              "command-specific help should not include unrelated commands")) );
   ]

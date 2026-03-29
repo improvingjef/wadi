@@ -19,13 +19,14 @@
 19. [ ] Write migration guidance for existing Dune projects.
 20. [ ] Benchmark build latency and tighten startup and execution overhead.
 21. [x] Infer intra-target module compilation order from OCaml interface dependencies so manifests stay declarative.
-22. [ ] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
+22. [x] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
 23. [ ] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
 24. [x] Replace shell-wrapped process execution with direct child-process spawning so `oasis run` preserves signals, streaming output, and exact exit semantics.
 25. [ ] Eliminate the hand-maintained bootstrap `Makefile` object lists and rules by deriving bootstrap compilation from the workspace model or a tiny generator.
 26. [ ] Extend the direct process driver with explicit environment and stdin plumbing so future action/codegen subtools never need shell fallbacks.
 27. [ ] Extract `_oasis` artifact-layout path rules into a dedicated module shared by build, clean, install, and diagnostics subtools.
-28. [ ] Drive CLI help, argument parsing, and command dispatch from a single command table so new subtools do not require parallel edits across `cli.ml`, tests, and bootstrap rules.
+28. [x] Drive CLI help, argument parsing, and command dispatch from a single command table so new subtools do not require parallel edits across `cli.ml`, tests, and bootstrap rules.
 29. [ ] Add an `oasis toolchain` subtool that prints the resolved compiler, `ocamlfind`, stdlib, and package search roots so switch/path problems are debuggable without guesswork.
 30. [ ] Cache toolchain and package discovery within a build session so package-aware workspaces do not pay repeated probe subprocess costs.
 31. [ ] Persist rebuild reasons alongside target stamps and surface them through `oasis explain` so users can see exactly why a target rebuilt or was reused.
+32. [ ] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.

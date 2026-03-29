@@ -10,6 +10,23 @@ let library_archive_path workspace name =
 let write_source workspace relative_path contents =
   Fs.write_file (Filename.concat workspace relative_path) contents
 
+let write_executable workspace relative_path contents =
+  let path = Filename.concat workspace relative_path in
+  Fs.write_file path contents;
+  Unix.chmod path 0o755;
+  path
+
+let resolve_command prog =
+  let outcome = Process.run_capture "/bin/sh" [ "-c"; "command -v " ^ prog ] in
+  assert_int_equal 0 outcome.status
+    (Printf.sprintf "expected to find %s on PATH" prog);
+  String.trim outcome.output
+
+let write_wrapper workspace relative_path label log_path command_path =
+  write_executable workspace relative_path
+    (Printf.sprintf "#!/bin/sh\nprintf '%s\\n' >> %s\nexec %s \"$@\"\n" label
+       (Filename.quote log_path) (Filename.quote command_path))
+
 let cases =
   [
     ( "builds and runs the hello fixture",
@@ -194,4 +211,106 @@ packages = ["missing_pkg_demo"]
               ~needle:"package 'missing_pkg_demo' is not available via ocamlfind"
               build.output
               "unknown packages should produce a direct resolver error")) );
+    ( "orders modules from interface dependencies",
+      (fun () ->
+        with_temp_dir "oasis-interface-order" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["alpha", "beta"]
+
+[executable.app]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/alpha.mli" {|val value : Beta.t|};
+            write_source workspace "lib/alpha.ml" {|let value = Beta.value|};
+            write_source workspace "lib/beta.ml"
+              {|
+type t = string
+let value = "interfaces count"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Alpha.value|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "interface dependencies should participate in inferred module order";
+            let run = run_binary (executable_path workspace "app") [] in
+            assert_int_equal 0 run.status
+              "interface-ordered executable should run successfully";
+            assert_string_equal "interfaces count\n" run.output
+              "interface-driven ordering should produce the expected output")) );
+    ( "reports module dependency cycles with target context",
+      (fun () ->
+        with_temp_dir "oasis-module-cycle" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.cycle]
+dir = "lib"
+modules = ["alpha", "beta"]
+|};
+            write_source workspace "lib/alpha.ml" {|let value = Beta.value|};
+            write_source workspace "lib/beta.ml" {|let value = Alpha.value|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_true (build.status <> 0)
+              "cyclic modules should fail before compilation";
+            assert_string_contains
+              ~needle:"library 'cycle' failed module dependency inference"
+              build.output
+              "cycle failures should identify the target being ordered";
+            assert_string_contains ~needle:"cycle in dependencies" build.output
+              "cycle failures should preserve the dependency-scanner error")) );
+    ( "honors toolchain command overrides during build",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let log_path = Filename.concat workspace "toolchain.log" in
+            let ocamlopt_wrapper =
+              write_wrapper workspace "bin/ocamlopt-wrapper" "ocamlopt"
+                log_path (resolve_command "ocamlopt")
+            in
+            let ocamldep_wrapper =
+              write_wrapper workspace "bin/ocamldep-wrapper" "ocamldep"
+                log_path (resolve_command "ocamldep")
+            in
+            let build =
+              with_env "OCAMLOPT" ocamlopt_wrapper (fun () ->
+                  with_env "OCAMLDEP" ocamldep_wrapper (fun () ->
+                      run_oasis ~cwd:workspace [ "build" ]))
+            in
+            assert_int_equal 0 build.status
+              "build should succeed when compiler commands are overridden";
+            let log = Fs.read_file log_path in
+            assert_string_contains ~needle:"ocamlopt\n" log
+              "build should invoke the overridden native compiler";
+            assert_string_contains ~needle:"ocamldep\n" log
+              "build should invoke the overridden dependency scanner")) );
+    ( "resolves unix from a stdlib subdirectory",
+      (fun () ->
+        with_temp_dir "oasis-unix-subdir" (fun workspace ->
+            let stdlib_dir = Filename.concat workspace "lib/ocaml" in
+            let unix_dir = Filename.concat stdlib_dir "unix" in
+            Fs.ensure_dir unix_dir;
+            Fs.write_file (Filename.concat unix_dir "unix.cmi") "";
+            match
+              Toolchain.resolve_library_dir ~exists:Fs.exists ~stdlib_dir "unix"
+            with
+            | Some resolved ->
+                assert_string_equal unix_dir resolved
+                  "unix lookup should prefer the library subdirectory layout"
+            | None -> fail "expected unix library resolution to succeed")) );
+    ( "resolves unix from the stdlib root when needed",
+      (fun () ->
+        with_temp_dir "oasis-unix-root" (fun workspace ->
+            let stdlib_dir = Filename.concat workspace "lib/ocaml" in
+            Fs.ensure_dir stdlib_dir;
+            Fs.write_file (Filename.concat stdlib_dir "unix.cmi") "";
+            match
+              Toolchain.resolve_library_dir ~exists:Fs.exists ~stdlib_dir "unix"
+            with
+            | Some resolved ->
+                assert_string_equal stdlib_dir resolved
+                  "unix lookup should fall back to the stdlib root layout"
+            | None -> fail "expected unix library resolution to succeed")) );
   ]
