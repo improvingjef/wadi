@@ -24,3 +24,11 @@
 - Human-facing rebuild explanations only stay trustworthy if downstream fingerprints summarize dependencies at the dependency edge. Embedding raw dependency fingerprint text made `oasis explain` blame leaf source files in the wrong target.
 - A cached target still needs first-class diagnostics. Persisting `.oasis-explain` next to `.oasis-stamp` turns “why did this rebuild?” from guesswork into a cheap read instead of another compile.
 - The bootstrap path still has one embarrassing duplication seam: the generated makefile is manifest-driven, but `scripts/generate_bootstrap_makefile.ml` still carries a hand-maintained `#mod_use` list for core modules.
+
+## 2026-03-29
+
+- `oasis install` only feels real once it stages more than a binary. Copying compiler-consumable library artifacts, the source manifest, and a machine-readable install manifest turns a build output into something another tool can reason about.
+- A command table is not actually a single source of truth if it only feeds `--help`. Generating markdown docs and shell completions from the same metadata is what makes the subtool split discoverable instead of aspirational.
+- Persisting `.oasis-explain.json` beside the human report is cheap and worthwhile as long as both formats are emitted from the same builder data. Two renderers over one fact set are maintainable; two diagnostic code paths are not.
+- The next install friction showed up immediately: local staging is pleasant, but downstream packaging still wants `META` export and `DESTDIR`-style relocation.
+- Static shell completion is enough to prove the command-table design, but the moment the tool grows real workspace nouns, target-aware and profile-aware completion becomes part of usability rather than polish.

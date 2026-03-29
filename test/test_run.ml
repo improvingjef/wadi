@@ -113,6 +113,13 @@ main = "main"
             assert_string_contains
               ~needle:"oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the clean command";
+            assert_string_contains
+              ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--verbose] [TARGET ...]"
+              run.output "top-level usage should include the install command";
+            assert_string_contains ~needle:"oasis docs" run.output
+              "top-level usage should include the docs command";
+            assert_string_contains ~needle:"oasis completion SHELL" run.output
+              "top-level usage should include the completion command";
             assert_string_contains ~needle:"oasis toolchain" run.output
               "top-level usage should include the toolchain command";
             assert_string_contains
@@ -144,4 +151,78 @@ main = "main"
               ~needle:"oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               help.output
               "command-specific help should not include unrelated commands")) );
+    ( "renders markdown docs from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-docs" (fun workspace ->
+            let docs = run_oasis ~cwd:workspace [ "docs" ] in
+            assert_int_equal 0 docs.status
+              "docs should render markdown successfully";
+            assert_string_contains ~needle:"# Oasis CLI" docs.output
+              "docs output should start with the markdown title";
+            assert_string_contains ~needle:"## install" docs.output
+              "docs output should include the install command";
+            assert_string_contains ~needle:"## completion" docs.output
+              "docs output should include the completion command";
+            assert_string_contains
+              ~needle:"- `--prefix DIR`: Stage installed files under DIR instead of the default profile root."
+              docs.output
+              "docs output should include option descriptions from the command table")) );
+    ( "renders bash completions from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-bash-completion" (fun workspace ->
+            let completion = run_oasis ~cwd:workspace [ "completion"; "bash" ] in
+            assert_int_equal 0 completion.status
+              "bash completion generation should succeed";
+            assert_string_contains ~needle:"_oasis()" completion.output
+              "bash completion output should define the completion function";
+            assert_string_contains
+              ~needle:"build run test clean install docs completion toolchain explain"
+              completion.output
+              "bash completion should include the command list from the table";
+            assert_string_contains ~needle:"--prefix" completion.output
+              "bash completion should include install flags";
+            assert_string_contains ~needle:"bash zsh fish" completion.output
+              "bash completion should include static shell names for the completion command")) );
+    ( "renders zsh completions from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-zsh-completion" (fun workspace ->
+            let completion = run_oasis ~cwd:workspace [ "completion"; "zsh" ] in
+            assert_int_equal 0 completion.status
+              "zsh completion generation should succeed";
+            assert_string_contains ~needle:"#compdef oasis" completion.output
+              "zsh completion output should declare the compdef";
+            assert_string_contains
+              ~needle:"_values 'command' build run test clean install docs completion toolchain explain"
+              completion.output
+              "zsh completion should include the command list from the table";
+            assert_string_contains ~needle:"bash zsh fish" completion.output
+              "zsh completion should include static shell names for the completion command")) );
+    ( "renders fish completions from the command table",
+      (fun () ->
+        with_temp_dir "oasis-cli-fish-completion" (fun workspace ->
+            let completion = run_oasis ~cwd:workspace [ "completion"; "fish" ] in
+            assert_int_equal 0 completion.status
+              "fish completion generation should succeed";
+            assert_string_contains
+              ~needle:"complete -c oasis -f -n '__fish_use_subcommand' -a 'build run test clean install docs completion toolchain explain'"
+              completion.output
+              "fish completion should include the command list from the table";
+            assert_string_contains
+              ~needle:"__fish_seen_subcommand_from install"
+              completion.output
+              "fish completion should include install-specific options";
+            assert_string_contains
+              ~needle:"__fish_seen_subcommand_from completion"
+              completion.output
+              "fish completion should include completion-specific shell names")) );
+    ( "rejects unknown completion shells clearly",
+      (fun () ->
+        with_temp_dir "oasis-cli-completion-error" (fun workspace ->
+            let completion = run_oasis ~cwd:workspace [ "completion"; "pwsh" ] in
+            assert_true (completion.status <> 0)
+              "completion should reject unsupported shells";
+            assert_string_contains
+              ~needle:"unknown shell 'pwsh'; expected bash, fish, or zsh"
+              completion.output
+              "completion should report the supported shell names directly")) );
   ]

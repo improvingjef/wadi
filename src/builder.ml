@@ -875,8 +875,9 @@ let render_link_command ~session ~env ~backend ~package_resolution args =
   in
   Ok (Toolchain.render_invocation ~env invocation)
 
-let write_target_report out_dir report =
-  Fs.write_file (Layout.explain_path out_dir) report
+let write_target_report out_dir report json_report =
+  Fs.write_file (Layout.explain_path out_dir) report;
+  Fs.write_file (Layout.explain_json_path out_dir) json_report
 
 let static_archive_path archive = Filename.remove_extension archive ^ ".a"
 
@@ -1006,8 +1007,30 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
           :: compile_commands
         @ [ "link: " ^ link_command ])
   in
+  let json_report =
+    Explain.render_json_report ~kind_name:"library" ~target_name:library.name
+      ~profile ~status ~out_dir ~artifact:archive
+      ~resolution_lines:
+        (target_resolution_lines ~session ~backend_request ~backend
+           ~compiler_version ~package_resolution pipeline)
+      ~include_dirs ~module_order:ordered_modules
+      ~command_lines:
+        (List.map
+           (fun (action_result : action_result) ->
+             "action " ^ action_result.name ^ ": cached")
+           action_results
+        @ List.map
+            (fun (tool : Manifest.command_tool) ->
+              "preprocess " ^ tool.name ^ ": "
+              ^ render_preprocessor_command ~workspace_root
+                  ~target_env:(pipeline.options.env) tool)
+            pipeline.preprocessors
+        @ ("module-order: " ^ module_order_command)
+          :: compile_commands
+        @ [ "link: " ^ link_command ])
+  in
   if status.Explain.build_status = Explain.Reused then (
-    write_target_report out_dir report;
+    write_target_report out_dir report json_report;
     Hashtbl.replace library_outputs library.name
       { archive; out_dir; fingerprint; packages = effective_packages };
     print_endline (Printf.sprintf "Up to date library %s -> %s" library.name archive);
@@ -1027,7 +1050,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
         (pipeline.options.link_flags @ [ "-a"; "-o"; archive ] @ object_files)
     in
     Fs.write_file (Layout.stamp_path out_dir) fingerprint;
-    write_target_report out_dir report;
+    write_target_report out_dir report json_report;
     Hashtbl.replace library_outputs library.name
       { archive; out_dir; fingerprint; packages = effective_packages };
     print_endline (Printf.sprintf "Built library %s -> %s" library.name archive);
@@ -1196,8 +1219,30 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
           :: compile_commands
         @ [ "link: " ^ link_command ])
   in
+  let json_report =
+    Explain.render_json_report ~kind_name:(runnable_kind_name kind)
+      ~target_name:runnable.name ~profile ~status ~out_dir ~artifact:binary
+      ~resolution_lines:
+        (target_resolution_lines ~session ~backend_request ~backend
+           ~compiler_version ~package_resolution pipeline)
+      ~include_dirs ~module_order:source_order
+      ~command_lines:
+        (List.map
+           (fun (action_result : action_result) ->
+             "action " ^ action_result.name ^ ": cached")
+           action_results
+        @ List.map
+            (fun (tool : Manifest.command_tool) ->
+              "preprocess " ^ tool.name ^ ": "
+              ^ render_preprocessor_command ~workspace_root
+                  ~target_env:(pipeline.options.env) tool)
+            pipeline.preprocessors
+        @ ("module-order: " ^ module_order_command)
+          :: compile_commands
+        @ [ "link: " ^ link_command ])
+  in
   if status.Explain.build_status = Explain.Reused then (
-    write_target_report out_dir report;
+    write_target_report out_dir report json_report;
     print_endline
       (Printf.sprintf "Up to date %s %s -> %s" (runnable_kind_name kind)
          runnable.name binary);
@@ -1224,7 +1269,7 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
         @ archive_files @ object_files)
     in
     Fs.write_file (Layout.stamp_path out_dir) fingerprint;
-    write_target_report out_dir report;
+    write_target_report out_dir report json_report;
     print_endline
       (Printf.sprintf "Built %s %s -> %s" (runnable_kind_name kind)
          runnable.name binary);

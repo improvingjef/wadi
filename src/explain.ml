@@ -9,6 +9,8 @@ type target_status = {
 
 let report_path out_dir = Filename.concat out_dir ".oasis-explain"
 
+let json_path out_dir = Filename.concat out_dir ".oasis-explain.json"
+
 let status_name = function
   | Rebuilt -> "rebuilt"
   | Reused -> "reused"
@@ -145,5 +147,38 @@ let render_report ~kind_name ~target_name ~profile ~status ~out_dir ~artifact
     @ render_section "Module-order" module_order
     @ [ "" ]
     @ render_section "Commands" command_lines)
+
+let json_string text = "\"" ^ String_util.json_escape text ^ "\""
+
+let json_array items = "[" ^ String.concat ", " items ^ "]"
+
+let render_json_report ~kind_name ~target_name ~profile ~status ~out_dir
+    ~artifact ~resolution_lines ~include_dirs ~module_order ~command_lines =
+  String.concat "\n"
+    [
+      "{";
+      "  \"target\": " ^ json_string target_name ^ ",";
+      "  \"kind\": " ^ json_string kind_name ^ ",";
+      "  \"profile\": " ^ json_string profile ^ ",";
+      "  \"state\": " ^ json_string (status_name status.build_status) ^ ",";
+      "  \"artifact\": " ^ json_string artifact ^ ",";
+      "  \"output_dir\": " ^ json_string out_dir ^ ",";
+      "  \"reasons\": "
+      ^ json_array (List.map json_string status.reasons)
+      ^ ",";
+      "  \"resolution\": "
+      ^ json_array (List.map json_string resolution_lines)
+      ^ ",";
+      "  \"include_dirs\": "
+      ^ json_array (List.map json_string include_dirs)
+      ^ ",";
+      "  \"module_order\": "
+      ^ json_array (List.map json_string module_order)
+      ^ ",";
+      "  \"commands\": "
+      ^ json_array (List.map json_string command_lines);
+      "}";
+      "";
+    ]
 
 let load_report path = Fs.read_file path

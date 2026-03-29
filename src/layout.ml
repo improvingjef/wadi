@@ -7,6 +7,12 @@ let build_root_for_profile workspace_root profile =
 
 let build_root workspace_root = build_root_for_profile workspace_root default_profile
 
+let install_root_for_profile workspace_root profile =
+  Filename.concat (artifact_root workspace_root) ("install/" ^ profile)
+
+let install_root workspace_root =
+  install_root_for_profile workspace_root default_profile
+
 let target_root_for_profile workspace_root profile kind =
   Filename.concat (build_root_for_profile workspace_root profile) kind
 
@@ -55,3 +61,26 @@ let test_binary ?(profile = default_profile) workspace_root name =
 let stamp_path out_dir = Filename.concat out_dir ".oasis-stamp"
 
 let explain_path out_dir = Explain.report_path out_dir
+
+let explain_json_path out_dir = Explain.json_path out_dir
+
+let install_bin_dir prefix = Filename.concat prefix "bin"
+
+let relative_install_library_dir name = Filename.concat "lib" name
+
+let install_library_dir prefix name =
+  Filename.concat prefix (relative_install_library_dir name)
+
+let relative_install_executable_path name = Filename.concat "bin" name
+
+let install_executable_path prefix name =
+  Filename.concat prefix (relative_install_executable_path name)
+
+let install_share_dir prefix workspace_name =
+  Filename.concat (Filename.concat prefix "share/oasis") workspace_name
+
+let install_metadata_path prefix workspace_name =
+  Filename.concat (install_share_dir prefix workspace_name) "install.json"
+
+let install_manifest_copy_path prefix workspace_name =
+  Filename.concat (install_share_dir prefix workspace_name) Manifest.default_filename

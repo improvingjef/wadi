@@ -14,10 +14,6 @@
 14. [x] Add support for preprocessors, PPX pipelines, and generated modules.
 15. [x] Implement workspace-wide defaults, profiles, and per-target overrides.
 16. [x] Add developer-facing diagnostics explaining compiler invocations and resolution decisions.
-17. [ ] Implement installable binaries, libraries, and metadata export.
-18. [ ] Add multi-package workspace support with shared dependency analysis.
-19. [ ] Write migration guidance for existing Dune projects.
-20. [ ] Benchmark build latency and tighten startup and execution overhead.
 21. [x] Infer intra-target module compilation order from OCaml interface dependencies so manifests stay declarative.
 22. [x] Hide compiler-toolchain quirks like `-I +unix` and stdlib layout shifts behind a portable driver layer.
 23. [x] Add a bytecode/native backend switch so bootstrap builds still work when `ocamlopt` is unavailable.
@@ -29,10 +25,15 @@
 29. [x] Add an `oasis toolchain` subtool that prints the resolved compiler, `ocamlfind`, stdlib, and package search roots so switch/path problems are debuggable without guesswork.
 30. [x] Cache toolchain and package discovery within a build session so package-aware workspaces do not pay repeated probe subprocess costs.
 31. [x] Persist rebuild reasons alongside target stamps and surface them through `oasis explain` so users can see exactly why a target rebuilt or was reused.
-32. [ ] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.
 33. [x] Teach the bootstrap generator to honor `.mli` files so interface-heavy self-hosting builds stay aligned with `oasis build`.
 34. [x] Drive bootstrap compile/link flags from target package metadata instead of the global `UNIX_FLAGS` fallback so the root workspace manifest becomes the single source of truth.
 35. [x] Add a bootstrap smoke target or CI step that removes `_bootstrap`, regenerates the make fragment, and rebuilds from scratch to catch self-hosting regressions immediately.
+
+17. [x] Implement installable binaries, libraries, and metadata export.
+18. [ ] Add multi-package workspace support with shared dependency analysis.
+19. [ ] Write migration guidance for existing Dune projects.
+20. [ ] Benchmark build latency and tighten startup and execution overhead.
+32. [x] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.
 36. [ ] Detect duplicate module stems across bootstrap library/executable/test groups before writing rules so the shared `_bootstrap/obj` directory never hides collisions behind overwritten artifacts.
 37. [ ] Add CI coverage for both native and bytecode bootstrap smoke lanes so backend portability stays enforced outside local development.
 38. [ ] Teach the bootstrap/self-hosted path about profiles, actions, preprocessors, and PPX so the manifest surface does not diverge between `oasis build` and `make test`.
@@ -40,5 +41,10 @@
 40. [ ] Replace copy-heavy action sandboxes with a cheaper file-materialization strategy so workspace sandboxes stay fast on larger trees.
 41. [ ] Track preprocessor/PPX auxiliary inputs and settings in rebuild diagnostics so transformed-source invalidations are explainable instead of implicit.
 42. [ ] Drive `scripts/generate_bootstrap_makefile.ml` from the workspace model or generated metadata so adding a core module never requires editing a second hard-coded module list.
-43. [ ] Persist a machine-readable sibling to `.oasis-explain` so editors and CI can consume rebuild reasons without scraping human-formatted text.
+43. [x] Persist a machine-readable sibling to `.oasis-explain` so editors and CI can consume rebuild reasons without scraping human-formatted text.
 44. [ ] Add `oasis explain --current` or an equivalent dry-run diff so users can inspect why a target would rebuild before paying the build cost.
+45. [ ] Export findlib-friendly `META` files and install-layout metadata from `oasis install` so staged libraries can be consumed without bespoke `-I` wiring.
+46. [ ] Add `DESTDIR` or equivalent relocation support to `oasis install` so package-manager staging does not have to rewrite prefixes after the fact.
+47. [ ] Teach `oasis completion` to suggest workspace-local target names and profile names instead of only static flags and shell names.
+48. [ ] Add `oasis explain --json` so automation can print the persisted `.oasis-explain.json` payload directly instead of opening files by path.
+49. [ ] Generate release docs and packaged shell-completion artifacts from `oasis docs` and `oasis completion` in CI so shipped assets cannot drift from the command table.

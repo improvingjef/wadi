@@ -80,3 +80,22 @@ let split_whitespace text =
 
 let split_lines text =
   text |> String.split_on_char '\n' |> List.filter (fun line -> line <> "")
+
+let json_escape text =
+  let buffer = Buffer.create (String.length text + 16) in
+  String.iter
+    (function
+      | '"' -> Buffer.add_string buffer "\\\""
+      | '\\' -> Buffer.add_string buffer "\\\\"
+      | '\b' -> Buffer.add_string buffer "\\b"
+      | '\012' -> Buffer.add_string buffer "\\f"
+      | '\n' -> Buffer.add_string buffer "\\n"
+      | '\r' -> Buffer.add_string buffer "\\r"
+      | '\t' -> Buffer.add_string buffer "\\t"
+      | ch ->
+          let code = Char.code ch in
+          if code < 0x20 then
+            Buffer.add_string buffer (Printf.sprintf "\\u%04x" code)
+          else Buffer.add_char buffer ch)
+    text;
+  Buffer.contents buffer

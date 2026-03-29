@@ -12,7 +12,8 @@ exit codes rather than hidden global state.
   targets.
 - `oasis graph`: explain target and module dependency order.
 - `oasis explain`: show compiler invocations, include paths, and why a target
-  was rebuilt.
+  was rebuilt. Persist a machine-readable `.oasis-explain.json` sibling for
+  editors and CI.
 
 ### Execution
 
@@ -29,6 +30,12 @@ exit codes rather than hidden global state.
 - `oasis vendor`: copy or sync external source dependencies into the workspace.
 - `oasis lock`: capture reproducible dependency selections.
 - `oasis install`: stage installable binaries, libraries, and metadata.
+
+### Discoverability
+
+- `oasis docs`: render markdown CLI reference from the live command table.
+- `oasis completion`: generate shell completion scripts from the live command
+  table.
 
 ### Toolchain and environment
 

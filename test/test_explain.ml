@@ -67,6 +67,27 @@ let cases =
               ~needle:"inputs and outputs matched the recorded fingerprint"
               second_explain.output
               "reused targets should explain the cache hit")) );
+    ( "persists a machine-readable explain sibling for automation",
+      (fun () ->
+        with_fixture "hello" (fun workspace ->
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "build should succeed before checking machine-readable explain data";
+            let report_path =
+              Layout.explain_json_path (Layout.library_out_dir workspace "greeting")
+            in
+            assert_file_exists report_path;
+            let report = Fs.read_file report_path in
+            assert_string_contains ~needle:"\"target\": \"greeting\"" report
+              "machine-readable explain should record the target name";
+            assert_string_contains ~needle:"\"state\": \"rebuilt\"" report
+              "machine-readable explain should record the build state";
+            assert_string_contains
+              ~needle:"\"reasons\": [\"previous build stamp missing\""
+              report
+              "machine-readable explain should preserve rebuild reasons";
+            assert_string_contains ~needle:"\"commands\": [" report
+              "machine-readable explain should preserve planned commands")) );
     ( "surfaces rebuild reasons and planned compiler commands",
       (fun () ->
         with_fixture "hello" (fun workspace ->

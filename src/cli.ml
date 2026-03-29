@@ -30,11 +30,24 @@ type clean_options = {
   profile : string option;
 }
 
+type install_options = {
+  workspace_dir : string;
+  verbose : bool;
+  targets : string list;
+  backend_request : Toolchain.backend_request;
+  profile : string option;
+  prefix : string option;
+}
+
 type explain_options = {
   workspace_dir : string;
   targets : string list;
   profile : string option;
 }
+
+type completion_options = { shell : string }
+
+type docs_options = unit
 
 type toolchain_options = { verbose : bool }
 
@@ -42,10 +55,19 @@ type command_result =
   | Exit_code of int
   | Forward_status of Unix.process_status
 
+type option_doc = {
+  usage : string;
+  flags : string list;
+  description : string;
+}
+
 type command_doc = {
   name : string;
+  summary : string;
   signature : string;
   examples : string list;
+  options : option_doc list;
+  completion_words : string list;
 }
 
 type command =
@@ -58,9 +80,52 @@ type command =
 
 let ( let* ) = Result.bind
 
+let workspace_option =
+  {
+    usage = "--workspace DIR";
+    flags = [ "--workspace" ];
+    description = "Read the workspace manifest from DIR.";
+  }
+
+let profile_option =
+  {
+    usage = "--profile NAME";
+    flags = [ "--profile" ];
+    description = "Select the workspace profile to resolve and build.";
+  }
+
+let backend_option =
+  {
+    usage = "--backend auto|native|bytecode";
+    flags = [ "--backend" ];
+    description = "Choose the compiler backend or let oasis auto-resolve it.";
+  }
+
+let verbose_option =
+  {
+    usage = "--verbose, -v";
+    flags = [ "--verbose"; "-v" ];
+    description = "Print detailed process execution as commands run.";
+  }
+
+let help_option =
+  {
+    usage = "--help";
+    flags = [ "--help" ];
+    description = "Print command-specific usage text.";
+  }
+
+let prefix_option =
+  {
+    usage = "--prefix DIR";
+    flags = [ "--prefix" ];
+    description = "Stage installed files under DIR instead of the default profile root.";
+  }
+
 let build_doc =
   {
     name = "build";
+    summary = "Compile libraries, executables, and tests into predictable artifact roots.";
     signature =
       "oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
@@ -69,11 +134,14 @@ let build_doc =
         "oasis build hello";
         "oasis build --workspace examples/hello --profile release --verbose";
       ];
+    options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    completion_words = [];
   }
 
 let run_doc =
   {
     name = "run";
+    summary = "Build and launch an executable target with exact argv forwarding.";
     signature =
       "oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
     examples =
@@ -83,11 +151,14 @@ let run_doc =
         "oasis run --profile release hello -- --loud";
         "oasis run -- --port 8080";
       ];
+    options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    completion_words = [];
   }
 
 let test_doc =
   {
     name = "test";
+    summary = "Build and execute declared test targets with a direct failure summary.";
     signature =
       "oasis test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
@@ -97,11 +168,14 @@ let test_doc =
         "oasis test unit integration";
         "oasis test --workspace examples/hello --profile ci --verbose";
       ];
+    options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    completion_words = [];
   }
 
 let clean_doc =
   {
     name = "clean";
+    summary = "Remove the whole artifact tree or only the requested target outputs.";
     signature = "oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
@@ -110,18 +184,68 @@ let clean_doc =
         "oasis clean hello greeting";
         "oasis clean --workspace examples/hello --profile release --verbose";
       ];
+    options = [ workspace_option; profile_option; verbose_option; help_option ];
+    completion_words = [];
+  }
+
+let install_doc =
+  {
+    name = "install";
+    summary = "Stage installable libraries, executables, and metadata under a prefix.";
+    signature =
+      "oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--verbose] [TARGET ...]";
+    examples =
+      [
+        "oasis install";
+        "oasis install hello";
+        "oasis install --prefix _stage hello greeting";
+      ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        prefix_option;
+        verbose_option;
+        help_option;
+      ];
+    completion_words = [];
+  }
+
+let docs_doc =
+  {
+    name = "docs";
+    summary = "Render markdown CLI reference directly from the live command table.";
+    signature = "oasis docs";
+    examples = [ "oasis docs" ];
+    options = [ help_option ];
+    completion_words = [];
+  }
+
+let completion_doc =
+  {
+    name = "completion";
+    summary = "Generate shell completion scripts from the live command table.";
+    signature = "oasis completion SHELL";
+    examples = [ "oasis completion bash"; "oasis completion zsh"; "oasis completion fish" ];
+    options = [ help_option ];
+    completion_words = [ "bash"; "zsh"; "fish" ];
   }
 
 let toolchain_doc =
   {
     name = "toolchain";
+    summary = "Print the resolved OCaml toolchain, backend, and package search roots.";
     signature = "oasis toolchain";
     examples = [ "oasis toolchain" ];
+    options = [ help_option ];
+    completion_words = [];
   }
 
 let explain_doc =
   {
     name = "explain";
+    summary = "Show why a target rebuilt or reused artifacts and which commands were planned.";
     signature = "oasis explain [--workspace DIR] [--profile NAME] [TARGET ...]";
     examples =
       [
@@ -129,6 +253,8 @@ let explain_doc =
         "oasis explain hello";
         "oasis explain --profile release greeting hello";
       ];
+    options = [ workspace_option; profile_option; help_option ];
+    completion_words = [];
   }
 
 let render_usage docs =
@@ -146,11 +272,197 @@ let render_usage docs =
         docs)
 
 let command_docs =
-  [ build_doc; run_doc; test_doc; clean_doc; toolchain_doc; explain_doc ]
+  [
+    build_doc;
+    run_doc;
+    test_doc;
+    clean_doc;
+    install_doc;
+    docs_doc;
+    completion_doc;
+    toolchain_doc;
+    explain_doc;
+  ]
 
 let usage () = render_usage command_docs
 
 let command_usage doc = render_usage [ doc ]
+
+let render_options_markdown options =
+  match options with
+  | [] -> [ "No options." ]
+  | options ->
+      List.map
+        (fun option_doc ->
+          Printf.sprintf "- `%s`: %s" option_doc.usage option_doc.description)
+        options
+
+let render_examples_markdown examples =
+  List.map (fun example -> "- `" ^ example ^ "`") examples
+
+let render_markdown docs =
+  String.concat "\n"
+    ([
+       "# Oasis CLI";
+       "";
+       "Generated from the live command table.";
+     ]
+    @ List.concat_map
+        (fun doc ->
+          [
+            "";
+            "## " ^ doc.name;
+            "";
+            doc.summary;
+            "";
+            "Usage:";
+            "";
+            "`" ^ doc.signature ^ "`";
+            "";
+            "Options:";
+          ]
+          @ render_options_markdown doc.options
+          @ [ ""; "Examples:" ]
+          @ render_examples_markdown doc.examples)
+        docs
+    @ [ "" ])
+
+let command_flag_words doc =
+  List.concat_map (fun option_doc -> option_doc.flags) doc.options
+
+let shell_words doc = command_flag_words doc @ doc.completion_words
+
+let shell_word_list words = String.concat " " words
+
+let render_bash_completion docs =
+  let render_case doc =
+    let option_words = shell_word_list (command_flag_words doc) in
+    let completion_words = shell_word_list doc.completion_words in
+    String.concat "\n"
+      [
+        "    " ^ doc.name ^ ")";
+        "      if [[ \"$cur\" == -* ]]; then";
+        "        COMPREPLY=( $(compgen -W \"" ^ option_words ^ "\" -- \"$cur\") )";
+        "      else";
+        "        COMPREPLY=( $(compgen -W \"" ^ completion_words ^ "\" -- \"$cur\") )";
+        "      fi";
+        "      ;;";
+      ]
+  in
+  String.concat "\n"
+    ([
+       "_oasis() {";
+       "  local cur command";
+       "  cur=\"${COMP_WORDS[COMP_CWORD]}\"";
+       "  if [[ $COMP_CWORD -eq 1 ]]; then";
+       "    COMPREPLY=( $(compgen -W \"" ^ shell_word_list (List.map (fun doc -> doc.name) docs)
+       ^ "\" -- \"$cur\") )";
+       "    return 0";
+       "  fi";
+       "  command=\"${COMP_WORDS[1]}\"";
+       "  case \"$command\" in";
+     ]
+    @ List.concat_map (fun doc -> [ render_case doc ]) docs
+    @ [ "  esac"; "}"; "complete -F _oasis oasis"; "" ])
+
+let render_zsh_completion docs =
+  let command_names = shell_word_list (List.map (fun doc -> doc.name) docs) in
+  let render_case doc =
+    let words = shell_word_list (shell_words doc) in
+    String.concat "\n"
+      [
+        "    " ^ doc.name ^ ")";
+        "      _values 'value' " ^ words;
+        "      ;;";
+      ]
+  in
+  String.concat "\n"
+    ([
+       "#compdef oasis";
+       "";
+       "local context state line";
+       "_arguments -C \\";
+       "  '1:command:->command' \\";
+       "  '*::arg:->args'";
+       "";
+       "case $state in";
+       "  command)";
+       "    _values 'command' " ^ command_names;
+       "    ;;";
+       "  args)";
+       "    case $line[1] in";
+     ]
+    @ List.concat_map (fun doc -> [ render_case doc ]) docs
+    @ [ "    esac"; "    ;;"; "esac"; "" ])
+
+let long_flag_name flag =
+  if String_util.starts_with ~prefix:"--" flag then
+    Some (String.sub flag 2 (String.length flag - 2))
+  else None
+
+let short_flag_name flag =
+  if String_util.starts_with ~prefix:"-" flag && not (String_util.starts_with ~prefix:"--" flag)
+  then Some (String.sub flag 1 (String.length flag - 1))
+  else None
+
+let render_fish_option command_name (option_doc : option_doc) =
+  let long_flags = List.filter_map long_flag_name option_doc.flags in
+  let short_flags = List.filter_map short_flag_name option_doc.flags in
+  let flag_parts =
+    (match short_flags with
+    | short :: _ -> [ "-s"; short ]
+    | [] -> [])
+    @
+    (match long_flags with
+    | long :: _ -> [ "-l"; long ]
+    | [] -> [])
+  in
+  if flag_parts = [] then ""
+  else
+    String.concat " "
+      ([ "complete"; "-c"; "oasis"; "-n"; "__fish_seen_subcommand_from " ^ command_name ]
+      @ flag_parts
+      @ [ "-d"; String_util.shell_quote option_doc.description ])
+
+let render_fish_completion docs =
+  let command_names = shell_word_list (List.map (fun doc -> doc.name) docs) in
+  String.concat "\n"
+    ([
+       "complete -c oasis -f -n '__fish_use_subcommand' -a '" ^ command_names ^ "'";
+     ]
+    @ List.concat_map
+        (fun doc ->
+          let option_lines =
+            List.filter_map
+              (fun option_doc ->
+                let line = render_fish_option doc.name option_doc in
+                if line = "" then None else Some line)
+              doc.options
+          in
+          let word_line =
+            match doc.completion_words with
+            | [] -> []
+            | words ->
+                [
+                  "complete -c oasis -f -n '__fish_seen_subcommand_from "
+                  ^ doc.name
+                  ^ "' -a '"
+                  ^ shell_word_list words
+                  ^ "'";
+                ]
+          in
+          option_lines @ word_line)
+        docs
+    @ [ "" ])
+
+let completion_script shell docs =
+  match shell with
+  | "bash" -> Ok (render_bash_completion docs)
+  | "zsh" -> Ok (render_zsh_completion docs)
+  | "fish" -> Ok (render_fish_completion docs)
+  | shell ->
+      Error
+        (Printf.sprintf "unknown shell '%s'; expected bash, fish, or zsh" shell)
 
 let report_error message =
   prerr_endline ("oasis: " ^ message);
@@ -287,6 +599,59 @@ let parse_toolchain_args args =
   | option :: _ when String_util.starts_with ~prefix:"-" option ->
       Error (Printf.sprintf "unknown option '%s'" option)
   | _ -> Error "toolchain does not accept positional arguments"
+
+let parse_docs_args args =
+  match args with
+  | [] -> Ok ()
+  | [ "--help" ] -> Error (command_usage docs_doc)
+  | option :: _ when String_util.starts_with ~prefix:"-" option ->
+      Error (Printf.sprintf "unknown option '%s'" option)
+  | _ -> Error "docs does not accept positional arguments"
+
+let parse_completion_args args =
+  match args with
+  | [ "--help" ] -> Error (command_usage completion_doc)
+  | [ shell ] -> Ok { shell }
+  | [] -> Error "completion requires a shell name"
+  | option :: _ when String_util.starts_with ~prefix:"-" option ->
+      Error (Printf.sprintf "unknown option '%s'" option)
+  | _ -> Error "completion accepts exactly one shell name"
+
+let parse_install_args (args : string list) : (install_options, string) result =
+  let* default_backend_request = default_backend_request () in
+  let rec loop (options : install_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
+    | "--prefix" :: prefix :: rest ->
+        loop { options with prefix = Some prefix } rest
+    | "--prefix" :: [] -> Error "--prefix requires a directory"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--help" :: _ -> Error (command_usage install_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop
+    {
+      workspace_dir = ".";
+      verbose = false;
+      targets = [];
+      backend_request = default_backend_request;
+      profile = None;
+      prefix = None;
+    }
+    args
 
 let parse_explain_args (args : string list) : (explain_options, string) result =
   let rec loop (options : explain_options) = function
@@ -458,6 +823,30 @@ let run_clean (options : clean_options) =
         | Ok () -> Exit_code 0
         | Error message -> report_error message)
 
+let run_install (options : install_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Installer.install ~workspace_root:options.workspace_dir
+          ~verbose:options.verbose ~backend_request:options.backend_request
+          ?profile:options.profile ?prefix:options.prefix
+          ~requested_targets:options.targets workspace
+      with
+      | Ok status -> Exit_code status
+      | Error message -> report_error message)
+
+let run_docs (_options : docs_options) =
+  print_string (render_markdown command_docs);
+  Exit_code 0
+
+let run_completion (options : completion_options) =
+  match completion_script options.shell command_docs with
+  | Ok script ->
+      print_string script;
+      Exit_code 0
+  | Error message -> report_error message
+
 let run_toolchain (_options : toolchain_options) =
   Toolchain.inspect () |> Toolchain.render_report |> print_endline;
   Exit_code 0
@@ -498,6 +887,10 @@ let commands =
     Command { doc = run_doc; parse = parse_run_args; run = run_executable };
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
+    Command { doc = install_doc; parse = parse_install_args; run = run_install };
+    Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
+    Command
+      { doc = completion_doc; parse = parse_completion_args; run = run_completion };
     Command
       { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
     Command { doc = explain_doc; parse = parse_explain_args; run = run_explain };
