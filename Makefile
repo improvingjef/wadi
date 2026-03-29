@@ -12,7 +12,7 @@ BOOTSTRAP_GENERATOR := scripts/generate_bootstrap_makefile.ml
 BOOTSTRAP_MK := $(BUILD_DIR)/bootstrap.generated.mk
 BOOTSTRAP_SOURCES := $(wildcard src/*.ml src/*.mli test/*.ml test/*.mli)
 
-.PHONY: all test clean bootstrap-smoke
+.PHONY: all test clean bootstrap-smoke release-artifacts
 
 all: $(BIN_DIR)/oasis
 
@@ -22,6 +22,9 @@ bootstrap-smoke:
 
 test: bootstrap-smoke $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) $(BIN_DIR)/test_runner
+
+release-artifacts: $(BIN_DIR)/oasis
+	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) bash scripts/generate_release_artifacts.sh
 
 clean:
 	rm -rf $(BUILD_DIR)

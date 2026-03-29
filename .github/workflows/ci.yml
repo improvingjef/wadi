@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - native
+          - bytecode
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.4.0
+
+      - name: Install shell dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fish zsh
+
+      - name: Install OCaml dependencies
+        run: opam install -y ocamlfind
+
+      - name: Run bootstrap smoke and test suite
+        run: make test BOOTSTRAP_BACKEND=${{ matrix.backend }}
+
+      - name: Refresh release artifacts
+        if: matrix.backend == 'native'
+        run: make release-artifacts
+
+      - name: Check committed release artifacts
+        if: matrix.backend == 'native'
+        run: git diff --exit-code -- docs/cli.md completions

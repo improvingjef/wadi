@@ -172,7 +172,33 @@ let current_option =
 
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
 
-let directory_completion_marker = "__oasis_complete_directories__"
+let completion_protocol_name = "__oasis_completion"
+
+let completion_protocol_version = "1"
+
+let sanitize_completion_field text =
+  let buffer = Buffer.create (String.length text) in
+  String.iter
+    (function
+      | '\t' | '\n' | '\r' -> Buffer.add_char buffer ' '
+      | ch -> Buffer.add_char buffer ch)
+    text;
+  Buffer.contents buffer
+
+let completion_protocol_header kind =
+  String.concat "\t"
+    [ completion_protocol_name; completion_protocol_version; kind ]
+
+let completion_candidate_line ?hint value =
+  match hint with
+  | Some hint ->
+      String.concat "\t"
+        [
+          "candidate";
+          sanitize_completion_field value;
+          sanitize_completion_field hint;
+        ]
+  | None -> String.concat "\t" [ "candidate"; sanitize_completion_field value ]
 
 let build_doc =
   {
@@ -421,26 +447,37 @@ let render_bash_completion ?workspace_dir () =
       "  done";
       "}";
       "_oasis() {";
-      "  local cur response first_line value description";
+      "  local cur response first_line body record protocol version kind value description";
       "  local -a previous values described";
       "  cur=\"${COMP_WORDS[COMP_CWORD]}\"";
       "  previous=(\"${COMP_WORDS[@]:1:$((COMP_CWORD-1))}\")";
       "  response=\"$(_oasis_query \"$cur\" \"${previous[@]}\")\"";
       "  first_line=\"${response%%$'\\n'*}\"";
-      "  if [[ \"$first_line\" == "
-      ^ String_util.shell_quote directory_completion_marker
-      ^ " ]]; then";
+      "  IFS=$'\\t' read -r protocol version kind <<< \"$first_line\"";
+      "  [[ \"$protocol\" == "
+      ^ String_util.shell_quote completion_protocol_name
+      ^ " ]] || return";
+      "  [[ \"$version\" == "
+      ^ String_util.shell_quote completion_protocol_version
+      ^ " ]] || return";
+      "  if [[ \"$kind\" == directories ]]; then";
       "    compopt -o filenames 2>/dev/null";
       "    compgen -V COMPREPLY -d -- \"$cur\"";
       "    return";
       "  fi";
-      "  while IFS=$'\\t' read -r value description; do";
+      "  if [[ \"$response\" == *$'\\n'* ]]; then";
+      "    body=\"${response#*$'\\n'}\"";
+      "  else";
+      "    body=''";
+      "  fi";
+      "  while IFS=$'\\t' read -r record value description; do";
+      "    [[ \"$record\" == candidate ]] || continue";
       "    [[ -n \"$value\" ]] || continue";
       "    values+=(\"$value\")";
       "    if [[ -n \"$description\" ]]; then";
       "      described+=(\"$value\"$'\\t'$description)";
       "    fi";
-      "  done <<< \"$response\"";
+      "  done <<< \"$body\"";
       "  compgen -V COMPREPLY -W \"$(printf '%s\\n' \"${values[@]}\")\" -- \"$cur\"";
       "  if [[ ${#described[@]} -gt 0 && ${#COMPREPLY[@]} -gt 1 ]]; then";
       "    _oasis_show_descriptions <<< \"$(printf '%s\\n' \"${described[@]}\")\"";
@@ -460,26 +497,37 @@ let render_zsh_completion ?workspace_dir () =
       "  " ^ query ^ " --current \"$1\" -- \"${@:2}\" 2>/dev/null";
       "}";
       "_oasis() {";
-      "  local current response first_line";
-      "  local value description";
+      "  local current response first_line body";
+      "  local record protocol version kind value description";
       "  local -a previous suggestions";
       "  current=\"${words[CURRENT]}\"";
       "  previous=(\"${(@)words[2,CURRENT-1]}\")";
       "  response=\"$(_oasis_query \"$current\" \"${previous[@]}\")\"";
       "  first_line=\"${response%%$'\\n'*}\"";
-      "  if [[ \"$first_line\" == "
-      ^ String_util.shell_quote directory_completion_marker
-      ^ " ]]; then";
+      "  IFS=$'\\t' read -r protocol version kind <<< \"$first_line\"";
+      "  [[ \"$protocol\" == "
+      ^ String_util.shell_quote completion_protocol_name
+      ^ " ]] || return";
+      "  [[ \"$version\" == "
+      ^ String_util.shell_quote completion_protocol_version
+      ^ " ]] || return";
+      "  if [[ \"$kind\" == directories ]]; then";
       "    _files -/";
       "    return";
       "  fi";
-      "  while IFS=$'\\t' read -r value description; do";
+      "  if [[ \"$response\" == *$'\\n'* ]]; then";
+      "    body=\"${response#*$'\\n'}\"";
+      "  else";
+      "    body=''";
+      "  fi";
+      "  while IFS=$'\\t' read -r record value description; do";
+      "    [[ \"$record\" == candidate ]] || continue";
       "    if [[ -n \"$description\" ]]; then";
       "      suggestions+=(\"${value}:${description}\")";
       "    elif [[ -n \"$value\" ]]; then";
       "      suggestions+=(\"${value}\")";
       "    fi";
-      "  done <<< \"$response\"";
+      "  done <<< \"$body\"";
       "  _describe 'value' suggestions";
       "}";
       "compdef _oasis oasis";
@@ -528,13 +576,36 @@ let render_fish_completion ?workspace_dir () =
       "  end";
       "  set -l current (commandline -ct)";
       "  set -l response (" ^ query ^ " --current \"$current\" -- $previous 2>/dev/null)";
-      "  if test (count $response) -gt 0; and test \"$response[1]\" = "
-      ^ String_util.shell_quote directory_completion_marker
+      "  set -l tab (printf '\\t')";
+      "  if test (count $response) -eq 0";
+      "    return";
+      "  end";
+      "  set -l header (string split $tab -- $response[1])";
+      "  if test (count $header) -lt 3";
+      "    return";
+      "  end";
+      "  if test \"$header[1]\" != "
+      ^ String_util.shell_quote completion_protocol_name
+      ^ " -o \"$header[2]\" != "
+      ^ String_util.shell_quote completion_protocol_version
       ^ "";
+      "    return";
+      "  end";
+      "  if test \"$header[3]\" = directories";
       "    __fish_complete_directories \"$current\"";
       "    return";
       "  end";
-      "  printf '%s\\n' $response";
+      "  for line in $response[2..-1]";
+      "    set -l fields (string split $tab -- $line)";
+      "    if test (count $fields) -lt 2 -o \"$fields[1]\" != candidate";
+      "      continue";
+      "    end";
+      "    if test (count $fields) -ge 3";
+      "      printf '%s\\t%s\\n' \"$fields[2]\" \"$fields[3]\"";
+      "    else";
+      "      printf '%s\\n' \"$fields[2]\"";
+      "    end";
+      "  end";
       "end";
       "complete -c oasis -f -a '(__oasis_complete)'";
       "";
@@ -1190,15 +1261,17 @@ let run_completion (options : completion_options) =
       | Query { previous; current; describe } ->
           (match completion_response workspace ~previous ~current with
           | Complete_directories ->
-              print_endline directory_completion_marker;
+              print_endline (completion_protocol_header "directories");
               Exit_code 0
           | Completion_candidates candidates ->
+              print_endline (completion_protocol_header "candidates");
               List.iter
                 (fun candidate ->
                   match (describe, candidate.hint) with
                   | true, Some hint ->
-                      print_endline (candidate.value ^ "\t" ^ hint)
-                  | _ -> print_endline candidate.value)
+                      print_endline
+                        (completion_candidate_line ~hint candidate.value)
+                  | _ -> print_endline (completion_candidate_line candidate.value))
                 candidates;
               Exit_code 0))
 

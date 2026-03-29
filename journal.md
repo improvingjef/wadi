@@ -58,3 +58,7 @@
 - A runtime completion query needs one more bit than “here are the words”: it also has to say when the shell should stop asking for logical nouns and hand control back to native directory completion for path-valued flags.
 - Bash is the awkward shell in the set. It can complete the right target names easily, but surfacing package-path context without corrupting the inserted word requires a fallback display path separate from the actual completion values.
 - Package-path annotations only feel consistent once every user-facing subtool carries them through its own summaries. Build output alone is not enough when `run`, `test`, and `install` are the commands people actually live in.
+- A completion protocol only becomes reusable once it has an explicit versioned header. The old single magic marker worked for one branch, but fish and zsh both got simpler once the response said “protocol/version/kind” up front.
+- Shell completion tests that never execute the generated scripts are wishful thinking. The fish bug was a real tab-parsing mistake that snapshot tests happily blessed and a runtime test caught immediately.
+- Shipping docs and completions as committed artifacts is only defensible if one script regenerates them and CI diff-checks the result. Otherwise “generated from the live command table” is just marketing copy.
+- The new release-artifact path exposed one more coupling smell in the bootstrap layer: refreshing the CLI binary for docs/completions still walks test sources, which means unrelated test syntax can block publishing command metadata.

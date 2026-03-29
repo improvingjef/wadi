@@ -1,0 +1,45 @@
+_oasis_query() {
+  oasis completion --query --describe --current "$1" -- "${@:2}" 2>/dev/null
+}
+_oasis_show_descriptions() {
+  local line
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    [[ "$line" == *$'\t'* ]] || continue
+    printf '%s\n' "$line" >&2
+  done
+}
+_oasis() {
+  local cur response first_line body record protocol version kind value description
+  local -a previous values described
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  previous=("${COMP_WORDS[@]:1:$((COMP_CWORD-1))}")
+  response="$(_oasis_query "$cur" "${previous[@]}")"
+  first_line="${response%%$'\n'*}"
+  IFS=$'\t' read -r protocol version kind <<< "$first_line"
+  [[ "$protocol" == '__oasis_completion' ]] || return
+  [[ "$version" == '1' ]] || return
+  if [[ "$kind" == directories ]]; then
+    compopt -o filenames 2>/dev/null
+    compgen -V COMPREPLY -d -- "$cur"
+    return
+  fi
+  if [[ "$response" == *$'\n'* ]]; then
+    body="${response#*$'\n'}"
+  else
+    body=''
+  fi
+  while IFS=$'\t' read -r record value description; do
+    [[ "$record" == candidate ]] || continue
+    [[ -n "$value" ]] || continue
+    values+=("$value")
+    if [[ -n "$description" ]]; then
+      described+=("$value"$'\t'$description)
+    fi
+  done <<< "$body"
+  compgen -V COMPREPLY -W "$(printf '%s\n' "${values[@]}")" -- "$cur"
+  if [[ ${#described[@]} -gt 0 && ${#COMPREPLY[@]} -gt 1 ]]; then
+    _oasis_show_descriptions <<< "$(printf '%s\n' "${described[@]}")"
+  fi
+}
+complete -F _oasis oasis

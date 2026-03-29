@@ -14,15 +14,32 @@ let path_with dir =
   | Some path -> dir ^ ":" ^ path
   | None -> dir
 
-let run_bash_completion ~cwd script body =
-  let script_path = Filename.concat cwd "oasis-completion.bash" in
-  Fs.write_file script_path script;
+let write_oasis_shim cwd =
   ignore
     (write_executable cwd "oasis"
        (Printf.sprintf "#!/bin/sh\nexec %s \"$@\"\n"
-          (Filename.quote (oasis_bin ()))));
+          (Filename.quote (oasis_bin ()))))
+
+let run_bash_completion ~cwd script body =
+  let script_path = Filename.concat cwd "oasis-completion.bash" in
+  Fs.write_file script_path script;
+  write_oasis_shim cwd;
   Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "bash"
     [ "-lc"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
+
+let run_zsh_completion ~cwd script body =
+  let script_path = Filename.concat cwd "oasis-completion.zsh" in
+  Fs.write_file script_path script;
+  write_oasis_shim cwd;
+  Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "zsh"
+    [ "-lc"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
+
+let run_fish_completion ~cwd script body =
+  let script_path = Filename.concat cwd "oasis-completion.fish" in
+  Fs.write_file script_path script;
+  write_oasis_shim cwd;
+  Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "fish"
+    [ "-c"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
 
 let cases =
   [
@@ -228,6 +245,77 @@ main = "main"
               ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources."
               docs.output
               "docs output should include the current explain description")) );
+    ( "generates release docs and completion artifacts from the live binary",
+      (fun () ->
+        with_temp_dir "oasis-cli-release-artifacts" (fun output_dir ->
+            let repo_root = Sys.getcwd () in
+            let script_path =
+              Filename.concat repo_root "scripts/generate_release_artifacts.sh"
+            in
+            let generated =
+              Process.run_capture ~cwd:repo_root
+                ~env:[ ("OASIS_BIN", oasis_bin ()) ]
+                "bash" [ script_path; "--output-dir"; output_dir ]
+            in
+            assert_int_equal 0 generated.status
+              "release artifact generation should succeed";
+            let docs = run_oasis ~cwd:repo_root [ "docs" ] in
+            let bash_completion =
+              run_oasis ~cwd:repo_root [ "completion"; "bash" ]
+            in
+            let zsh_completion =
+              run_oasis ~cwd:repo_root [ "completion"; "zsh" ]
+            in
+            let fish_completion =
+              run_oasis ~cwd:repo_root [ "completion"; "fish" ]
+            in
+            assert_int_equal 0 docs.status
+              "docs should render successfully before comparing release artifacts";
+            assert_int_equal 0 bash_completion.status
+              "bash completion should render successfully before comparing release artifacts";
+            assert_int_equal 0 zsh_completion.status
+              "zsh completion should render successfully before comparing release artifacts";
+            assert_int_equal 0 fish_completion.status
+              "fish completion should render successfully before comparing release artifacts";
+            assert_string_equal docs.output
+              (Fs.read_file (Filename.concat output_dir "docs/cli.md"))
+              "release docs should come directly from oasis docs";
+            assert_string_equal bash_completion.output
+              (Fs.read_file (Filename.concat output_dir "completions/oasis.bash"))
+              "packaged bash completion should come directly from oasis completion bash";
+            assert_string_equal zsh_completion.output
+              (Fs.read_file (Filename.concat output_dir "completions/_oasis"))
+              "packaged zsh completion should come directly from oasis completion zsh";
+            assert_string_equal fish_completion.output
+              (Fs.read_file (Filename.concat output_dir "completions/oasis.fish"))
+              "packaged fish completion should come directly from oasis completion fish")) );
+    ( "keeps committed release artifacts in sync with the command table",
+      (fun () ->
+        let repo_root = Sys.getcwd () in
+        let docs = run_oasis ~cwd:repo_root [ "docs" ] in
+        let bash_completion = run_oasis ~cwd:repo_root [ "completion"; "bash" ] in
+        let zsh_completion = run_oasis ~cwd:repo_root [ "completion"; "zsh" ] in
+        let fish_completion = run_oasis ~cwd:repo_root [ "completion"; "fish" ] in
+        assert_int_equal 0 docs.status
+          "docs should render successfully before checking committed artifacts";
+        assert_int_equal 0 bash_completion.status
+          "bash completion should render successfully before checking committed artifacts";
+        assert_int_equal 0 zsh_completion.status
+          "zsh completion should render successfully before checking committed artifacts";
+        assert_int_equal 0 fish_completion.status
+          "fish completion should render successfully before checking committed artifacts";
+        assert_string_equal docs.output
+          (Fs.read_file (Filename.concat repo_root "docs/cli.md"))
+          "the committed CLI reference should stay synced with oasis docs";
+        assert_string_equal bash_completion.output
+          (Fs.read_file (Filename.concat repo_root "completions/oasis.bash"))
+          "the committed bash completion should stay synced with oasis completion bash";
+        assert_string_equal zsh_completion.output
+          (Fs.read_file (Filename.concat repo_root "completions/_oasis"))
+          "the committed zsh completion should stay synced with oasis completion zsh";
+        assert_string_equal fish_completion.output
+          (Fs.read_file (Filename.concat repo_root "completions/oasis.fish"))
+          "the committed fish completion should stay synced with oasis completion fish") );
     ( "queries workspace-local targets and profiles at completion time",
       (fun () ->
         with_temp_dir "oasis-cli-workspace-completion" (fun workspace ->
@@ -260,11 +348,16 @@ main = "main"
                 in
                 assert_int_equal 0 target_query.status
                   "completion queries should load workspace-local targets when asked";
-                assert_string_contains ~needle:"core\n" target_query.output
+                assert_string_contains
+                  ~needle:"__oasis_completion\t1\tcandidates\n"
+                  target_query.output
+                  "completion queries should announce the protocol version";
+                assert_string_contains ~needle:"candidate\tcore\n" target_query.output
                   "completion queries should suggest library targets";
-                assert_string_contains ~needle:"demo\n" target_query.output
+                assert_string_contains ~needle:"candidate\tdemo\n" target_query.output
                   "completion queries should suggest executable targets";
-                assert_string_contains ~needle:"demo_suite\n" target_query.output
+                assert_string_contains
+                  ~needle:"candidate\tdemo_suite\n" target_query.output
                   "completion queries should suggest test targets";
                 let profile_query =
                   run_oasis ~cwd:outside
@@ -282,11 +375,12 @@ main = "main"
                 in
                 assert_int_equal 0 profile_query.status
                   "completion queries should load profile values when asked";
-                assert_string_contains ~needle:"release\n" profile_query.output
+                assert_string_contains
+                  ~needle:"candidate\trelease\n" profile_query.output
                   "completion queries should suggest the default profile name";
-                assert_string_contains ~needle:"dev\n" profile_query.output
+                assert_string_contains ~needle:"candidate\tdev\n" profile_query.output
                   "completion queries should suggest additional profile names")) ));
-    ( "returns a directory-completion marker for directory-valued flags",
+    ( "returns a versioned directory-completion protocol header for path flags",
       (fun () ->
         with_temp_dir "oasis-cli-path-query" (fun workspace ->
             let workspace_query =
@@ -295,27 +389,27 @@ main = "main"
             in
             assert_int_equal 0 workspace_query.status
               "workspace-directory completion queries should succeed";
-            assert_string_equal "__oasis_complete_directories__\n"
+            assert_string_equal "__oasis_completion\t1\tdirectories\n"
               workspace_query.output
-              "workspace-directory completion should use the directory marker";
+              "workspace-directory completion should use the versioned directory response";
             let prefix_query =
               run_oasis ~cwd:workspace
                 [ "completion"; "--query"; "--current"; "st"; "--"; "install"; "--prefix" ]
             in
             assert_int_equal 0 prefix_query.status
               "prefix completion queries should succeed";
-            assert_string_equal "__oasis_complete_directories__\n"
+            assert_string_equal "__oasis_completion\t1\tdirectories\n"
               prefix_query.output
-              "prefix completion should use the directory marker";
+              "prefix completion should use the versioned directory response";
             let destdir_query =
               run_oasis ~cwd:workspace
                 [ "completion"; "--query"; "--current"; "pk"; "--"; "install"; "--destdir" ]
             in
             assert_int_equal 0 destdir_query.status
               "destdir completion queries should succeed";
-            assert_string_equal "__oasis_complete_directories__\n"
+            assert_string_equal "__oasis_completion\t1\tdirectories\n"
               destdir_query.output
-              "destdir completion should use the directory marker")) );
+              "destdir completion should use the versioned directory response")) );
     ( "returns member package paths in described completion queries",
       (fun () ->
         with_temp_dir "oasis-cli-completion-describe" (fun workspace ->
@@ -365,11 +459,19 @@ deps = ["core"]
                 in
                 assert_int_equal 0 query.status
                   "described completion queries should succeed";
-                assert_string_contains ~needle:"shared\n" query.output
+                assert_string_contains
+                  ~needle:"__oasis_completion\t1\tcandidates\n"
+                  query.output
+                  "described completion queries should announce the protocol version";
+                assert_string_contains ~needle:"candidate\tshared\n" query.output
                   "root targets should still be listed plainly";
-                assert_string_contains ~needle:"core\tpackages/core\n" query.output
+                assert_string_contains
+                  ~needle:"candidate\tcore\tpackages/core\n"
+                  query.output
                   "member library completions should include their package path";
-                assert_string_contains ~needle:"demo\tpackages/app\n" query.output
+                assert_string_contains
+                  ~needle:"candidate\tdemo\tpackages/app\n"
+                  query.output
                   "member executable completions should include their package path")) ));
     ( "queries top-level command names outside a workspace",
       (fun () ->
@@ -380,9 +482,13 @@ deps = ["core"]
             in
             assert_int_equal 0 query.status
               "top-level completion queries should succeed without a manifest";
-            assert_string_contains ~needle:"build\n" query.output
+            assert_string_contains
+              ~needle:"__oasis_completion\t1\tcandidates\n"
+              query.output
+              "top-level completion queries should announce the protocol version";
+            assert_string_contains ~needle:"candidate\tbuild\n" query.output
               "top-level completion queries should suggest command names";
-            assert_string_not_contains ~needle:"run\n" query.output
+            assert_string_not_contains ~needle:"candidate\trun\n" query.output
               "query filtering should preserve the current prefix")) );
     ( "renders bash completions from the command table",
       (fun () ->
@@ -407,9 +513,12 @@ deps = ["core"]
             assert_string_contains ~needle:"_oasis_show_descriptions"
               completion.output
               "bash completion should provide a description fallback helper";
-            assert_string_contains ~needle:"__oasis_complete_directories__"
+            assert_string_contains ~needle:"__oasis_completion"
               completion.output
-              "bash completion should recognize directory-mode queries";
+              "bash completion should recognize the versioned completion protocol";
+            assert_string_contains ~needle:"read -r protocol version kind"
+              completion.output
+              "bash completion should parse protocol headers before reading suggestions";
             assert_string_contains ~needle:"compgen -V COMPREPLY -d -- \"$cur\""
               completion.output
               "bash completion should fall back to shell-native directory completion")) );
@@ -431,9 +540,9 @@ deps = ["core"]
               "directory completion should surface matching directories";
             assert_string_contains ~needle:"reply:prefix-dir\n" bash.output
               "directory completion should reuse bash's native directory matcher";
-            assert_string_not_contains ~needle:"__oasis_complete_directories__"
+            assert_string_not_contains ~needle:"__oasis_completion"
               bash.output
-              "the protocol marker should stay internal to the completion function")) );
+              "the protocol header should stay internal to the completion function")) );
     ( "bash completion prints package-path hints while completing plain target names",
       (fun () ->
         with_temp_dir "oasis-cli-bash-descriptions" (fun workspace ->
@@ -505,6 +614,9 @@ deps = ["core"]
             assert_string_contains ~needle:"_describe 'value' suggestions"
               completion.output
               "zsh completion should describe runtime query suggestions";
+            assert_string_contains ~needle:"read -r protocol version kind"
+              completion.output
+              "zsh completion should parse protocol headers before describing suggestions";
             assert_string_contains ~needle:"_files -/"
               completion.output
               "zsh completion should delegate directory-valued flags to native path completion")) );
@@ -528,9 +640,115 @@ deps = ["core"]
             assert_string_contains ~needle:"--describe"
               completion.output
               "fish completion should request described runtime suggestions";
+            assert_string_contains ~needle:"set -l tab (printf '\\t')"
+              completion.output
+              "fish completion should define a tab separator for protocol parsing";
+            assert_string_contains ~needle:"string split $tab -- $response[1]"
+              completion.output
+              "fish completion should parse protocol headers before forwarding results";
             assert_string_contains ~needle:"__fish_complete_directories"
               completion.output
               "fish completion should delegate directory-valued flags to native path completion")) );
+    ( "executes zsh completion runtime branches for described and path completions",
+      (fun () ->
+        with_temp_dir "oasis-cli-zsh-runtime" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+
+[library.shared]
+dir = "shared"
+modules = ["shared"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+deps = ["shared"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "shared/shared.ml" {|let value = "shared"|};
+            write_source workspace "packages/core/lib/core.ml"
+              {|let value = Shared.value|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline Core.value|};
+            Fs.ensure_dir (Filename.concat workspace "project");
+            let completion = run_oasis ~cwd:workspace [ "completion"; "zsh" ] in
+            assert_int_equal 0 completion.status
+              "zsh completion script generation should succeed before runtime checks";
+            let zsh =
+              run_zsh_completion ~cwd:workspace completion.output
+                "function _describe() {\n  local tag=\"$1\"\n  local array_name=\"$2\"\n  local -a items\n  items=(\"${(@P)array_name}\")\n  printf 'tag:%s\\n' \"$tag\"\n  printf 'suggestion:%s\\n' \"$items[@]\"\n}\nfunction _files() {\n  printf 'files:%s\\n' \"$*\"\n}\nwords=(oasis build '')\nCURRENT=3\n_oasis\nwords=(oasis build --workspace pr)\nCURRENT=4\n_oasis\n"
+            in
+            assert_int_equal 0 zsh.status
+              "the zsh completion function should execute successfully";
+            assert_string_contains ~needle:"tag:value\n" zsh.output
+              "zsh completion should route described candidates through _describe";
+            assert_string_contains ~needle:"suggestion:core:packages/core\n"
+              zsh.output
+              "zsh runtime completion should surface member package hints";
+            assert_string_contains ~needle:"suggestion:demo:packages/app\n"
+              zsh.output
+              "zsh runtime completion should include executable package hints";
+            assert_string_contains ~needle:"files:-/\n" zsh.output
+              "zsh runtime completion should delegate path flags to _files")) );
+    ( "executes fish completion runtime branches for described and path completions",
+      (fun () ->
+        with_temp_dir "oasis-cli-fish-runtime" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core", "packages/app"]
+
+[library.shared]
+dir = "shared"
+modules = ["shared"]
+|};
+            write_workspace_file workspace "packages/core/oasis.toml"
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+deps = ["shared"]
+|};
+            write_workspace_file workspace "packages/app/oasis.toml"
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "shared/shared.ml" {|let value = "shared"|};
+            write_source workspace "packages/core/lib/core.ml"
+              {|let value = Shared.value|};
+            write_source workspace "packages/app/app/main.ml"
+              {|let () = print_endline Core.value|};
+            Fs.ensure_dir (Filename.concat workspace "project");
+            let completion = run_oasis ~cwd:workspace [ "completion"; "fish" ] in
+            assert_int_equal 0 completion.status
+              "fish completion script generation should succeed before runtime checks";
+            let fish =
+              run_fish_completion ~cwd:workspace completion.output
+                "set -g oasis_mode described\nfunction commandline\n  switch $argv[1]\n    case -opc\n      switch $oasis_mode\n        case described\n          echo oasis\n          echo build\n        case path\n          echo oasis\n          echo build\n          echo --workspace\n      end\n    case -ct\n      switch $oasis_mode\n        case described\n          echo ''\n        case path\n          echo pr\n      end\n  end\nend\nfunction __fish_complete_directories\n  printf 'dir:%s\\n' $argv\nend\n__oasis_complete\nset -g oasis_mode path\n__oasis_complete\n"
+            in
+            assert_int_equal 0 fish.status
+              "the fish completion function should execute successfully";
+            assert_string_contains ~needle:"core\tpackages/core\n" fish.output
+              "fish runtime completion should surface member package hints";
+            assert_string_contains ~needle:"demo\tpackages/app\n" fish.output
+              "fish runtime completion should include executable package hints";
+            assert_string_contains ~needle:"dir:pr\n" fish.output
+              "fish runtime completion should delegate path flags to the native directory completer")) );
     ( "binds generated completion scripts to an explicit workspace when requested",
       (fun () ->
         with_temp_dir "oasis-cli-completion-workspace-script" (fun workspace ->

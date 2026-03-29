@@ -35,7 +35,7 @@
 20. [ ] Benchmark build latency and tighten startup and execution overhead.
 32. [x] Generate docs and shell completions from the command table so new subtools stay discoverable without duplicating CLI metadata.
 36. [x] Detect duplicate module stems across bootstrap library/executable/test groups before writing rules so the shared `_bootstrap/obj` directory never hides collisions behind overwritten artifacts.
-37. [ ] Add CI coverage for both native and bytecode bootstrap smoke lanes so backend portability stays enforced outside local development.
+37. [x] Add CI coverage for both native and bytecode bootstrap smoke lanes so backend portability stays enforced outside local development.
 38. [ ] Teach the bootstrap/self-hosted path about profiles, actions, preprocessors, and PPX so the manifest surface does not diverge between `oasis build` and `make test`.
 39. [x] Detect and explain collisions between generated outputs and checked-in source files before a build silently overrides one with the other.
 40. [ ] Replace copy-heavy action sandboxes with a cheaper file-materialization strategy so workspace sandboxes stay fast on larger trees.
@@ -47,7 +47,7 @@
 46. [x] Add `DESTDIR` or equivalent relocation support to `oasis install` so package-manager staging does not have to rewrite prefixes after the fact.
 47. [x] Teach `oasis completion` to suggest workspace-local target names and profile names instead of only static flags and shell names.
 48. [x] Add `oasis explain --json` so automation can print the persisted `.oasis-explain.json` payload directly instead of opening files by path.
-49. [ ] Generate release docs and packaged shell-completion artifacts from `oasis docs` and `oasis completion` in CI so shipped assets cannot drift from the command table.
+49. [x] Generate release docs and packaged shell-completion artifacts from `oasis docs` and `oasis completion` in CI so shipped assets cannot drift from the command table.
 50. [x] Close over transitive workspace-library dependencies during `oasis install` or warn when generated `META` files reference unstaged internal packages.
 51. [x] Clarify and test relative `--prefix` plus `--destdir` semantics so local staging does not inherit surprising absolute workspace paths.
 52. [x] Add an explicit `--backend` flag to `oasis explain --current` so dry-run answers can mirror non-default build requests instead of relying only on ambient backend selection.
@@ -62,5 +62,6 @@
 61. [x] Restore shell-native path completion for `--workspace`, `--prefix`, and `--destdir` in the runtime completion protocol so dynamic queries do not regress directory-flag ergonomics.
 62. [x] Teach bash completion to surface member package-path descriptions or another shell-appropriate fallback so package-aware target discovery is not limited to zsh and fish.
 63. [x] Extend package-path annotations to `oasis run`, `oasis test`, and `oasis install` summaries so every user-facing subtool reports large-workspace target origin consistently.
-64. [ ] Add direct runtime execution tests for zsh and fish completion scripts so path-mode and described completions are exercised beyond string snapshots.
-65. [ ] Replace the ad hoc completion marker line with a structured or versioned completion-query response so future shell integrations are not coupled to one magic string.
+64. [x] Add direct runtime execution tests for zsh and fish completion scripts so path-mode and described completions are exercised beyond string snapshots.
+65. [x] Replace the ad hoc completion marker line with a structured or versioned completion-query response so future shell integrations are not coupled to one magic string.
+66. [ ] Decouple release-artifact generation from unrelated bootstrap test-source scans so refreshing `docs/cli.md` and packaged completions never depends on the whole test tree parsing cleanly.

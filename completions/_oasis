@@ -1,0 +1,36 @@
+#compdef oasis
+
+_oasis_query() {
+  oasis completion --query --describe --current "$1" -- "${@:2}" 2>/dev/null
+}
+_oasis() {
+  local current response first_line body
+  local record protocol version kind value description
+  local -a previous suggestions
+  current="${words[CURRENT]}"
+  previous=("${(@)words[2,CURRENT-1]}")
+  response="$(_oasis_query "$current" "${previous[@]}")"
+  first_line="${response%%$'\n'*}"
+  IFS=$'\t' read -r protocol version kind <<< "$first_line"
+  [[ "$protocol" == '__oasis_completion' ]] || return
+  [[ "$version" == '1' ]] || return
+  if [[ "$kind" == directories ]]; then
+    _files -/
+    return
+  fi
+  if [[ "$response" == *$'\n'* ]]; then
+    body="${response#*$'\n'}"
+  else
+    body=''
+  fi
+  while IFS=$'\t' read -r record value description; do
+    [[ "$record" == candidate ]] || continue
+    if [[ -n "$description" ]]; then
+      suggestions+=("${value}:${description}")
+    elif [[ -n "$value" ]]; then
+      suggestions+=("${value}")
+    fi
+  done <<< "$body"
+  _describe 'value' suggestions
+}
+compdef _oasis oasis
