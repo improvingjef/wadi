@@ -76,6 +76,56 @@ env = ["TARGET=demo"]
               "env output should include the requested executable context";
             assert_string_contains ~needle:"TARGET=demo\n" report.output
               "target-local env bindings should appear in executable contexts")) );
+    ( "prints focused action environments for oasis action planning",
+      (fun () ->
+        with_temp_dir "oasis-env-action" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+env = ["MODE=default"]
+
+[profile.release]
+env = ["MODE=release", "PROFILE=release"]
+
+[action.generate]
+argv = ["./tools/generate.sh"]
+outputs = ["version.ml"]
+env = ["ACTION=generate"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+env = ["TARGET=core"]
+|};
+            write_source workspace "lib/core.ml" {|let message = Version.value|};
+            let report =
+              run_oasis_with_env ~cwd:workspace
+                ~env:[ ("HOST_ONLY", "from-host") ]
+                [ "env"; "--profile"; "release"; "action"; "core" ]
+            in
+            assert_int_equal 0 report.status
+              "env action should render successfully";
+            assert_string_contains ~needle:"Subtool: action\n" report.output
+              "env action should report the selected subtool";
+            assert_string_contains ~needle:"Requested-targets: core\n" report.output
+              "env action should report the selected target";
+            assert_string_contains ~needle:"Target: library core\n" report.output
+              "env action should include the selected library target";
+            assert_string_contains ~needle:"Context: action generate\n"
+              report.output
+              "env action should include action-specific contexts";
+            assert_string_contains ~needle:"ACTION=generate\n" report.output
+              "env action should merge action-local bindings";
+            assert_string_contains ~needle:"TARGET=core\n" report.output
+              "env action should retain target-local bindings";
+            assert_string_contains ~needle:"MODE=release\n" report.output
+              "env action should apply profile bindings";
+            assert_string_contains ~needle:"HOST_ONLY=from-host\n" report.output
+              "env action should include inherited host bindings";
+            assert_string_not_contains ~needle:"Context: compiler-linker\n"
+              report.output
+              "env action should stay focused on action execution contexts")) );
     ( "prints the runtime environment for oasis run planning",
       (fun () ->
         with_temp_dir "oasis-env-run" (fun workspace ->

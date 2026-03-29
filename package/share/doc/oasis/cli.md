@@ -22,6 +22,26 @@ Examples:
 - `oasis build hello`
 - `oasis build --workspace examples/hello --profile release --verbose`
 
+## action
+
+Run declared generated-file actions for selected targets without compiling or linking.
+
+Usage:
+
+`oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--verbose, -v`: Print detailed process execution as commands run.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis action`
+- `oasis action core`
+- `oasis action demo`
+- `oasis action --profile release core demo`
+
 ## graph
 
 Show target build order, module order, and pipeline shape without compiling.
@@ -127,6 +147,25 @@ Examples:
 - `oasis clean hello greeting`
 - `oasis clean --workspace examples/hello --profile release --verbose`
 
+## promote
+
+Copy declared non-source action outputs back into the workspace on purpose.
+
+Usage:
+
+`oasis promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--verbose, -v`: Print detailed process execution as commands run.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis promote`
+- `oasis promote snapshots`
+- `oasis promote --profile release fixtures`
+
 ## deps
 
 Resolve transitive external package requirements for selected targets.
@@ -146,7 +185,7 @@ Examples:
 
 ## env
 
-Print the exact subprocess environment a build, run, test, bench, or install step would inherit.
+Print the exact subprocess environment a build, action, run, test, bench, or install step would inherit.
 
 Usage:
 
@@ -161,6 +200,7 @@ Options:
 
 Examples:
 - `oasis env build`
+- `oasis env action core`
 - `oasis env --profile release build demo`
 - `oasis env --json run demo`
 - `oasis env --changed-only build demo`

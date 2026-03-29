@@ -116,3 +116,7 @@
 107. [x] Support interface-only OCaml modules (`.mli` without `.ml`) across build, install, stale-artifact pruning, and rebuild explanations so migrated Dune projects do not need fake implementation files.
 108. [x] Teach the bootstrap planner, generated makefile, and seed metadata path to model interface-only modules the same way as `oasis build`, keeping self-hosting parity for signature-heavy codebases.
 109. [x] Teach `oasis migrate` to preserve Dune `modules_without_implementation` when inferring target module lists so signature-only APIs migrate without hand-editing the generated manifest.
+110. [x] Implement `oasis action` so declared generated-file steps can run in dependency order without forcing a full compile/link cycle.
+111. [x] Implement `oasis promote` for explicit non-source action outputs so checked-in snapshots and fixtures can be refreshed on purpose instead of through ad hoc shell scripts.
+112. [x] Extend the command table, env reporting, completion queries, release docs, and packaged artifacts to cover the generated-source subtools so `action`/`promote` stay discoverable and testable.
+113. [ ] Add a first-class checked-in generated-source mode for `.ml`/`.mli` promotion so snapshotting source-like outputs does not collide with the build-time generated-source safety checks.

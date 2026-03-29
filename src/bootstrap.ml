@@ -393,8 +393,8 @@ let library_plan ~session ~workspace_root ~profile workspace index library =
       pipeline.actions
   in
   let* _action_results =
-    Builder.run_actions ~mode:Builder.Materialize ~workspace_root ~out_dir ~target
-      ~pipeline
+    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root
+      ~out_dir ~target ~pipeline
   in
   let* () =
     Builder.materialize_wrapped_library_source ~mode:Builder.Materialize
@@ -447,8 +447,8 @@ let runnable_plan ~session ~workspace_root ~profile workspace index ~kind runnab
   let* package_resolution = Toolchain.resolve_packages ~session packages in
   let* pipeline = Builder.resolve_pipeline ~workspace_root workspace ~profile target in
   let* _action_results =
-    Builder.run_actions ~mode:Builder.Materialize ~workspace_root ~out_dir ~target
-      ~pipeline
+    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root
+      ~out_dir ~target ~pipeline
   in
   let* module_sources =
     Builder.source_descriptors ~workspace_root
@@ -853,8 +853,8 @@ let enriched_seed_metadata_lines ?seed_root ~manifest_path workspace =
       pipeline.actions
   in
   let* _action_results =
-    Builder.run_actions ~mode:Builder.Materialize ~workspace_root ~out_dir ~target
-      ~pipeline
+    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root
+      ~out_dir ~target ~pipeline
   in
   let* () =
     Builder.materialize_wrapped_library_source ~mode:Builder.Materialize

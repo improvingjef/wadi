@@ -159,6 +159,141 @@ main = "main"
               "run summaries should surface the member package path";
             assert_string_contains ~needle:"member run\n" run.output
               "run should still stream the executable output")) );
+    ( "runs declared actions without compiling target artifacts",
+      (fun () ->
+        with_temp_dir "oasis-action" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.generate]
+argv = ["./tools/generate.sh"]
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+|};
+            write_source workspace "lib/core.ml" {|let message = Version.value|};
+            write_source workspace "templates/version.txt" "action-only\n";
+            ignore
+              (write_executable workspace "tools/generate.sh"
+                 "#!/bin/sh\nset -eu\nvalue=$(cat ../templates/version.txt)\nprintf 'let value = \"%s\"\\n' \"$value\" > version.ml\n");
+            let first = run_oasis ~cwd:workspace [ "action"; "core" ] in
+            assert_int_equal 0 first.status
+              "action should execute declared target actions successfully";
+            assert_string_contains
+              ~needle:"Generated action outputs for library core ->"
+              first.output
+              "action should report generated outputs";
+            assert_file_exists
+              (Filename.concat (Layout.library_out_dir workspace "core")
+                 "generated/version.ml");
+            assert_true
+              (not (Fs.exists (Layout.library_archive workspace "core")))
+              "action should not compile library archives while materializing actions";
+            let second = run_oasis ~cwd:workspace [ "action"; "core" ] in
+            assert_int_equal 0 second.status
+              "re-running action should still succeed";
+            assert_string_contains ~needle:"Up to date actions for library core ->"
+              second.output
+              "action should report cached outputs when nothing changed")) );
+    ( "runs dependency actions when targeting a downstream executable",
+      (fun () ->
+        with_temp_dir "oasis-action-dependency" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.generate]
+argv = ["./tools/generate.sh"]
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["core"]
+|};
+            write_source workspace "lib/core.ml" {|let message = Version.value|};
+            write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
+            write_source workspace "templates/version.txt" "dependency\n";
+            ignore
+              (write_executable workspace "tools/generate.sh"
+                 "#!/bin/sh\nset -eu\nvalue=$(cat ../templates/version.txt)\nprintf 'let value = \"%s\"\\n' \"$value\" > version.ml\n");
+            let run = run_oasis ~cwd:workspace [ "action"; "demo" ] in
+            assert_int_equal 0 run.status
+              "action should resolve dependency closures before running actions";
+            assert_string_contains
+              ~needle:"Generated action outputs for library core ->"
+              run.output
+              "action should report dependency-library actions when they run";
+            assert_file_exists
+              (Filename.concat (Layout.library_out_dir workspace "core")
+                 "generated/version.ml"))) );
+    ( "promotes declared non-source action outputs back into the workspace",
+      (fun () ->
+        with_temp_dir "oasis-promote" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.snapshot]
+argv = ["./tools/snapshot.sh"]
+outputs = ["snapshot.txt"]
+
+[library.core]
+dir = "lib"
+modules = ["core"]
+actions = ["snapshot"]
+|};
+            write_source workspace "lib/core.ml" {|let value = "core"|};
+            ignore
+              (write_executable workspace "tools/snapshot.sh"
+                 "#!/bin/sh\nset -eu\nprintf 'snapshot\\n' > snapshot.txt\n");
+            let promote = run_oasis ~cwd:workspace [ "promote"; "core" ] in
+            assert_int_equal 0 promote.status
+              "promote should materialize and copy declared outputs";
+            let promoted_path = Filename.concat workspace "lib/snapshot.txt" in
+            let normalized_promoted_path = Fs.realpath promoted_path in
+            assert_file_exists promoted_path;
+            assert_string_equal "snapshot\n" (Fs.read_file promoted_path)
+              "promote should copy generated output contents into the workspace";
+            assert_string_contains
+              ~needle:(Printf.sprintf
+                         "Promoted action snapshot output snapshot.txt for library core -> %s\n"
+                         normalized_promoted_path)
+              promote.output
+              "promote should report each copied output directly")) );
+    ( "rejects promoting source-like action outputs",
+      (fun () ->
+        with_temp_dir "oasis-promote-source-like" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.generate]
+argv = ["./tools/generate.sh"]
+outputs = ["version.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+|};
+            write_source workspace "lib/core.ml" {|let message = Version.value|};
+            ignore
+              (write_executable workspace "tools/generate.sh"
+                 "#!/bin/sh\nset -eu\nprintf 'let value = \"nope\"\\n' > version.ml\n");
+            let promote = run_oasis ~cwd:workspace [ "promote"; "core" ] in
+            assert_true (promote.status <> 0)
+              "promote should reject source-like outputs that would break future builds";
+            assert_string_contains
+              ~needle:"oasis promote currently supports only non-source outputs"
+              promote.output
+              "promote should explain why source-like outputs are rejected";
+            assert_true
+              (not (Fs.exists (Filename.concat workspace "lib/version.ml")))
+              "promote should not copy rejected source-like outputs into the workspace")) );
     ( "prints top-level usage from the command table",
       (fun () ->
         with_temp_dir "oasis-cli-usage" (fun workspace ->
@@ -169,6 +304,9 @@ main = "main"
               ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
+              ~needle:"oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
+              run.output "top-level usage should include the action command";
+            assert_string_contains
               ~needle:"oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               run.output "top-level usage should include the run command";
             assert_string_contains
@@ -177,6 +315,9 @@ main = "main"
             assert_string_contains
               ~needle:"oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the clean command";
+            assert_string_contains
+              ~needle:"oasis promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
+              run.output "top-level usage should include the promote command";
             assert_string_contains
               ~needle:"oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]"
               run.output "top-level usage should include the graph command";
@@ -242,12 +383,16 @@ main = "main"
               "docs output should start with the markdown title";
             assert_string_contains ~needle:"## graph" docs.output
               "docs output should include the graph command";
+            assert_string_contains ~needle:"## action" docs.output
+              "docs output should include the action command";
             assert_string_contains ~needle:"## deps" docs.output
               "docs output should include the deps command";
             assert_string_contains ~needle:"## env" docs.output
               "docs output should include the env command";
             assert_string_contains ~needle:"## install" docs.output
               "docs output should include the install command";
+            assert_string_contains ~needle:"## promote" docs.output
+              "docs output should include the promote command";
             assert_string_contains ~needle:"## migrate" docs.output
               "docs output should include the migrate command";
             assert_string_contains ~needle:"## completion" docs.output
@@ -276,6 +421,10 @@ main = "main"
               ~needle:"- `--stdout`: Print the generated manifest instead of writing a file."
               docs.output
               "docs output should include the migrate stdout description";
+            assert_string_contains
+              ~needle:"- `oasis env action core`"
+              docs.output
+              "docs output should include env action examples from the command table";
             assert_string_contains
               ~needle:"- `oasis env run demo`"
               docs.output
@@ -434,6 +583,25 @@ main = "main"
                 assert_string_contains
                   ~needle:"candidate\tdemo_suite\n" target_query.output
                   "completion queries should suggest test targets";
+                let action_query =
+                  run_oasis ~cwd:outside
+                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "action" ]
+                in
+                assert_int_equal 0 action_query.status
+                  "action completion queries should load workspace-local targets";
+                assert_string_contains ~needle:"candidate\tcore\n" action_query.output
+                  "action completion queries should suggest libraries";
+                assert_string_contains ~needle:"candidate\tdemo\n" action_query.output
+                  "action completion queries should suggest executables";
+                let promote_query =
+                  run_oasis ~cwd:outside
+                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "promote" ]
+                in
+                assert_int_equal 0 promote_query.status
+                  "promote completion queries should load workspace-local targets";
+                assert_string_contains ~needle:"candidate\tcore\n"
+                  promote_query.output
+                  "promote completion queries should suggest libraries";
                 let bench_query =
                   run_oasis ~cwd:outside
                     [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "bench" ]
@@ -493,8 +661,20 @@ main = "main"
               "env completion should suggest subtools before a target";
             assert_string_contains ~needle:"candidate\tbuild\n" subtools.output
               "env completion should suggest build";
+            assert_string_contains ~needle:"candidate\taction\n" subtools.output
+              "env completion should suggest action";
             assert_string_contains ~needle:"candidate\trun\n" subtools.output
               "env completion should suggest run";
+            let action_targets =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; ""; "--"; "env"; "action" ]
+            in
+            assert_int_equal 0 action_targets.status
+              "env action completion should suggest workspace targets";
+            assert_string_contains ~needle:"candidate\tcore\n" action_targets.output
+              "env action completion should include libraries";
+            assert_string_contains ~needle:"candidate\tdemo\n" action_targets.output
+              "env action completion should include executables";
             let run_targets =
               run_oasis ~cwd:workspace
                 [ "completion"; "--query"; "--current"; ""; "--"; "env"; "run" ]

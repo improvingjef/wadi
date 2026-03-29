@@ -1,5 +1,6 @@
 type subtool =
   | Build
+  | Action
   | Run
   | Test
   | Bench
@@ -24,6 +25,7 @@ let ( let* ) = Result.bind
 
 let subtool_name = function
   | Build -> "build"
+  | Action -> "action"
   | Run -> "run"
   | Test -> "test"
   | Bench -> "bench"
@@ -32,6 +34,7 @@ let subtool_name = function
 let parse_subtool value =
   match String.lowercase_ascii (String.trim value) with
   | "build" -> Ok Build
+  | "action" -> Ok Action
   | "run" -> Ok Run
   | "test" -> Ok Test
   | "bench" -> Ok Bench
@@ -39,7 +42,7 @@ let parse_subtool value =
   | value ->
       Error
         (Printf.sprintf
-           "unknown env subtool '%s'; expected build, run, test, bench, or install"
+           "unknown env subtool '%s'; expected build, action, run, test, bench, or install"
            value)
 
 let resolve_profile workspace = function
@@ -284,8 +287,8 @@ let target_label target =
     (Manifest.target_kind_name target)
     (Manifest.target_display_name target)
 
-let build_contexts ~workspace_root ~profile ~changed_only ~host_env workspace
-    order =
+let build_contexts ~workspace_root ~profile ~changed_only ~host_env
+    ~include_compiler ~include_actions ~include_preprocessors workspace order =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
     | target :: rest ->
@@ -297,21 +300,32 @@ let build_contexts ~workspace_root ~profile ~changed_only ~host_env workspace
           let pipeline : Builder.resolved_pipeline = pipeline in
           pipeline.options.env
         in
-        let contexts =
-          [ context ~changed_only ~host_env label "compiler-linker" target_env ]
-          @ List.map
+        let compiler_contexts =
+          if include_compiler then
+            [ context ~changed_only ~host_env label "compiler-linker" target_env ]
+          else []
+        in
+        let action_contexts =
+          if include_actions then
+            List.map
               (fun (action : Manifest.action) ->
                 context ~changed_only ~host_env label
                   ("action " ^ Manifest.action_display_name action)
                   (Manifest.merge_env_bindings target_env action.env))
               pipeline.actions
-          @ List.map
+          else []
+        in
+        let preprocessor_contexts =
+          if include_preprocessors then
+            List.map
               (fun (tool : Manifest.command_tool) ->
                 context ~changed_only ~host_env label
                   ("preprocess " ^ Manifest.command_tool_display_name tool)
                   (Manifest.merge_env_bindings target_env tool.env))
               pipeline.preprocessors
+          else []
         in
+        let contexts = compiler_contexts @ action_contexts @ preprocessor_contexts in
         loop (List.rev_append contexts acc) rest
   in
   loop [] order
@@ -323,6 +337,11 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
   let* requested, runtime_contexts =
     match subtool with
     | Build ->
+        let* targets = resolve_named_targets workspace requested_targets in
+        Ok
+          ( List.map Manifest.target_name targets,
+            [] )
+    | Action ->
         let* targets = resolve_named_targets workspace requested_targets in
         Ok
           ( List.map Manifest.target_name targets,
@@ -375,6 +394,9 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
   let* order = Builder.resolve_build_order workspace requested in
   let* build_contexts =
     build_contexts ~workspace_root ~profile ~changed_only ~host_env workspace
+      ~include_compiler:(subtool <> Action)
+      ~include_actions:true
+      ~include_preprocessors:(subtool <> Action)
       order
   in
   let contexts = build_contexts @ runtime_contexts in

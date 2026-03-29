@@ -741,7 +741,7 @@ let sandbox_input_string ~sandbox_root ~label relative_path =
   else
     Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
 
-let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
+let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
     (action : Manifest.action) =
   let* fingerprint =
     action_fingerprint ~workspace_root ~target_env ~target_dir options action
@@ -821,7 +821,8 @@ let run_action ~workspace_root ~out_dir ~target_dir ~target_env options
                 | _ -> None
               in
               let* _ =
-                Process.ensure_success ~cwd ~env ?stdin ?stdout_path prog args
+                Process.ensure_success ~cwd ~verbose ~env ?stdin ?stdout_path
+                  prog args
               in
               run_steps (step_index + 1) rest
         in
@@ -943,14 +944,15 @@ let resolve_pipeline ~workspace_root workspace ~profile target =
   in
   Ok { options; actions; preprocessors; ppx_tools }
 
-let run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline =
+let run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline =
   Fs.ensure_dir out_dir;
   let target_env = pipeline.options.env in
   let options = pipeline.options in
   collect_results pipeline.actions (fun action ->
       match mode with
       | Materialize ->
-          run_action ~workspace_root ~out_dir ~target_dir:(Manifest.target_dir target)
+          run_action ~verbose ~workspace_root ~out_dir
+            ~target_dir:(Manifest.target_dir target)
             ~target_env options action
       | Plan_only ->
           plan_action ~workspace_root ~out_dir
@@ -1585,7 +1587,7 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
       pipeline.actions
   in
   let* action_results =
-    run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline
+    run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
   let* () =
     materialize_wrapped_library_source ~mode ~workspace_root ~out_dir library
@@ -1863,7 +1865,7 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
   let* action_results =
-    run_actions ~mode ~workspace_root ~out_dir ~target ~pipeline
+    run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
   let planned_generated_outputs =
     planned_generated_output_names pipeline.actions

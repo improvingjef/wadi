@@ -6,6 +6,13 @@ type build_options = {
   profile : string option;
 }
 
+type action_options = {
+  workspace_dir : string;
+  verbose : bool;
+  targets : string list;
+  profile : string option;
+}
+
 type run_options = {
   workspace_dir : string;
   verbose : bool;
@@ -35,6 +42,13 @@ type bench_options = {
 }
 
 type clean_options = {
+  workspace_dir : string;
+  verbose : bool;
+  targets : string list;
+  profile : string option;
+}
+
+type promote_options = {
   workspace_dir : string;
   verbose : bool;
   targets : string list;
@@ -326,6 +340,24 @@ let build_doc =
     completion_words = [];
   }
 
+let action_doc =
+  {
+    name = "action";
+    summary =
+      "Run declared generated-file actions for selected targets without compiling or linking.";
+    signature =
+      "oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+    examples =
+      [
+        "oasis action";
+        "oasis action core";
+        "oasis action demo";
+        "oasis action --profile release core demo";
+      ];
+    options = [ workspace_option; profile_option; verbose_option; help_option ];
+    completion_words = [];
+  }
+
 let run_doc =
   {
     name = "run";
@@ -404,6 +436,23 @@ let clean_doc =
     completion_words = [];
   }
 
+let promote_doc =
+  {
+    name = "promote";
+    summary =
+      "Copy declared non-source action outputs back into the workspace on purpose.";
+    signature =
+      "oasis promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+    examples =
+      [
+        "oasis promote";
+        "oasis promote snapshots";
+        "oasis promote --profile release fixtures";
+      ];
+    options = [ workspace_option; profile_option; verbose_option; help_option ];
+    completion_words = [];
+  }
+
 let graph_doc =
   {
     name = "graph";
@@ -439,12 +488,13 @@ let env_doc =
   {
     name = "env";
     summary =
-      "Print the exact subprocess environment a build, run, test, bench, or install step would inherit.";
+      "Print the exact subprocess environment a build, action, run, test, bench, or install step would inherit.";
     signature =
       "oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]";
     examples =
       [
         "oasis env build";
+        "oasis env action core";
         "oasis env --profile release build demo";
         "oasis env --json run demo";
         "oasis env --changed-only build demo";
@@ -460,7 +510,7 @@ let env_doc =
         changed_only_option;
         help_option;
       ];
-    completion_words = [ "build"; "run"; "test"; "bench"; "install" ];
+    completion_words = [ "build"; "action"; "run"; "test"; "bench"; "install" ];
   }
 
 let repl_doc =
@@ -609,11 +659,13 @@ let render_usage docs =
 let command_docs =
   [
     build_doc;
+    action_doc;
     graph_doc;
     run_doc;
     test_doc;
     bench_doc;
     clean_doc;
+    promote_doc;
     deps_doc;
     env_doc;
     repl_doc;
@@ -920,6 +972,24 @@ let parse_build_args (args : string list) : (build_options, string) result =
     }
     args
 
+let parse_action_args (args : string list) : (action_options, string) result =
+  let rec loop (options : action_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--help" :: _ -> Error (command_usage action_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; verbose = false; targets = []; profile = None } args
+
 let parse_run_args (args : string list) : (run_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : run_options) = function
@@ -1061,6 +1131,24 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage clean_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop { workspace_dir = "."; verbose = false; targets = []; profile = None } args
+
+let parse_promote_args (args : string list) : (promote_options, string) result =
+  let rec loop (options : promote_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--help" :: _ -> Error (command_usage promote_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | target :: rest -> loop { options with targets = target :: options.targets } rest
@@ -1486,7 +1574,8 @@ let positional_completion_candidates ?workspace command_name rest =
       | _ -> [] )
   | Some workspace -> (
       match command_name with
-      | "build" | "clean" | "graph" | "deps" | "explain" ->
+      | "build" | "action" | "clean" | "promote" | "graph" | "deps" | "explain"
+        ->
           List.map target_candidate workspace.Manifest.targets
       | "run" ->
           if positional_argument_count rest = 0 then
@@ -1502,6 +1591,7 @@ let positional_completion_candidates ?workspace command_name rest =
           match positional_arguments [] rest with
           | [] -> List.map (fun word -> candidate word) env_doc.completion_words
           | [ "build" ] -> List.map target_candidate workspace.Manifest.targets
+          | [ "action" ] -> List.map target_candidate workspace.Manifest.targets
           | [ "run" ] -> executable_target_candidates workspace
           | [ "test" ] -> test_target_candidates workspace
           | [ "bench" ] -> bench_target_candidates workspace
@@ -1664,6 +1754,20 @@ let run_build (options : build_options) =
       | Ok _ -> Exit_code 0
       | Error message -> report_error message)
 
+let run_action_command (options : action_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Actioner.run ~workspace_root:options.workspace_dir
+          ~verbose:options.verbose ?profile:options.profile
+          ~requested_targets:options.targets workspace
+      with
+      | Ok reports ->
+          print_string (Actioner.render_report reports);
+          Exit_code 0
+      | Error message -> report_error message)
+
 let run_graph (options : graph_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
@@ -1764,6 +1868,20 @@ let run_clean (options : clean_options) =
         with
         | Ok () -> Exit_code 0
         | Error message -> report_error message)
+
+let run_promote (options : promote_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Promoter.promote ~workspace_root:options.workspace_dir
+          ~verbose:options.verbose ?profile:options.profile
+          ~requested_targets:options.targets workspace
+      with
+      | Ok promoted ->
+          print_string (Promoter.render_report promoted);
+          Exit_code 0
+      | Error message -> report_error message)
 
 let run_deps (options : deps_options) =
   match load_workspace options.workspace_dir with
@@ -1969,11 +2087,13 @@ let run_explain (options : explain_options) =
 let commands =
   [
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
+    Command { doc = action_doc; parse = parse_action_args; run = run_action_command };
     Command { doc = graph_doc; parse = parse_graph_args; run = run_graph };
     Command { doc = run_doc; parse = parse_run_args; run = run_executable };
     Command { doc = test_doc; parse = parse_test_args; run = run_tests };
     Command { doc = bench_doc; parse = parse_bench_args; run = run_bench };
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
+    Command { doc = promote_doc; parse = parse_promote_args; run = run_promote };
     Command { doc = deps_doc; parse = parse_deps_args; run = run_deps };
     Command { doc = env_doc; parse = parse_env_args; run = run_env };
     Command { doc = repl_doc; parse = parse_repl_args; run = run_repl };

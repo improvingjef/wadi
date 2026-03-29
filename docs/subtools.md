@@ -48,10 +48,11 @@ exit codes rather than hidden global state.
 
 ### Code generation and actions
 
-- `oasis action`: run declared generated-file steps inside a sandboxed runner.
+- `oasis action`: run declared generated-file steps inside a sandboxed runner
+  without paying a full compile/link.
 - `oasis ppx`: compile and apply preprocessor pipelines with explicit ordering.
-- `oasis promote`: copy generated outputs back into the source tree on purpose,
-  never by surprise.
+- `oasis promote`: copy declared non-source generated outputs back into the
+  source tree on purpose, never by surprise.
 
 ## Dune feature mapping
 
