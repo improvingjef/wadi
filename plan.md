@@ -72,13 +72,18 @@
 70. [ ] Set up GitHub Releases with pre-built static binaries for macOS and Linux so users can install oasis without opam or a build toolchain.
 71. [ ] Create a Homebrew formula so macOS users can install oasis with `brew install oasis` without needing an opam setup.
 72. [ ] Add a `flake.nix` so Nix users can run oasis directly or add it to their development shells.
+73a. [ ] Implement library namespace wrapping so a library named `foo` generates a wrapper module that re-exports all child modules as `Foo.Child_module`. This is required for compatibility with any dune-built OCaml project that uses `(libraries ...)` namespacing and is the single biggest blocker for real-world migration.
 73. [x] Implement `oasis graph` so target build order, module order, and active action/preprocess/PPX pipelines are visible without compiling.
 74. [x] Implement `oasis deps` so transitive external package requirements and `ocamlfind` search roots are inspectable without reverse-engineering compiler invocations.
 75. [x] Implement `oasis migrate` to scan `dune-project` plus workspace `dune` files and emit a reviewable first-pass `oasis.toml`.
 76. [x] Extend `oasis migrate` to translate common Dune fields like `preprocess`, `pps`, install/public metadata, and common unsupported stanzas into first-class oasis sections instead of warning comments.
 77. [x] Add `oasis env` so users can print the exact environment a subtool would run under before executing it.
-78. [ ] Add `oasis repl` so workspaces can launch a package-aware OCaml toplevel without manually reconstructing include paths and package flags.
+78. [x] Add `oasis repl` so workspaces can launch a package-aware OCaml toplevel without manually reconstructing include paths and package flags.
 79. [ ] Add `oasis bench` with stable benchmark target execution and machine-readable summaries so the execution subtool split covers Dune’s benchmarking workflows as well as builds and tests.
 80. [ ] Eliminate the remaining app-only interpreter seed from bootstrap generation so cold-start builds no longer depend on `scripts/generate_bootstrap_makefile.ml` loading source through the toplevel at all.
-81. [ ] Teach `oasis migrate` to infer auxiliary `deps` for translated dune preprocess actions and rules when the source form names concrete file inputs, reducing the remaining review-only warnings in generated manifests.
-82. [ ] Add `oasis env --json` or a changed-only mode so large inherited environments stay inspectable in editors and CI without forcing humans to diff hundreds of ambient variables by eye.
+81. [x] Teach `oasis migrate` to infer auxiliary `deps` for translated dune preprocess actions and rules when the source form names concrete file inputs, reducing the remaining review-only warnings in generated manifests.
+82. [x] Add `oasis env --json` or a changed-only mode so large inherited environments stay inspectable in editors and CI without forcing humans to diff hundreds of ambient variables by eye.
+83. [ ] Cache and fingerprint generated `oasis repl` toplevel binaries so repeated REPL launches do not pay an `ocamlmktop` relink after a no-op build.
+84. [ ] Add an `oasis env repl` mode or equivalent machine-readable REPL plan output so editors can request include paths, linked units, and runtime env without launching the toplevel.
+85. [ ] Extend dune-action dependency inference beyond simple `run`/`copy` forms to `progn`, `with-stdin-from`, `diff`, and alias-driven workflows so fewer migrations fall back to review comments.
+86. [ ] Add an explicit `oasis repl --script` or generated-loader mode so noninteractive use does not depend on OCaml toplevel argument quirks like `-init` versus script-file execution.

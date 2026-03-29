@@ -103,4 +103,55 @@ main = "main"
               "env run should include the launched runtime context";
             assert_string_contains ~needle:"RUNTIME_ONLY=yes\n" report.output
               "runtime contexts should include inherited host variables")) );
+    ( "prints machine-readable JSON env reports",
+      (fun () ->
+        with_temp_dir "oasis-env-json" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+env = ["MODE=default"]
+
+[profile.release]
+env = ["MODE=release", "PROFILE=release"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+env = ["TARGET=demo"]
+|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            let report =
+              run_oasis_with_env ~cwd:workspace
+                ~env:[ ("HOST_ONLY", "from-host") ]
+                [ "env"; "--json"; "--profile"; "release"; "run"; "demo" ]
+            in
+            assert_int_equal 0 report.status
+              "env --json should render successfully";
+            assert_string_contains ~needle:"\"workspace\": null" report.output
+              "env JSON should encode an unnamed workspace as null";
+            assert_string_contains ~needle:"\"subtool\": \"run\"" report.output
+              "env JSON should include the selected subtool";
+            assert_string_contains ~needle:"\"profile\": \"release\"" report.output
+              "env JSON should include the resolved profile";
+            assert_string_contains
+              ~needle:"\"requested_targets\": [\"demo\"]"
+              report.output
+              "env JSON should report the requested target names";
+            assert_string_contains
+              ~needle:"\"target\": \"executable demo\""
+              report.output
+              "env JSON should include the build context target label";
+            assert_string_contains ~needle:"\"context\": \"runtime\""
+              report.output
+              "env JSON should include the runtime context label";
+            assert_string_contains
+              ~needle:"\"HOST_ONLY\": \"from-host\""
+              report.output
+              "env JSON should include inherited environment bindings";
+            assert_string_contains ~needle:"\"MODE\": \"release\""
+              report.output
+              "env JSON should include resolved profile bindings";
+            assert_string_contains ~needle:"\"TARGET\": \"demo\""
+              report.output
+              "env JSON should include target-local bindings")) );
   ]

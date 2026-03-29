@@ -304,6 +304,11 @@ type parsed_command = {
   cwd : string option;
 }
 
+type inferred_deps = {
+  deps : string list;
+  opaque : bool;
+}
+
 let parse_run_like ~dir args =
   let* argv = atoms_of_values "run" args in
   match argv with
@@ -363,6 +368,72 @@ let parse_rule_command ~dir ~outputs = function
             | None -> Some dir);
         }
   | form -> parse_command_form ~dir form
+
+let inferred_none = { deps = []; opaque = false }
+
+let merge_inferred left right =
+  {
+    deps = String_util.dedup_preserve (left.deps @ right.deps);
+    opaque = left.opaque || right.opaque;
+  }
+
+let inferred_dep_candidate ~workspace_root ~dir ~outputs value =
+  if value = "" || value = "." || String_util.starts_with ~prefix:"%{" value then
+    None
+  else
+    let rebased = rebase_dune_relative_path dir value in
+    let absolute = Filename.concat workspace_root rebased in
+    if List.mem rebased outputs then None
+    else if Fs.exists absolute && not (Fs.is_directory absolute) then Some rebased
+    else None
+
+let inferred_run_deps ~workspace_root ~dir ~outputs args =
+  match args with
+  | [] -> { deps = []; opaque = false }
+  | _prog :: rest ->
+      let rec loop deps opaque = function
+        | [] -> { deps = String_util.dedup_preserve (List.rev deps); opaque }
+        | Atom value :: tail ->
+            let deps =
+              match inferred_dep_candidate ~workspace_root ~dir ~outputs value with
+              | Some dep -> dep :: deps
+              | None -> deps
+            in
+            loop deps opaque tail
+        | List _ :: tail -> loop deps true tail
+      in
+      loop [] false rest
+
+let rec infer_action_deps ~workspace_root ~dir ~outputs = function
+  | List (Atom "run" :: args) -> inferred_run_deps ~workspace_root ~dir ~outputs args
+  | List [ Atom "copy"; Atom src; Atom _dst ]
+  | List [ Atom "copy#"; Atom src; Atom _dst ] ->
+      {
+        deps =
+          (match inferred_dep_candidate ~workspace_root ~dir ~outputs src with
+          | Some dep -> [ dep ]
+          | None -> []);
+        opaque = false;
+      }
+  | List [ Atom "bash"; Atom _ ] | List [ Atom "system"; Atom _ ] ->
+      { deps = []; opaque = true }
+  | List [ Atom "chdir"; Atom cwd; nested ] ->
+      infer_action_deps ~workspace_root
+        ~dir:(rebase_dune_relative_path dir cwd)
+        ~outputs nested
+  | List [ Atom "with-stdout-to"; Atom output; nested ] ->
+      let outputs =
+        if output = "%{target}" || output = "%{targets}" then outputs
+        else String_util.dedup_preserve (rebase_dune_relative_path dir output :: outputs)
+      in
+      infer_action_deps ~workspace_root ~dir ~outputs nested
+  | List [] | Atom _ -> { deps = []; opaque = true }
+  | List forms ->
+      List.fold_left
+        (fun inferred form ->
+          merge_inferred inferred
+            (infer_action_deps ~workspace_root ~dir ~outputs form))
+        inferred_none forms
 
 let resolved_ppx_argv packages =
   let ocamlfind = ocamlfind_cmd () in
@@ -476,7 +547,7 @@ let relative_dir workspace_root dune_path =
 let rebased_field_paths dir paths =
   List.map (rebase_dune_relative_path dir) paths
 
-let parse_target_tools ~dune_path ~dir acc fields =
+let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
   let* acc, preprocess_names, ppx_names =
     match optional_single_value_field "preprocess" fields with
     | Error message -> Error message
@@ -524,14 +595,20 @@ let parse_target_tools ~dune_path ~dir acc fields =
           | Some _ as cwd -> cwd
           | None -> Some dir
         in
-        let acc =
-          warn acc
-            (Printf.sprintf
-               "generated preprocess '%s' from dune action in %s; add deps = [...] if it reads auxiliary files"
-               name dune_path)
+        let inferred =
+          infer_action_deps ~workspace_root ~dir ~outputs:[] form
         in
         let acc =
-          with_preprocessor acc { name; argv = command.argv; cwd; deps = [] }
+          if inferred.opaque then
+            warn acc
+              (Printf.sprintf
+                 "generated preprocess '%s' from dune action in %s; review deps = [...] because the action hides some file inputs behind shell or unsupported forms"
+                 name dune_path)
+          else acc
+        in
+        let acc =
+          with_preprocessor acc
+            { name; argv = command.argv; cwd; deps = inferred.deps }
         in
         Ok (acc, [ name ], [])
     | Ok (Some _) ->
@@ -601,6 +678,23 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                     dune_path))
         | Ok command ->
             let name, acc = generated_name acc "dune_action" in
+            let inferred =
+              infer_action_deps ~workspace_root ~dir
+                ~outputs:(rebased_field_paths dir outputs)
+                form
+            in
+            let deps =
+              String_util.dedup_preserve
+                (rebased_field_paths dir deps @ inferred.deps)
+            in
+            let acc =
+              if inferred.opaque && deps = [] then
+                warn acc
+                  (Printf.sprintf
+                     "generated action '%s' from dune rule in %s may read auxiliary files; review deps = [...]"
+                     name dune_path)
+              else acc
+            in
             let action =
               {
                 name;
@@ -610,7 +704,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                   (match command.cwd with
                   | Some _ as cwd -> cwd
                   | None -> Some dir);
-                deps = rebased_field_paths dir deps;
+                deps;
                 outputs;
               }
             in
@@ -629,7 +723,9 @@ let parse_library ~workspace_root ~dune_path acc fields =
     | None -> inferred_modules
   in
   let* libraries = optional_atom_list_field "libraries" fields in
-  let* acc, preprocess, ppx = parse_target_tools ~dune_path ~dir acc fields in
+  let* acc, preprocess, ppx =
+    parse_target_tools ~workspace_root ~dune_path ~dir acc fields
+  in
   Ok
     ( acc,
       [
@@ -690,7 +786,7 @@ let parse_runnable_group kind_label raw_kind ~workspace_root ~dune_path acc fiel
     in
     let* libraries = optional_atom_list_field "libraries" fields in
     let* acc, preprocess, ppx =
-      parse_target_tools ~dune_path ~dir acc fields
+      parse_target_tools ~workspace_root ~dune_path ~dir acc fields
     in
     Ok
       ( acc,

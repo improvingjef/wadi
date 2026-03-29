@@ -178,4 +178,42 @@ version = 1
                   ~needle:"# dune public_name"
                   migrate.output
                   "public names should be emitted as manifest fields instead of review comments")) ));
+    ( "infers explicit auxiliary file deps from dune preprocess actions and rules",
+      (fun () ->
+        with_temp_dir "oasis-migrate-inferred-deps" (fun workspace ->
+            write_workspace_file workspace "dune"
+              {|
+(library
+ (name core)
+ (modules core generated)
+ (preprocess (action (run ./tools/expand.sh templates/banner.txt))))
+
+(rule
+ (targets generated.ml)
+ (action (run ./tools/render.sh data/source.txt generated.ml)))
+|};
+            write_source workspace "core.ml" {|let message = Generated.value|};
+            write_workspace_file workspace "templates/banner.txt" "banner\n";
+            write_workspace_file workspace "data/source.txt" "source\n";
+            ignore
+              (write_executable workspace "tools/expand.sh"
+                 "#!/bin/sh\ncat\n");
+            ignore
+              (write_executable workspace "tools/render.sh"
+                 "#!/bin/sh\ncat \"$1\" > \"$2\"\n");
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should infer auxiliary deps for straightforward dune actions";
+            assert_string_contains
+              ~needle:"[preprocess.dune_preprocess_1]\nargv = [\"tools/expand.sh\", \"templates/banner.txt\"]\ncwd = \".\"\ndeps = [\"templates/banner.txt\"]\n"
+              migrate.output
+              "migrate should infer preprocess deps from explicit file arguments";
+            assert_string_contains
+              ~needle:"[action.dune_action_2]\nargv = [\"tools/render.sh\", \"data/source.txt\", \"generated.ml\"]\noutputs = [\"generated.ml\"]\ndeps = [\"data/source.txt\"]\ncwd = \".\"\n"
+              migrate.output
+              "migrate should infer dune rule deps from explicit file arguments while excluding outputs";
+            assert_string_not_contains
+              ~needle:"generated preprocess 'dune_preprocess_1' from dune action"
+              migrate.output
+              "migrate should drop the old manual-deps warning when explicit inputs are inferred")) );
   ]

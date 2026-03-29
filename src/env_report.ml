@@ -293,3 +293,52 @@ let render_report (report : report) =
      ]
     @ List.map render_context report.contexts)
     ^ "\n"
+
+let json_string value = "\"" ^ String_util.json_escape value ^ "\""
+
+let json_string_or_null = function
+  | Some value -> json_string value
+  | None -> "null"
+
+let json_string_list values =
+  "[" ^ String.concat ", " (List.map json_string values) ^ "]"
+
+let json_env bindings =
+  "{"
+  ^
+  String.concat ", "
+    (List.map
+       (fun (name, value) -> json_string name ^ ": " ^ json_string value)
+       bindings)
+  ^ "}"
+
+let render_context_json (context : context) =
+  String.concat "\n"
+    [
+      "    {";
+      "      \"target\": " ^ json_string context.target ^ ",";
+      "      \"context\": " ^ json_string context.label ^ ",";
+      "      \"env\": " ^ json_env context.env;
+      "    }";
+    ]
+
+let render_json_report (report : report) =
+  let contexts =
+    match report.contexts with
+    | [] -> "[]"
+    | contexts ->
+        "[\n"
+        ^ String.concat ",\n" (List.map render_context_json contexts)
+        ^ "\n  ]"
+  in
+  String.concat "\n"
+    [
+      "{";
+      "  \"workspace\": " ^ json_string_or_null report.workspace_name ^ ",";
+      "  \"subtool\": " ^ json_string (subtool_name report.subtool) ^ ",";
+      "  \"profile\": " ^ json_string report.profile ^ ",";
+      "  \"requested_targets\": " ^ json_string_list report.requested ^ ",";
+      "  \"contexts\": " ^ contexts;
+      "}";
+      "";
+    ]

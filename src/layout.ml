@@ -68,6 +68,14 @@ let explain_path out_dir = Explain.report_path out_dir
 
 let explain_json_path out_dir = Explain.json_path out_dir
 
+let repl_root_for_profile workspace_root profile =
+  Filename.concat (build_root_for_profile workspace_root profile) "repl"
+
+let repl_root workspace_root = repl_root_for_profile workspace_root default_profile
+
+let repl_binary ?(profile = default_profile) workspace_root name =
+  Filename.concat (repl_root_for_profile workspace_root profile) (name ^ ".top")
+
 let install_bin_dir prefix = Filename.concat prefix relative_install_bin_dir
 
 let relative_install_library_dir name = Filename.concat "lib" name

@@ -121,6 +121,9 @@ Important rules:
   in rebuild detection and `oasis explain`.
 - `oasis migrate` resolves common dune `pps` forms through `ocamlfind printppx`
   and emits `ppx.*` sections with explicit argv.
+- `oasis migrate` now infers `deps` for straightforward dune `action (run ...)`
+  preprocessors and rules when the form names concrete file inputs directly,
+  which cuts down the remaining review-only warnings.
 - common dune `rule` stanzas become `action.*` sections when oasis can map the
   targets, deps, and command form directly
 - Generated `.ml` or `.mli` files may not collide with checked-in source files

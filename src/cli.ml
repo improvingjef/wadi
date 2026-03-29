@@ -47,6 +47,15 @@ type env_options = {
   profile : string option;
   subtool : Env_report.subtool;
   targets : string list;
+  json : bool;
+}
+
+type repl_options = {
+  workspace_dir : string;
+  verbose : bool;
+  target : string option;
+  args : string list;
+  profile : string option;
 }
 
 type install_options = {
@@ -349,16 +358,35 @@ let env_doc =
     name = "env";
     summary =
       "Print the exact subprocess environment a build, run, test, or install step would inherit.";
-    signature = "oasis env [--workspace DIR] [--profile NAME] SUBTOOL [TARGET ...]";
+    signature =
+      "oasis env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]";
     examples =
       [
         "oasis env build";
         "oasis env --profile release build demo";
+        "oasis env --json run demo";
         "oasis env run demo";
         "oasis env test unit";
       ];
-    options = [ workspace_option; profile_option; help_option ];
+    options = [ workspace_option; profile_option; json_option; help_option ];
     completion_words = [ "build"; "run"; "test"; "install" ];
+  }
+
+let repl_doc =
+  {
+    name = "repl";
+    summary =
+      "Build a bytecode toplevel with workspace libraries and packages already wired in.";
+    signature =
+      "oasis repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]";
+    examples =
+      [
+        "oasis repl core";
+        "oasis repl demo";
+        "oasis repl --profile release core -- -noinit -noprompt";
+      ];
+    options = [ workspace_option; profile_option; verbose_option; help_option ];
+    completion_words = [];
   }
 
 let install_doc =
@@ -485,6 +513,7 @@ let command_docs =
     clean_doc;
     deps_doc;
     env_doc;
+    repl_doc;
     install_doc;
     docs_doc;
     completion_doc;
@@ -775,9 +804,9 @@ let parse_build_args (args : string list) : (build_options, string) result =
     }
     args
 
-let parse_run_args args =
+let parse_run_args (args : string list) : (run_options, string) result =
   let* default_backend_request = default_backend_request () in
-  let rec loop options = function
+  let rec loop (options : run_options) = function
     | [] -> Ok { options with args = options.args }
     | "--" :: rest -> Ok { options with args = rest }
     | "--workspace" :: dir :: rest ->
@@ -908,16 +937,25 @@ let parse_deps_args (args : string list) : (deps_options, string) result =
   loop { workspace_dir = "."; targets = [] } args
 
 let parse_env_args (args : string list) : (env_options, string) result =
-  let rec loop workspace_dir profile subtool targets = function
+  let rec loop workspace_dir profile json subtool targets = function
     | [] -> (
         match subtool with
         | None -> Error "env requires a subtool name"
-        | Some subtool -> Ok { workspace_dir; profile; subtool; targets = List.rev targets })
-    | "--workspace" :: dir :: rest -> loop dir profile subtool targets rest
+        | Some subtool ->
+            Ok
+              {
+                workspace_dir;
+                profile;
+                subtool;
+                targets = List.rev targets;
+                json;
+              } )
+    | "--workspace" :: dir :: rest -> loop dir profile json subtool targets rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | "--profile" :: value :: rest ->
-        loop workspace_dir (Some value) subtool targets rest
+        loop workspace_dir (Some value) json subtool targets rest
     | "--profile" :: [] -> Error "--profile requires a name"
+    | "--json" :: rest -> loop workspace_dir profile true subtool targets rest
     | "--help" :: _ -> Error (command_usage env_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -925,12 +963,37 @@ let parse_env_args (args : string list) : (env_options, string) result =
         match subtool with
         | None ->
             let* subtool = Env_report.parse_subtool value in
-            loop workspace_dir profile (Some subtool) targets rest
+            loop workspace_dir profile json (Some subtool) targets rest
         | Some Env_report.Run when targets <> [] ->
             Error "env run accepts at most one target"
-        | Some _ -> loop workspace_dir profile subtool (value :: targets) rest)
+        | Some _ ->
+            loop workspace_dir profile json subtool (value :: targets) rest)
   in
-  loop "." None None [] args
+  loop "." None false None [] args
+
+let parse_repl_args (args : string list) : (repl_options, string) result =
+  let rec loop (options : repl_options) = function
+    | [] -> Ok options
+    | "--" :: rest -> Ok { options with args = rest }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: value :: rest ->
+        loop { options with profile = Some value } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | ("--verbose" | "-v") :: rest ->
+        loop { options with verbose = true } rest
+    | "--help" :: _ -> Error (command_usage repl_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | value :: rest -> (
+        match options.target with
+        | None -> loop { options with target = Some value } rest
+        | Some _ -> Error "repl accepts at most one target before --")
+  in
+  loop
+    { workspace_dir = "."; verbose = false; target = None; args = []; profile = None }
+    args
 
 let parse_toolchain_args args =
   match args with
@@ -1224,6 +1287,10 @@ let positional_completion_candidates ?workspace command_name rest =
             executable_target_candidates workspace
           else []
       | "test" -> test_target_candidates workspace
+      | "repl" ->
+          if positional_argument_count rest = 0 then
+            List.map target_candidate workspace.Manifest.targets
+          else []
       | "env" -> (
           match positional_arguments [] rest with
           | [] -> List.map (fun word -> candidate word) env_doc.completion_words
@@ -1491,8 +1558,22 @@ let run_env (options : env_options) =
           ?profile:options.profile workspace options.subtool options.targets
       with
       | Ok report ->
-          print_string (Env_report.render_report report);
+          print_string
+            (if options.json then Env_report.render_json_report report
+             else Env_report.render_report report);
           Exit_code 0
+      | Error message -> report_error message)
+
+let run_repl (options : repl_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Repl.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
+          ?profile:options.profile ?target:options.target ~args:options.args
+          workspace
+      with
+      | Ok status -> Forward_status status
       | Error message -> report_error message)
 
 let run_install (options : install_options) =
@@ -1649,6 +1730,7 @@ let commands =
     Command { doc = clean_doc; parse = parse_clean_args; run = run_clean };
     Command { doc = deps_doc; parse = parse_deps_args; run = run_deps };
     Command { doc = env_doc; parse = parse_env_args; run = run_env };
+    Command { doc = repl_doc; parse = parse_repl_args; run = run_repl };
     Command { doc = install_doc; parse = parse_install_args; run = run_install };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
     Command

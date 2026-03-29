@@ -33,6 +33,9 @@ let cases =
           "/tmp/oasis-layout/_oasis/build/default/exe/app/.oasis-explain"
           (Layout.explain_path (Layout.executable_out_dir workspace "app"))
           "target explain reports should live next to the target artifacts";
+        assert_string_equal "/tmp/oasis-layout/_oasis/build/default/repl/core.top"
+          (Layout.repl_binary workspace "core")
+          "repl binaries should live under a dedicated repl root";
         assert_string_equal "/tmp/oasis-layout/lib/core/META"
           (Layout.install_library_meta_path "/tmp/oasis-layout" "core")
           "installed library META files should live beside staged library artifacts";

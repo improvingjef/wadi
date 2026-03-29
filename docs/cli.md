@@ -126,18 +126,39 @@ Print the exact subprocess environment a build, run, test, or install step would
 
 Usage:
 
-`oasis env [--workspace DIR] [--profile NAME] SUBTOOL [TARGET ...]`
+`oasis env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
+- `--json`: Print machine-readable JSON output instead of the text report.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis env build`
 - `oasis env --profile release build demo`
+- `oasis env --json run demo`
 - `oasis env run demo`
 - `oasis env test unit`
+
+## repl
+
+Build a bytecode toplevel with workspace libraries and packages already wired in.
+
+Usage:
+
+`oasis repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--verbose, -v`: Print detailed process execution as commands run.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis repl core`
+- `oasis repl demo`
+- `oasis repl --profile release core -- -noinit -noprompt`
 
 ## install
 

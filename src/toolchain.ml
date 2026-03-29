@@ -89,6 +89,8 @@ let ocamldep_cmd () = command_override "OCAMLDEP" "ocamldep"
 
 let ocamlfind_cmd () = command_override "OCAMLFIND" "ocamlfind"
 
+let ocamlmktop_cmd () = command_override "OCAMLMKTOP" "ocamlmktop"
+
 let backend_name = function
   | Native -> "native"
   | Bytecode -> "bytecode"
@@ -362,6 +364,17 @@ let ocamldep_invocation ?session resolution args =
           args = ("ocamldep" :: package_args resolution) @ args;
         }
 
+let ocamlmktop_invocation ?session resolution args =
+  match resolution.packages with
+  | [] -> Ok { prog = ocamlmktop_cmd (); args }
+  | _ ->
+      let* ocamlfind = ensure_ocamlfind ?session () in
+      Ok
+        {
+          prog = ocamlfind;
+          args = ("ocamlmktop" :: package_args resolution) @ args;
+        }
+
 let render_invocation ?cwd ?(env = []) invocation =
   Process.render ?cwd ~env invocation.prog invocation.args
 
@@ -371,6 +384,10 @@ let ensure_success_compiler ?session ?(env = []) ~verbose backend resolution arg
 
 let ensure_success_ocamldep ?session ?(env = []) ~verbose resolution args =
   let* invocation = ocamldep_invocation ?session resolution args in
+  Process.ensure_success ~verbose ~env invocation.prog invocation.args
+
+let ensure_success_ocamlmktop ?session ?(env = []) ~verbose resolution args =
+  let* invocation = ocamlmktop_invocation ?session resolution args in
   Process.ensure_success ~verbose ~env invocation.prog invocation.args
 
 let sort_sources ?session ?(env = []) ~verbose resolution source_files =
