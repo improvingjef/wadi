@@ -17,9 +17,8 @@ let source_like_promotion_error target action_name relative_path =
   Error
     (Printf.sprintf
        "target '%s' action '%s' output '%s' looks like checked-in OCaml source; \
-        oasis promote currently supports only non-source outputs because \
-        promoted .ml/.mli files would collide with build-time generated-source \
-        validation"
+        declare it under checked_in_sources = [...] if it is an intentional \
+        promoted snapshot"
        (Manifest.target_name target) action_name relative_path)
 
 let promote_output ~generated_path ~destination_path =
@@ -43,7 +42,12 @@ let promote_action_outputs ~workspace_root (target_actions : Actioner.target_act
           match (outputs, generated_paths) with
           | [], [] -> Ok acc
           | relative_path :: output_rest, generated_path :: path_rest ->
-              if Builder.is_source_path relative_path then
+              if
+                Builder.is_source_path relative_path
+                && not
+                     (Manifest.action_output_is_checked_in_source action
+                        relative_path)
+              then
                 source_like_promotion_error target action.name relative_path
               else
                 let destination_path =

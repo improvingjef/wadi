@@ -88,6 +88,7 @@ type action = {
   cwd : string option;
   deps : string list;
   outputs : string list;
+  checked_in_sources : string list;
   env : env_binding list;
   stdin : string option;
   stdin_path : string option;
@@ -219,6 +220,9 @@ let action_commands (action : action) = action.steps
 
 let action_is_multistep (action : action) =
   List.length action.steps > 1
+
+let action_output_is_checked_in_source (action : action) relative_path =
+  List.mem relative_path action.checked_in_sources
 
 let command_tool_display_name (tool : command_tool) =
   tool.name ^ package_suffix tool.package_path
@@ -828,6 +832,7 @@ let parse_action path section name =
         "cwd";
         "deps";
         "outputs";
+        "checked_in_sources";
         "env";
         "stdin";
         "stdin_path";
@@ -854,6 +859,7 @@ let parse_action path section name =
   let* cwd = optional_string path section "cwd" in
   let* deps = optional_strings path section "deps" in
   let* outputs = required_strings path section "outputs" in
+  let* checked_in_sources = optional_strings path section "checked_in_sources" in
   let* env = optional_env_bindings path section "env" in
   let* stdin = optional_string path section "stdin" in
   let* stdin_path = optional_string path section "stdin_path" in
@@ -876,9 +882,43 @@ let parse_action path section name =
   let* () = validate_relative_paths path section.line "deps" deps in
   let* () = validate_relative_paths path section.line "outputs" outputs in
   let* () =
+    validate_relative_paths path section.line "checked_in_sources"
+      checked_in_sources
+  in
+  let* () =
     if outputs = [] then
       error path section.line "outputs cannot be empty"
     else Ok ()
+  in
+  let* () =
+    let seen = Hashtbl.create (List.length checked_in_sources) in
+    let rec loop = function
+      | [] -> Ok ()
+      | relative_path :: rest ->
+          if Hashtbl.mem seen relative_path then
+            error path section.line
+              (Printf.sprintf "duplicate checked_in_sources entry '%s'"
+                 relative_path)
+          else if not (List.mem relative_path outputs) then
+            error path section.line
+              (Printf.sprintf
+                 "checked_in_sources entry '%s' must name one of the declared \
+                  action outputs"
+                 relative_path)
+          else if
+            not
+              (String_util.ends_with ~suffix:".ml" relative_path
+              || String_util.ends_with ~suffix:".mli" relative_path)
+          then
+            error path section.line
+              (Printf.sprintf
+                 "checked_in_sources entry '%s' must be a .ml or .mli output"
+                 relative_path)
+          else (
+            Hashtbl.add seen relative_path ();
+            loop rest)
+    in
+    loop checked_in_sources
   in
   let* () =
     match cwd with
@@ -919,6 +959,7 @@ let parse_action path section name =
       cwd;
       deps;
       outputs;
+      checked_in_sources;
       env;
       stdin;
       stdin_path;

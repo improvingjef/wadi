@@ -256,6 +256,9 @@ let is_source_path path =
     (fun suffix -> String_util.ends_with ~suffix path)
     [ ".ml"; ".mli" ]
 
+let action_output_is_checked_in_source (action : Manifest.action) output =
+  Manifest.action_output_is_checked_in_source action output
+
 let rec digest_path path =
   if Sys.is_directory path then
     let entries = Sys.readdir path |> Array.to_list |> List.sort String.compare in
@@ -603,68 +606,77 @@ let with_temp_dir prefix f =
   Fun.protect ~finally:(fun () -> Fs.remove_tree path) (fun () -> f path)
 
 let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandbox =
-  match sandbox with
-  | Manifest.Workspace ->
-      Fs.materialize_tree ~src:workspace_root ~dst:sandbox_root;
-      let artifact_root = Filename.concat sandbox_root "_oasis" in
-      if Fs.exists artifact_root then Fs.remove_tree artifact_root;
-      Ok ()
-  | Manifest.Target ->
-      let sandbox_target_dir = Filename.concat sandbox_root target_dir in
-      let workspace_target_dir = Filename.concat workspace_root target_dir in
-      let* () =
-        if Fs.exists workspace_target_dir then
-          if Sys.is_directory workspace_target_dir then (
-            Fs.materialize_tree ~src:workspace_target_dir ~dst:sandbox_target_dir;
-            Ok ())
-          else
-            Error
-              (Printf.sprintf "target dir exists and is not a directory: %s"
-                 workspace_target_dir)
-        else (
-          Fs.ensure_dir sandbox_target_dir;
-          Ok ())
-      in
-      let copied = Hashtbl.create 16 in
-      let copy_once label relative_path =
-        if Hashtbl.mem copied relative_path then Ok ()
-        else (
-          Hashtbl.add copied relative_path ();
-          let src = Filename.concat workspace_root relative_path in
-          if not (Fs.exists src) then
-            Error
-              (Printf.sprintf "%s path does not exist: %s" label relative_path)
+  let* () =
+    match sandbox with
+    | Manifest.Workspace ->
+        Fs.materialize_tree ~src:workspace_root ~dst:sandbox_root;
+        let artifact_root = Filename.concat sandbox_root "_oasis" in
+        if Fs.exists artifact_root then Fs.remove_tree artifact_root;
+        Ok ()
+    | Manifest.Target ->
+        let sandbox_target_dir = Filename.concat sandbox_root target_dir in
+        let workspace_target_dir = Filename.concat workspace_root target_dir in
+        let* () =
+          if Fs.exists workspace_target_dir then
+            if Sys.is_directory workspace_target_dir then (
+              Fs.materialize_tree ~src:workspace_target_dir ~dst:sandbox_target_dir;
+              Ok ())
+            else
+              Error
+                (Printf.sprintf "target dir exists and is not a directory: %s"
+                   workspace_target_dir)
           else (
-            materialize_path ~src
-              ~dst:(Filename.concat sandbox_root relative_path);
-            Ok ()))
-      in
-      let* () =
-        match action.Manifest.cwd with
-        | Some cwd when cwd <> "." && cwd <> target_dir ->
-            copy_once "action cwd" cwd
-        | Some _ | None -> Ok ()
-      in
-      let* () =
+            Fs.ensure_dir sandbox_target_dir;
+            Ok ())
+        in
+        let copied = Hashtbl.create 16 in
+        let copy_once label relative_path =
+          if Hashtbl.mem copied relative_path then Ok ()
+          else (
+            Hashtbl.add copied relative_path ();
+            let src = Filename.concat workspace_root relative_path in
+            if not (Fs.exists src) then
+              Error
+                (Printf.sprintf "%s path does not exist: %s" label relative_path)
+            else (
+              materialize_path ~src
+                ~dst:(Filename.concat sandbox_root relative_path);
+              Ok ()))
+        in
+        let* () =
+          match action.Manifest.cwd with
+          | Some cwd when cwd <> "." && cwd <> target_dir ->
+              copy_once "action cwd" cwd
+          | Some _ | None -> Ok ()
+        in
+        let* () =
+          List.fold_left
+            (fun result argv ->
+              let* () = result in
+              let prog, _ = command_prog_and_args argv in
+              if Filename.is_relative prog && String.contains prog '/' then
+                copy_once "action program" prog
+              else Ok ())
+            (Ok ()) (action_commands action)
+        in
+        let* () =
+          match action.Manifest.stdin_path with
+          | Some path -> copy_once "action stdin_path" path
+          | None -> Ok ()
+        in
         List.fold_left
-          (fun result argv ->
+          (fun result dep ->
             let* () = result in
-            let prog, _ = command_prog_and_args argv in
-            if Filename.is_relative prog && String.contains prog '/' then
-              copy_once "action program" prog
-            else Ok ())
-          (Ok ()) (action_commands action)
-      in
-      let* () =
-        match action.Manifest.stdin_path with
-        | Some path -> copy_once "action stdin_path" path
-        | None -> Ok ()
-      in
-      List.fold_left
-        (fun result dep ->
-          let* () = result in
-          copy_once "action dependency" dep)
-        (Ok ()) action.Manifest.deps
+            copy_once "action dependency" dep)
+          (Ok ()) action.Manifest.deps
+  in
+  let sandbox_target_dir = Filename.concat sandbox_root target_dir in
+  List.iter
+    (fun output ->
+      let output_path = Filename.concat sandbox_target_dir output in
+      if Fs.exists output_path then Fs.remove_tree output_path)
+    action.Manifest.outputs;
+  Ok ()
 
 let validate_generated_source_collisions ~workspace_root ~target_dir ~target_name
     actions =
@@ -680,7 +692,10 @@ let validate_generated_source_collisions ~workspace_root ~target_dir ~target_nam
             let workspace_output_path =
               Filename.concat workspace_root (Filename.concat target_dir output)
             in
-            if Fs.exists workspace_output_path then
+            if
+              Fs.exists workspace_output_path
+              && not (action_output_is_checked_in_source action output)
+            then
               Error
                 (Printf.sprintf
                    "target '%s' action '%s' output '%s' collides with checked-in \
@@ -722,6 +737,9 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
     env;
   List.iter (fun output -> append_line buffer ("output " ^ output))
     action.outputs;
+  List.iter
+    (fun output -> append_line buffer ("checked-in-source " ^ output))
+    action.checked_in_sources;
   let* dependency_lines =
     dependency_fingerprint_lines ~workspace_root ~line_prefix:"dep"
       ~error_label:"action dependency" (action_declared_inputs action)
@@ -1402,6 +1420,8 @@ let render_action_resolution_lines (action : Manifest.action) =
   let name = Manifest.action_display_name action in
   [
     "action " ^ name ^ " outputs: " ^ joined_names action.outputs;
+    "action " ^ name ^ " checked-in-sources: "
+    ^ joined_names action.checked_in_sources;
     "action " ^ name ^ " deps: " ^ joined_names (action_declared_inputs action);
   ]
   @ List.mapi

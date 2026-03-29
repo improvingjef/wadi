@@ -240,6 +240,36 @@ version = 1
                   ~needle:"# dune public_name"
                   migrate.output
                   "public names should be emitted as manifest fields instead of review comments")) ));
+    ( "migrates dune promote-mode source rules into checked-in generated source outputs",
+      (fun () ->
+        with_temp_dir "oasis-migrate-promote-source" (fun workspace ->
+            write_workspace_file workspace "dune"
+              {|
+(library
+ (name core)
+ (modules core version))
+
+(rule
+ (mode promote)
+ (targets version.ml)
+ (action (with-stdout-to %{target} (run ./tools/version.sh))))
+|};
+            write_source workspace "core.ml" {|let message = Version.value|};
+            write_source workspace "version.ml" {|let value = "checked-in"|};
+            ignore
+              (write_executable workspace "tools/version.sh"
+                 "#!/bin/sh\nprintf 'let value = \"generated\"\\n'\n");
+            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            assert_int_equal 0 migrate.status
+              "migrate should translate dune promote-mode rules";
+            assert_string_contains
+              ~needle:"[action.dune_action_1]\nargv = [\"tools/version.sh\"]\noutputs = [\"version.ml\"]\nchecked_in_sources = [\"version.ml\"]\nstdout = \"version.ml\"\ncwd = \".\"\n"
+              migrate.output
+              "migrate should preserve promote-mode source targets as checked-in generated sources";
+            assert_string_contains
+              ~needle:"[library.core]\nwrapped = true\ndir = \".\"\nmodules = [\"version\"]\nactions = [\"dune_action_1\"]\n"
+              migrate.output
+              "migrate should still attach the promote-mode action to the matching target")) );
     ( "infers explicit auxiliary file deps from dune preprocess actions and rules",
       (fun () ->
         with_temp_dir "oasis-migrate-inferred-deps" (fun workspace ->

@@ -363,6 +363,50 @@ modules = ["version"]
               (List.hd (List.nth action.Manifest.steps 1))
               "the second action step should keep its argv"
         | _ -> fail "expected a single parsed action")) ;
+    ( "parses checked-in generated source outputs for actions",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[action.generate]
+argv = ["./scripts/generate.sh"]
+outputs = ["version.ml", "stamp.txt"]
+checked_in_sources = ["version.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+|})
+        in
+        match workspace.Manifest.actions with
+        | [ action ] ->
+            assert_string_equal "version.ml"
+              (List.hd action.Manifest.checked_in_sources)
+              "actions should preserve explicitly declared checked-in generated sources"
+        | _ -> fail "expected a single parsed action")) ;
+    ( "rejects checked-in generated source entries that are not declared outputs",
+      (fun () ->
+        let error =
+          expect_error
+            (load_manifest
+               {|
+[action.generate]
+argv = ["./scripts/generate.sh"]
+outputs = ["version.ml"]
+checked_in_sources = ["other.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+|})
+        in
+        assert_string_contains
+          ~needle:"checked_in_sources entry 'other.ml' must name one of the declared action outputs"
+          error
+          "checked-in generated sources should be constrained to declared outputs")) ;
     ( "parses multi-package workspace members",
       (fun () ->
         with_temp_dir "oasis-members" (fun workspace_root ->

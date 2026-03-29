@@ -266,6 +266,40 @@ actions = ["snapshot"]
                          normalized_promoted_path)
               promote.output
               "promote should report each copied output directly")) );
+    ( "promotes explicit checked-in generated source outputs back into the workspace",
+      (fun () ->
+        with_temp_dir "oasis-promote-checked-in-source" (fun workspace ->
+            write_manifest workspace
+              {|
+[action.generate]
+argv = ["./tools/generate.sh"]
+outputs = ["version.ml"]
+checked_in_sources = ["version.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate"]
+|};
+            write_source workspace "lib/core.ml" {|let message = Version.value|};
+            write_source workspace "lib/version.ml" {|let value = "checked-in"|};
+            ignore
+              (write_executable workspace "tools/generate.sh"
+                 "#!/bin/sh\nset -eu\nprintf 'let value = \"generated\"\\n' > version.ml\n");
+            let promote = run_oasis ~cwd:workspace [ "promote"; "core" ] in
+            assert_int_equal 0 promote.status
+              "promote should allow explicitly checked-in generated OCaml sources";
+            let promoted_path = Filename.concat workspace "lib/version.ml" in
+            let normalized_promoted_path = Fs.realpath promoted_path in
+            assert_string_equal "let value = \"generated\"\n"
+              (Fs.read_file promoted_path)
+              "promote should refresh the checked-in OCaml snapshot";
+            assert_string_contains
+              ~needle:(Printf.sprintf
+                         "Promoted action generate output version.ml for library core -> %s\n"
+                         normalized_promoted_path)
+              promote.output
+              "promote should report checked-in generated source snapshots like other promoted outputs")) );
     ( "rejects promoting source-like action outputs",
       (fun () ->
         with_temp_dir "oasis-promote-source-like" (fun workspace ->
@@ -288,9 +322,9 @@ actions = ["generate"]
             assert_true (promote.status <> 0)
               "promote should reject source-like outputs that would break future builds";
             assert_string_contains
-              ~needle:"oasis promote currently supports only non-source outputs"
+              ~needle:"declare it under checked_in_sources = [...]"
               promote.output
-              "promote should explain why source-like outputs are rejected";
+              "promote should explain how to opt source-like outputs into safe promotion";
             assert_true
               (not (Fs.exists (Filename.concat workspace "lib/version.ml")))
               "promote should not copy rejected source-like outputs into the workspace")) );

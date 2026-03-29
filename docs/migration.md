@@ -24,7 +24,7 @@ only for the pieces it still cannot translate cleanly.
 - `dune install` -> `oasis install`
 - `dune describe`, `dune rules`, and most rebuild-debugging work -> `oasis explain`
 - explicit generated-file runs -> `oasis action`
-- explicit non-source promotion workflows -> `oasis promote`
+- generated-file promotion workflows -> `oasis promote`
 
 ## Basic Stanza Translation
 
@@ -138,10 +138,12 @@ Important rules:
 - common dune `rule` stanzas become `action.*` sections when oasis can map the
   targets, deps, and command form directly
 - Generated `.ml` or `.mli` files may not collide with checked-in source files
-  in the target directory. Oasis fails fast instead of silently choosing one.
-- `oasis promote` is currently for non-source generated outputs. Promoting a
-  generated `.ml` or `.mli` back into the workspace would conflict with the
-  same build-time collision guard that keeps generated sources honest.
+  in the target directory unless the action lists them under
+  `checked_in_sources = [...]`. Oasis still builds from the generated copy and
+  leaves the workspace snapshot alone until `oasis promote`.
+- dune `rule` stanzas with `(mode promote)` now migrate source-like targets to
+  `checked_in_sources = [...]`, which preserves the snapshot intent without
+  weakening the normal generated-source collision guard.
 - Wrapped libraries may keep a checked-in `Foo.ml` and/or `Foo.mli` wrapper.
   When `oasis migrate` sees that wrapper in the source tree, it omits that
   wrapper stem from `modules = [...]` even if the dune stanza listed it

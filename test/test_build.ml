@@ -919,6 +919,74 @@ modules = ["version"]
               "the build should explain why the generated output is unsafe";
             assert_string_contains ~needle:"app/version.ml" build.output
               "the collision report should point at the checked-in source path")) );
+    ( "builds from explicit checked-in generated source snapshots without auto-promoting them",
+      (fun () ->
+        with_temp_dir "oasis-action-checked-in-source" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+outputs = ["version.ml"]
+checked_in_sources = ["version.ml"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nprintf 'let message = \"generated\"\\n' > version.ml\n");
+            write_source workspace "app/version.ml"
+              {|let message = "checked-in"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_int_equal 0 build.status
+              "explicit checked-in generated sources should bypass the normal collision guard";
+            let run = run_binary (executable_path workspace "demo") [] in
+            assert_int_equal 0 run.status
+              "executables should still link against the generated source snapshot";
+            assert_string_equal "generated\n" run.output
+              "builds should compile the generated output, not the stale checked-in snapshot";
+            assert_string_equal {|let message = "checked-in"|}
+              (Fs.read_file (Filename.concat workspace "app/version.ml"))
+              "build should not silently rewrite checked-in source snapshots")) );
+    ( "requires actions to regenerate checked-in source snapshots instead of reusing copied workspace files",
+      (fun () ->
+        with_temp_dir "oasis-action-checked-in-source-missing" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+actions = ["generate_version"]
+
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+outputs = ["version.ml"]
+checked_in_sources = ["version.ml"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+modules = ["version"]
+|};
+            ignore
+              (write_executable workspace "scripts/generate_version.sh"
+                 "#!/bin/sh\nexit 0\n");
+            write_source workspace "app/version.ml"
+              {|let message = "checked-in"|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline Version.message|};
+            let build = run_oasis ~cwd:workspace [ "build" ] in
+            assert_true (build.status <> 0)
+              "actions should not satisfy declared outputs from copied checked-in files";
+            assert_string_contains
+              ~needle:"did not produce declared output version.ml"
+              build.output
+              "the builder should fail if the action never rewrites its checked-in generated source")) );
     ( "writes action stdout directly into declared generated outputs",
       (fun () ->
         with_temp_dir "oasis-action-stdout" (fun workspace ->

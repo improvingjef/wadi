@@ -89,6 +89,7 @@ argv = ["./scripts/generate_version.sh"]
 cwd = "."
 deps = ["templates/version.txt"]
 outputs = ["version.ml"]
+checked_in_sources = ["version.ml"]
 env = ["MODE=release"]
 stdin_path = "templates/version.txt"
 stdout = "version.ml"
@@ -111,6 +112,9 @@ Rules:
 - `steps` is an array of argv arrays that runs in order inside one sandbox.
 - `cwd` and `deps` are workspace-relative in the root manifest.
 - `outputs` are relative to the target directory.
+- `checked_in_sources` names a subset of `.ml` / `.mli` outputs that are
+  intentionally checked into the workspace and refreshed later with
+  `oasis promote`.
 - `stdin` feeds literal text to the action process.
 - `stdin_path` feeds a workspace-relative file to stdin and is tracked as an
   input.
@@ -120,7 +124,9 @@ Rules:
 - `stdout` redirects process stdout into one declared output path without
   forcing a shell wrapper.
 - If an output is `.ml` or `.mli`, it may not collide with checked-in source in
-  the target directory.
+  the target directory unless it is listed in `checked_in_sources`.
+- Checked-in generated sources still build from the generated copy under
+  `_oasis`; `oasis build` does not silently rewrite the workspace snapshot.
 - `sandbox = "workspace"` copies the workspace into the sandbox; `target`
   limits materialization to the target tree plus declared tool inputs.
 

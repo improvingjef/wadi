@@ -119,4 +119,7 @@
 110. [x] Implement `oasis action` so declared generated-file steps can run in dependency order without forcing a full compile/link cycle.
 111. [x] Implement `oasis promote` for explicit non-source action outputs so checked-in snapshots and fixtures can be refreshed on purpose instead of through ad hoc shell scripts.
 112. [x] Extend the command table, env reporting, completion queries, release docs, and packaged artifacts to cover the generated-source subtools so `action`/`promote` stay discoverable and testable.
-113. [ ] Add a first-class checked-in generated-source mode for `.ml`/`.mli` promotion so snapshotting source-like outputs does not collide with the build-time generated-source safety checks.
+113. [x] Add a first-class checked-in generated-source mode for `.ml`/`.mli` promotion so snapshotting source-like outputs does not collide with the build-time generated-source safety checks.
+114. [x] Clear declared action outputs from the action sandbox before execution so stale checked-in snapshots or prior generated files cannot masquerade as freshly regenerated outputs.
+115. [x] Exclude generated-source snapshots from bootstrap workspace-input tracking when the build actually compiles the generated copy, keeping self-hosting fingerprints aligned with real compile inputs.
+116. [x] Teach `oasis migrate` to translate dune `rule (mode promote)` source targets into explicit `checked_in_sources` declarations instead of leaving them as manual follow-up.

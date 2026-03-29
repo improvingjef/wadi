@@ -270,11 +270,19 @@ let pipeline_input_paths ~workspace_root (pipeline : Builder.resolved_pipeline) 
 let source_input_paths ~workspace_root sources =
   sources
   |> List.concat_map (fun (source : Builder.source_descriptor) ->
-         (if source.has_ml then
+         (if
+            source.has_ml
+            && source.ml_path
+               = resolve_input_path ~workspace_root source.ml_relative
+          then
             existing_workspace_inputs ~workspace_root source.ml_relative
           else [])
          @
-         if source.has_mli then
+         if
+           source.has_mli
+           && source.mli_path
+              = resolve_input_path ~workspace_root source.mli_relative
+         then
            existing_workspace_inputs ~workspace_root source.mli_relative
          else [])
 

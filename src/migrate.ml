@@ -28,6 +28,7 @@ type raw_action = {
   cwd : string option;
   deps : string list;
   outputs : string list;
+  checked_in_sources : string list;
   stdin_path : string option;
   stdout : string option;
 }
@@ -736,6 +737,16 @@ let explicit_rule_deps ~dir fields =
             merge_explicit_dep_refs refs (explicit_dep_refs_from_form ~dir value))
           explicit_dep_refs_none values)
 
+let is_source_like_output path =
+  String_util.ends_with ~suffix:".ml" path
+  || String_util.ends_with ~suffix:".mli" path
+
+let checked_in_sources_for_rule_mode outputs = function
+  | None -> []
+  | Some (Atom "promote") -> List.filter is_source_like_output outputs
+  | Some (List (Atom "promote" :: _)) -> List.filter is_source_like_output outputs
+  | Some _ -> []
+
 let resolved_ppx_argv packages =
   let ocamlfind = ocamlfind_cmd () in
   let outcome = Process.run_capture ocamlfind ("printppx" :: packages) in
@@ -967,6 +978,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
   let dir = relative_dir workspace_root dune_path in
   let* target = optional_atom_field "target" fields in
   let* targets = optional_atom_list_field "targets" fields in
+  let* mode = optional_single_value_field "mode" fields in
   let* explicit_deps = explicit_rule_deps ~dir fields in
   let outputs =
     match target with
@@ -999,6 +1011,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
         | Ok commands ->
             let* command = normalize_action_commands commands in
             let name, acc = generated_name acc "dune_action" in
+            let checked_in_sources = checked_in_sources_for_rule_mode outputs mode in
             let inferred =
               infer_action_deps ~workspace_root ~dir
                 ~outputs:(rebased_field_paths dir outputs)
@@ -1036,6 +1049,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                   | None -> Some dir);
                 deps;
                 outputs;
+                checked_in_sources;
                 stdin_path = command.stdin_path;
                 stdout = command.stdout;
               }
@@ -1361,6 +1375,11 @@ let render_action (action : raw_action) =
     | steps -> "steps = " ^ toml_array_array steps);
     "outputs = " ^ toml_array action.outputs;
   ]
+  @
+  (match action.checked_in_sources with
+  | [] -> []
+  | checked_in_sources ->
+      [ "checked_in_sources = " ^ toml_array checked_in_sources ])
   @
   (match action.deps with
   | [] -> []
