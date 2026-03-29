@@ -267,6 +267,44 @@ public_name = "demo-cli"
               "install metadata should point at the staged public library path";
             assert_string_contains ~needle:"\"path\": \"bin/demo-cli\"" metadata
               "install metadata should point at the staged public executable path")) );
+    ( "does not stage stale wrapper artifacts after wrapped mode flips",
+      (fun () ->
+        with_temp_dir "oasis-install-prune-wrapper" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+wrapped = true
+modules = ["greeting"]
+|};
+            write_source workspace "lib/greeting.ml"
+              {|let message = "wrapped"|};
+            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 first_build.status
+              "the initial wrapped build should succeed before stale-wrapper pruning is exercised";
+            let wrapper_cmi =
+              Filename.concat (Layout.library_out_dir workspace "core") "core.cmi"
+            in
+            assert_file_exists wrapper_cmi;
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["greeting"]
+|};
+            let prefix = Filename.concat workspace "_stage" in
+            let install =
+              run_oasis ~cwd:workspace
+                [ "install"; "--prefix"; prefix; "core" ]
+            in
+            assert_int_equal 0 install.status
+              "install should rebuild and stage the library after wrapped mode changes";
+            assert_true (not (Fs.exists wrapper_cmi))
+              "the stale generated wrapper interface should be pruned from the build directory";
+            assert_true
+              (not (Fs.exists (Filename.concat prefix "lib/core/core.cmi")))
+              "install should not stage stale wrapper artifacts after wrapped mode flips";
+            assert_file_exists (Filename.concat prefix "lib/core/greeting.cmi"))) );
     ( "reports member package paths in install summaries",
       (fun () ->
         with_temp_dir "oasis-install-package-paths" (fun workspace ->

@@ -1,4 +1,4 @@
-type plan = {
+type toplevel_plan = {
   target : Manifest.target;
   include_dirs : string list;
   package_resolution : Toolchain.package_resolution;
@@ -14,6 +14,19 @@ let ( let* ) = Result.bind
 type toplevel_build_status =
   | Built
   | Reused
+
+type plan_status =
+  | Build_needed
+  | Reusable
+
+type launch_plan = {
+  toplevel : toplevel_plan;
+  profile : string;
+  toplevel_status : plan_status;
+  runtime_args : string list;
+  script_path : string option;
+  stdin : string option;
+}
 
 let include_args include_dirs =
   List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
@@ -95,8 +108,8 @@ let toplevel_path ~workspace_root ~profile target =
 let toplevel_stamp_path ~workspace_root ~profile target =
   Layout.repl_stamp_path ~profile workspace_root (Manifest.target_name target)
 
-let toplevel_fingerprint ~session ~compiler_version target include_dirs
-    package_resolution env link_inputs =
+let toplevel_fingerprint ?(allow_missing_inputs = false) ~session
+    ~compiler_version target include_dirs package_resolution env link_inputs =
   let buffer = Buffer.create 256 in
   append_line buffer ("compiler-version " ^ compiler_version);
   append_line buffer ("tool ocamlmktop " ^ Toolchain.ocamlmktop_cmd ());
@@ -118,12 +131,16 @@ let toplevel_fingerprint ~session ~compiler_version target include_dirs
           append_line buffer
             ("input " ^ path ^ " " ^ Digest.to_hex (Digest.file path));
           Ok ())
+        else if allow_missing_inputs then (
+          append_line buffer ("input-missing " ^ path);
+          Ok ())
         else Error (Printf.sprintf "repl input does not exist: %s" path))
       (Ok ()) link_inputs
   in
   Ok (Buffer.contents buffer)
 
-let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
+let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
+    requested_target =
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
   let session = Toolchain.create_session () in
@@ -136,8 +153,10 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
   let* order = Builder.resolve_build_order workspace [ requested_name ] in
   let index = Builder.index_targets workspace in
   let* _ =
-    Builder.build ~workspace_root ~verbose ~requested_targets:[ requested_name ]
-      ~backend_request ?profile:(Some profile) workspace
+    if materialize_targets then
+      Builder.build ~workspace_root ~verbose ~requested_targets:[ requested_name ]
+        ~backend_request ?profile:(Some profile) workspace
+    else Ok { Builder.build_root = ""; artifacts = [] }
   in
   let library_outputs = Hashtbl.create 8 in
   let rec loop = function
@@ -169,7 +188,8 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
             library_outputs_for_names order closure library_outputs
           in
           let* fingerprint =
-            toplevel_fingerprint ~session ~compiler_version
+            toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets)
+              ~session ~compiler_version
               (Manifest.Library library) description.include_dirs
               description.package_resolution description.pipeline.options.env
               link_inputs
@@ -207,7 +227,8 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
           @ helper_object_files description executable.main
         in
         let* fingerprint =
-          toplevel_fingerprint ~session ~compiler_version
+          toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets)
+            ~session ~compiler_version
             (Manifest.Executable executable) description.include_dirs
             description.package_resolution description.pipeline.options.env
             link_inputs
@@ -244,7 +265,8 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
           @ helper_object_files description test.main
         in
         let* fingerprint =
-          toplevel_fingerprint ~session ~compiler_version (Manifest.Test test)
+          toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets)
+            ~session ~compiler_version (Manifest.Test test)
             description.include_dirs description.package_resolution
             description.pipeline.options.env link_inputs
         in
@@ -266,7 +288,7 @@ let target_plan ~workspace_root ~verbose ?profile workspace requested_target =
   in
   loop order
 
-let build_toplevel ~verbose (plan : plan) =
+let build_toplevel ~verbose (plan : toplevel_plan) =
   if
     Fs.exists plan.toplevel_path && Fs.exists plan.stamp_path
     && Fs.read_file plan.stamp_path = plan.fingerprint
@@ -284,23 +306,208 @@ let build_toplevel ~verbose (plan : plan) =
     Fs.write_file plan.stamp_path plan.fingerprint;
     Ok Built
 
-let run ~workspace_root ~verbose ?profile ?target ~args workspace =
-  let* plan = target_plan ~workspace_root ~verbose ?profile workspace target in
-  let* build_status = build_toplevel ~verbose plan in
-  let runtime_args = include_args plan.include_dirs @ args in
+let plan_status (plan : toplevel_plan) =
+  if
+    Fs.exists plan.toplevel_path && Fs.exists plan.stamp_path
+    && Fs.read_file plan.stamp_path = plan.fingerprint
+  then Reusable
+  else Build_needed
+
+let resolve_script_path path =
+  if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
+  else path
+
+let read_script path =
+  let resolved_path = resolve_script_path path |> Fs.realpath in
+  if not (Fs.exists resolved_path) then
+    Error (Printf.sprintf "repl script does not exist: %s" path)
+  else if Fs.is_directory resolved_path then
+    Error (Printf.sprintf "repl script is a directory, not a file: %s" path)
+  else Ok (resolved_path, Fs.read_file resolved_path)
+
+let launch_plan ~workspace_root ~verbose ?profile ?target ?script_path ~args
+    ~materialize_targets workspace =
+  let* toplevel =
+    target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
+      target
+  in
+  let* script_path, stdin =
+    match script_path with
+    | None -> Ok (None, None)
+    | Some path ->
+        let* resolved_path, contents = read_script path in
+        Ok (Some resolved_path, Some contents)
+  in
+  Ok
+    {
+      toplevel;
+      profile =
+        (match profile with
+        | Some profile when String.trim profile <> "" -> profile
+        | Some _ | None -> Manifest.default_profile workspace);
+      toplevel_status = plan_status toplevel;
+      runtime_args = include_args toplevel.include_dirs @ args;
+      script_path;
+      stdin;
+    }
+
+let json_string text = "\"" ^ String_util.json_escape text ^ "\""
+
+let json_array items = "[" ^ String.concat ", " items ^ "]"
+
+let render_binding_json (name, value) =
+  "{ \"name\": " ^ json_string name ^ ", \"value\": " ^ json_string value ^ " }"
+
+let render_package_path_json (name, path) =
+  "{ \"name\": " ^ json_string name ^ ", \"path\": " ^ json_string path ^ " }"
+
+let merged_env env =
+  Process.merged_environment_bindings env
+  |> List.sort (fun (left, _) (right, _) -> String.compare left right)
+
+let plan_status_name = function
+  | Build_needed -> "build-needed"
+  | Reusable -> "reusable"
+
+let render_plan (plan : launch_plan) =
+  let toplevel = plan.toplevel in
+  let package_names = toplevel.package_resolution.Toolchain.packages in
+  let package_paths = toplevel.package_resolution.Toolchain.package_paths in
+  let env_overrides =
+    match toplevel.env with
+    | [] -> [ "Env-overrides: none" ]
+    | bindings ->
+        "Env-overrides:" :: List.map (fun (name, value) -> "  " ^ name ^ "=" ^ value) bindings
+  in
+  let package_lines =
+    match package_paths with
+    | [] ->
+        [
+          "Packages: "
+          ^
+          (match package_names with
+          | [] -> "none"
+          | names -> String.concat ", " names);
+        ]
+    | package_paths ->
+        [
+          "Packages: "
+          ^
+          (match package_names with
+          | [] -> "none"
+          | names -> String.concat ", " names);
+          "Package-paths:";
+        ]
+        @ List.map
+            (fun (name, path) -> "  " ^ name ^ " -> " ^ path)
+            package_paths
+  in
+  String.concat "\n"
+    ([
+       "Profile: " ^ plan.profile;
+       "Target: "
+       ^ Manifest.target_kind_name toplevel.target
+       ^ " "
+       ^ Manifest.target_display_name toplevel.target;
+       "Toplevel: " ^ toplevel.toplevel_path;
+       "Toplevel-status: " ^ plan_status_name plan.toplevel_status;
+       "Runtime-command: "
+       ^ Process.render ~env:toplevel.env toplevel.toplevel_path plan.runtime_args;
+       "Script-stdin: "
+       ^
+       (match plan.script_path with
+       | Some path -> path
+       | None -> "none");
+       "Include-dirs:";
+     ]
+    @ List.map (fun dir -> "  " ^ dir) toplevel.include_dirs
+    @ [ "Link-inputs:" ]
+    @ List.map (fun path -> "  " ^ path) toplevel.link_inputs
+    @ package_lines
+    @ env_overrides
+    @ [ "" ])
+
+let render_json_plan (plan : launch_plan) =
+  let toplevel = plan.toplevel in
+  String.concat "\n"
+    [
+      "{";
+      "  \"profile\": " ^ json_string plan.profile ^ ",";
+      "  \"target\": {";
+      "    \"kind\": "
+      ^ json_string (Manifest.target_kind_name toplevel.target)
+      ^ ",";
+      "    \"name\": "
+      ^ json_string (Manifest.target_name toplevel.target)
+      ^ ",";
+      "    \"display_name\": "
+      ^ json_string (Manifest.target_display_name toplevel.target);
+      "  },";
+      "  \"toplevel_path\": " ^ json_string toplevel.toplevel_path ^ ",";
+      "  \"toplevel_status\": "
+      ^ json_string (plan_status_name plan.toplevel_status)
+      ^ ",";
+      "  \"runtime_args\": "
+      ^ json_array (List.map json_string plan.runtime_args)
+      ^ ",";
+      "  \"runtime_command\": "
+      ^ json_string
+          (Process.render ~env:toplevel.env toplevel.toplevel_path plan.runtime_args)
+      ^ ",";
+      "  \"script_path\": "
+      ^
+      (match plan.script_path with
+      | Some path -> json_string path
+      | None -> "null")
+      ^ ",";
+      "  \"include_dirs\": "
+      ^ json_array (List.map json_string toplevel.include_dirs)
+      ^ ",";
+      "  \"link_inputs\": "
+      ^ json_array (List.map json_string toplevel.link_inputs)
+      ^ ",";
+      "  \"packages\": "
+      ^ json_array
+          (List.map json_string toplevel.package_resolution.Toolchain.packages)
+      ^ ",";
+      "  \"package_paths\": "
+      ^ json_array
+          (List.map render_package_path_json
+             toplevel.package_resolution.Toolchain.package_paths)
+      ^ ",";
+      "  \"env_overrides\": "
+      ^ json_array (List.map render_binding_json toplevel.env)
+      ^ ",";
+      "  \"env\": "
+      ^ json_array (List.map render_binding_json (merged_env toplevel.env));
+      "}";
+      "";
+    ]
+
+let report ~workspace_root ~verbose ?profile ?target ?script_path ~args workspace =
+  launch_plan ~workspace_root ~verbose ?profile ?target ?script_path ~args
+    ~materialize_targets:false workspace
+
+let run ~workspace_root ~verbose ?profile ?target ?script_path ~args workspace =
+  let* plan =
+    launch_plan ~workspace_root ~verbose ?profile ?target ?script_path ~args
+      ~materialize_targets:true workspace
+  in
+  let* build_status = build_toplevel ~verbose plan.toplevel in
   print_endline
     (Printf.sprintf
        (match build_status with
        | Built -> "Built repl toplevel for %s %s -> %s"
        | Reused -> "Up to date repl toplevel for %s %s -> %s")
-       (Manifest.target_kind_name plan.target)
-       (Manifest.target_display_name plan.target)
-       plan.toplevel_path);
+       (Manifest.target_kind_name plan.toplevel.target)
+       (Manifest.target_display_name plan.toplevel.target)
+       plan.toplevel.toplevel_path);
   print_endline
     (Printf.sprintf "Launching repl for %s %s -> %s"
-       (Manifest.target_kind_name plan.target)
-       (Manifest.target_display_name plan.target)
-       plan.toplevel_path);
+       (Manifest.target_kind_name plan.toplevel.target)
+       (Manifest.target_display_name plan.toplevel.target)
+       plan.toplevel.toplevel_path);
   Ok
-    (Process.run_status ~verbose ~env:plan.env plan.toplevel_path runtime_args)
+    (Process.run_status ~verbose ~env:plan.toplevel.env ?stdin:plan.stdin
+       plan.toplevel.toplevel_path plan.runtime_args)
       .Process.unix_status

@@ -338,6 +338,43 @@ modules = ["core"]
               ~needle:"reserved wrapper stem 'core'"
               build.output
               "wrapped-library collisions should explain the reserved stem")) );
+    ( "prunes stale compiled outputs when a target's module list shrinks",
+      (fun () ->
+        with_temp_dir "oasis-prune-stale-modules" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core", "stale"]
+|};
+            write_source workspace "lib/core.ml" {|let value = "core"|};
+            write_source workspace "lib/stale.ml" {|let value = "stale"|};
+            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 first_build.status
+              "the initial build should succeed before stale-output pruning is exercised";
+            let out_dir = Layout.library_out_dir workspace "core" in
+            let stale_paths =
+              List.map (Filename.concat out_dir)
+                [ "stale.cmi"; "stale.cmo"; "stale.cmx"; "stale.o" ]
+            in
+            assert_true (List.exists Fs.exists stale_paths)
+              "the initial build should leave compiled outputs for the removed module";
+            write_manifest workspace
+              {|
+[library.core]
+dir = "lib"
+modules = ["core"]
+|};
+            let second_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            assert_int_equal 0 second_build.status
+              "rebuilding after the module list shrinks should still succeed";
+            List.iter
+              (fun path ->
+                assert_true (not (Fs.exists path))
+                  (Printf.sprintf
+                     "stale compiled outputs should be removed after the target shape changes: %s"
+                     path))
+              stale_paths)) );
     ( "reuses artifacts when inputs are unchanged",
       (fun () ->
         with_fixture "hello" (fun workspace ->

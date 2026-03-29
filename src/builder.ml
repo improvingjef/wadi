@@ -923,6 +923,25 @@ let expected_module_outputs backend out_dir stem =
         Filename.concat out_dir (stem ^ ".cmo");
       ]
 
+let prunable_output_suffixes =
+  [ ".cmi"; ".cmo"; ".cmx"; ".cmxa"; ".cma"; ".a"; ".o" ]
+
+let is_prunable_output path =
+  (not (Sys.is_directory path))
+  && List.exists
+       (fun suffix -> String_util.ends_with ~suffix path)
+       prunable_output_suffixes
+
+let prune_stale_build_outputs ~out_dir ~expected_outputs =
+  if Fs.exists out_dir && Fs.is_directory out_dir then
+    let expected = Hashtbl.create (List.length expected_outputs) in
+    List.iter (fun path -> Hashtbl.replace expected path ()) expected_outputs;
+    Sys.readdir out_dir
+    |> Array.iter (fun name ->
+           let path = Filename.concat out_dir name in
+           if is_prunable_output path && not (Hashtbl.mem expected path) then
+             Fs.remove_tree path)
+
 let ppx_args ~workspace_root (ppx_tools : Manifest.ppx_tool list) =
   List.concat_map
     (fun tool -> [ "-ppx"; ppx_command_string ~workspace_root tool ])
@@ -1541,6 +1560,17 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
   in
   let source_table = ordered_source_table description.prepared_sources in
   let display_name = library.name ^ Manifest.package_suffix library.package_path in
+  let expected_outputs =
+    List.concat_map
+      (expected_module_outputs backend description.out_dir)
+      description.ordered_modules
+    @ [ description.archive ]
+    @
+    (match backend with
+    | Toolchain.Native -> [ static_archive_path description.archive ]
+    | Toolchain.Bytecode -> [])
+  in
+  prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
       description.json_report;
@@ -1818,6 +1848,13 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
   let display_name =
     runnable.name ^ Manifest.package_suffix runnable.package_path
   in
+  let expected_outputs =
+    List.concat_map
+      (expected_module_outputs backend description.out_dir)
+      description.source_order
+    @ [ description.binary ]
+  in
+  prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
       description.json_report;

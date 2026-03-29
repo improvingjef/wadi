@@ -83,3 +83,7 @@
 - A generated namespace wrapper has to reserve the library-name stem up front. Letting checked-in `core.ml`, action outputs, and an auto-generated wrapper compete for the same module name would turn migration into guesswork.
 - REPL latency is a fingerprinting problem, not a REPL problem. Once the toplevel stamp closes over linked archives, helper objects, toolchain facts, and env bindings, `ocamlmktop` becomes skippable on the common no-op path.
 - Changed-only env reports become genuinely readable only after empty contexts disappear too. Showing a `runtime` block with no deltas is just another form of noise.
+- Noninteractive REPL automation gets much less fragile once the subtool owns script transport explicitly. Feeding `oasis repl --script` through stdin avoids depending on OCaml toplevel quirks about when a trailing path is treated like a script versus just another argv.
+- Editor-facing REPL support needs a plan, not just a launch command. Include dirs, linked units, env bindings, and the eventual toplevel path are the real integration surface, so `oasis repl --plan --json` is more valuable than telling users to scrape terminal output.
+- Build caching is only half the job; artifact hygiene matters too. If stale `.cmi`/`.cmx` files survive a module-list change or wrapped-mode flip, `oasis install` quietly stages lies.
+- File-valued CLI flags expose a completion gap immediately. Directory-mode path completion is a decent fallback for `--workspace`, but `--script` really wants a protocol branch that can hand shells full file completion again.

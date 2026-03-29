@@ -187,7 +187,7 @@ main = "main"
               ~needle:"oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]"
               run.output "top-level usage should include the env command";
             assert_string_contains
-              ~needle:"oasis repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]"
+              ~needle:"oasis repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]"
               run.output "top-level usage should include the repl command";
             assert_string_contains
               ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]"

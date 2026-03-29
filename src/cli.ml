@@ -57,6 +57,9 @@ type repl_options = {
   target : string option;
   args : string list;
   profile : string option;
+  script_path : string option;
+  plan : bool;
+  json : bool;
 }
 
 type install_options = {
@@ -235,6 +238,22 @@ let current_option =
       "Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources.";
   }
 
+let plan_option =
+  {
+    usage = "--plan";
+    flags = [ "--plan" ];
+    description =
+      "Print the resolved REPL plan and exit without launching the toplevel.";
+  }
+
+let script_option =
+  {
+    usage = "--script PATH";
+    flags = [ "--script" ];
+    description =
+      "Read noninteractive toplevel phrases from PATH via stdin instead of passing a script file as an OCaml argv.";
+  }
+
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
 
 let completion_protocol_name = "__oasis_completion"
@@ -395,14 +414,25 @@ let repl_doc =
     summary =
       "Build a bytecode toplevel with workspace libraries and packages already wired in.";
     signature =
-      "oasis repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]";
+      "oasis repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]";
     examples =
       [
         "oasis repl core";
         "oasis repl demo";
+        "oasis repl --plan --json core";
+        "oasis repl core --script scripts/session.ml -- -noinit -noprompt";
         "oasis repl --profile release core -- -noinit -noprompt";
       ];
-    options = [ workspace_option; profile_option; verbose_option; help_option ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        verbose_option;
+        plan_option;
+        json_option;
+        script_option;
+        help_option;
+      ];
     completion_words = [];
   }
 
@@ -1007,6 +1037,11 @@ let parse_repl_args (args : string list) : (repl_options, string) result =
     | "--profile" :: [] -> Error "--profile requires a name"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
+    | "--plan" :: rest -> loop { options with plan = true } rest
+    | "--json" :: rest -> loop { options with json = true } rest
+    | "--script" :: path :: rest ->
+        loop { options with script_path = Some path } rest
+    | "--script" :: [] -> Error "--script requires a path"
     | "--help" :: _ -> Error (command_usage repl_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -1015,9 +1050,23 @@ let parse_repl_args (args : string list) : (repl_options, string) result =
         | None -> loop { options with target = Some value } rest
         | Some _ -> Error "repl accepts at most one target before --")
   in
-  loop
-    { workspace_dir = "."; verbose = false; target = None; args = []; profile = None }
-    args
+  let* options =
+    loop
+      {
+        workspace_dir = ".";
+        verbose = false;
+        target = None;
+        args = [];
+        profile = None;
+        script_path = None;
+        plan = false;
+        json = false;
+      }
+      args
+  in
+  if options.json && not options.plan then
+    Error "repl --json requires --plan"
+  else Ok options
 
 let parse_toolchain_args args =
   match args with
@@ -1271,7 +1320,7 @@ let find_command_doc name =
 
 let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
-  | "--output" ->
+  | "--output" | "--script" ->
       true
   | _ -> false
 
@@ -1336,11 +1385,11 @@ let value_completion_candidates ?workspace = function
           List.map (fun word -> candidate word) (profile_names workspace)
       | None -> [])
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
-  | "--workspace" | "--prefix" | "--destdir" | "--output" -> []
+  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script" -> []
   | _ -> []
 
 let value_completion_response ?workspace = function
-  | "--workspace" | "--prefix" | "--destdir" | "--output" ->
+  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script" ->
       Complete_directories
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
@@ -1593,13 +1642,27 @@ let run_repl (options : repl_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
   | Ok workspace -> (
-      match
-        Repl.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
-          ?profile:options.profile ?target:options.target ~args:options.args
-          workspace
-      with
-      | Ok status -> Forward_status status
-      | Error message -> report_error message)
+      if options.plan then
+        match
+          Repl.report ~workspace_root:options.workspace_dir
+            ~verbose:options.verbose ?profile:options.profile
+            ?target:options.target ?script_path:options.script_path
+            ~args:options.args workspace
+        with
+        | Ok plan ->
+            print_string
+              (if options.json then Repl.render_json_plan plan
+               else Repl.render_plan plan);
+            Exit_code 0
+        | Error message -> report_error message
+      else
+        match
+          Repl.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
+            ?profile:options.profile ?target:options.target
+            ?script_path:options.script_path ~args:options.args workspace
+        with
+        | Ok status -> Forward_status status
+        | Error message -> report_error message)
 
 let run_install (options : install_options) =
   match load_workspace options.workspace_dir with

@@ -149,17 +149,22 @@ Build a bytecode toplevel with workspace libraries and packages already wired in
 
 Usage:
 
-`oasis repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]`
+`oasis repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
 - `--verbose, -v`: Print detailed process execution as commands run.
+- `--plan`: Print the resolved REPL plan and exit without launching the toplevel.
+- `--json`: Print machine-readable JSON output instead of the text report.
+- `--script PATH`: Read noninteractive toplevel phrases from PATH via stdin instead of passing a script file as an OCaml argv.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis repl core`
 - `oasis repl demo`
+- `oasis repl --plan --json core`
+- `oasis repl core --script scripts/session.ml -- -noinit -noprompt`
 - `oasis repl --profile release core -- -noinit -noprompt`
 
 ## install
