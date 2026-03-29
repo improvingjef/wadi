@@ -46,6 +46,9 @@ let resolve_profile workspace = function
   | Some profile when String.trim profile <> "" -> profile
   | Some _ | None -> Manifest.default_profile workspace
 
+let display_name name package_path =
+  name ^ Manifest.package_suffix package_path
+
 let target_index (workspace : Manifest.workspace) =
   let index = Hashtbl.create (List.length workspace.targets) in
   List.iter
@@ -80,6 +83,13 @@ let test_targets (workspace : Manifest.workspace) =
       | Manifest.Test test -> Some test
       | Manifest.Library _ | Manifest.Executable _ -> None)
     workspace.targets
+
+type bench_request = {
+  name : string;
+  package_path : string option;
+  executable : Manifest.executable;
+  env : Manifest.env_binding list;
+}
 
 let installable_targets (workspace : Manifest.workspace) =
   List.filter
@@ -147,28 +157,76 @@ let resolve_test_targets workspace requested_targets =
 
 let resolve_bench_targets workspace requested_targets =
   let requested_targets = String_util.dedup_preserve requested_targets in
+  let executable_request (executable : Manifest.executable) =
+    { name = executable.name; package_path = executable.package_path; executable; env = [] }
+  in
+  let declared_bench_request (bench : Manifest.bench_target) =
+    match
+      List.find_opt
+        (fun target -> Manifest.target_name target = bench.executable)
+        workspace.Manifest.targets
+    with
+    | Some (Manifest.Executable executable) ->
+        Ok
+          {
+            name = bench.name;
+            package_path = bench.package_path;
+            executable;
+            env = bench.env;
+          }
+    | Some (Manifest.Library _) ->
+        Error
+          (Printf.sprintf
+             "bench '%s' points at library '%s'; oasis env bench requires executable targets"
+             bench.name bench.executable)
+    | Some (Manifest.Test _) ->
+        Error
+          (Printf.sprintf
+             "bench '%s' points at test '%s'; oasis env bench requires executable targets"
+             bench.name bench.executable)
+    | None ->
+        Error
+          (Printf.sprintf "bench '%s' points at unknown executable '%s'" bench.name
+             bench.executable)
+  in
   if requested_targets = [] then
-    match executable_targets workspace with
-    | [] -> Error "workspace does not define any executables to benchmark"
-    | executables -> Ok executables
+    match workspace.Manifest.benches with
+    | bench :: benches ->
+        let rec loop acc = function
+          | [] -> Ok (List.rev acc)
+          | bench :: rest ->
+              let* resolved = declared_bench_request bench in
+              loop (resolved :: acc) rest
+        in
+        loop [] (bench :: benches)
+    | [] -> (
+        match executable_targets workspace with
+        | [] -> Error "workspace does not define any benchmarks or executables to benchmark"
+        | executables -> Ok (List.map executable_request executables))
   else
     let index = target_index workspace in
     let rec loop acc = function
       | [] -> Ok (List.rev acc)
       | name :: rest -> (
-          match Hashtbl.find_opt index name with
-          | Some (Manifest.Executable executable) -> loop (executable :: acc) rest
-          | Some (Manifest.Library _) ->
-              Error
-                (Printf.sprintf
-                   "target '%s' is a library; oasis env bench only supports executables"
-                   name)
-          | Some (Manifest.Test _) ->
-              Error
-                (Printf.sprintf
-                   "target '%s' is a test; oasis env bench only supports executables"
-                   name)
-          | None -> Error (Printf.sprintf "unknown target '%s'" name))
+          match Manifest.find_bench workspace name with
+          | Some bench ->
+              let* resolved = declared_bench_request bench in
+              loop (resolved :: acc) rest
+          | None -> (
+              match Hashtbl.find_opt index name with
+              | Some (Manifest.Executable executable) ->
+                  loop (executable_request executable :: acc) rest
+              | Some (Manifest.Library _) ->
+                  Error
+                    (Printf.sprintf
+                       "target '%s' is a library; oasis env bench only supports executables or [bench.*] declarations"
+                       name)
+              | Some (Manifest.Test _) ->
+                  Error
+                    (Printf.sprintf
+                       "target '%s' is a test; oasis env bench only supports executables or [bench.*] declarations"
+                       name)
+              | None -> Error (Printf.sprintf "unknown target '%s'" name)))
     in
     loop [] requested_targets
 
@@ -298,16 +356,18 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
                   "runtime" [])
               tests )
     | Bench ->
-        let* executables = resolve_bench_targets workspace requested_targets in
+        let* benches = resolve_bench_targets workspace requested_targets in
         Ok
-          ( List.map (fun (executable : Manifest.executable) -> executable.name) executables,
+          ( List.map
+              (fun (bench : bench_request) -> bench.executable.name)
+              benches,
             List.map
-              (fun (executable : Manifest.executable) ->
+              (fun (bench : bench_request) ->
                 context ~changed_only ~host_env
-                  (Printf.sprintf "executable %s"
-                     (Manifest.target_display_name (Manifest.Executable executable)))
-                  "runtime" [])
-              executables )
+                  (Printf.sprintf "bench %s"
+                     (display_name bench.name bench.package_path))
+                  "runtime" bench.env)
+              benches )
     | Install ->
         let* targets = resolve_install_targets workspace requested_targets in
         Ok (List.map Manifest.target_name targets, [])

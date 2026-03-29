@@ -42,6 +42,7 @@ PACKAGE_DIR=$OUTPUT_DIR/package
 mkdir -p \
   "$OUTPUT_DIR/docs" \
   "$OUTPUT_DIR/completions" \
+  "$PACKAGE_DIR/share/doc/oasis" \
   "$PACKAGE_DIR/share/bash-completion/completions" \
   "$PACKAGE_DIR/share/zsh/site-functions" \
   "$PACKAGE_DIR/share/fish/vendor_completions.d"
@@ -51,6 +52,8 @@ mkdir -p \
 "$OASIS_BIN" completion zsh >"$OUTPUT_DIR/completions/_oasis"
 "$OASIS_BIN" completion fish >"$OUTPUT_DIR/completions/oasis.fish"
 
+cp "$OUTPUT_DIR/docs/cli.md" \
+  "$PACKAGE_DIR/share/doc/oasis/cli.md"
 cp "$OUTPUT_DIR/completions/oasis.bash" \
   "$PACKAGE_DIR/share/bash-completion/completions/oasis"
 cp "$OUTPUT_DIR/completions/_oasis" \

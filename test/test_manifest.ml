@@ -138,6 +138,45 @@ deps = ["core"]
             assert_string_equal "unit" test.name
               "test name should come from the section path"
         | _ -> fail "unexpected target layout in parsed workspace")) ;
+    ( "parses dedicated bench declarations",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[executable.demo]
+dir = "app"
+main = "main"
+
+[bench.quick]
+executable = "demo"
+argv = ["--quick"]
+env = ["BENCH_MODE=quick"]
+warmup = 0
+iterations = 7
+description = "quick smoke benchmark"
+|})
+        in
+        match workspace.Manifest.benches with
+        | [ bench ] ->
+            assert_string_equal "quick" bench.name
+              "bench names should come from the section path";
+            assert_string_equal "demo" bench.executable
+              "bench declarations should reference executable targets by name";
+            assert_string_equal "--quick" (List.hd bench.argv)
+              "bench declarations should preserve argv";
+            assert_string_equal "quick" (env_value "BENCH_MODE" bench.env)
+              "bench declarations should parse env bindings";
+            assert_true (bench.warmup = Some 0)
+              "bench declarations should preserve warmup overrides";
+            assert_true (bench.iterations = Some 7)
+              "bench declarations should preserve iteration overrides";
+            assert_string_equal "quick smoke benchmark"
+              (match bench.description with
+              | Some description -> description
+              | None -> fail "expected bench description")
+              "bench declarations should parse optional descriptions"
+        | _ -> fail "expected a single parsed bench declaration")) ;
     ( "parses external package declarations",
       (fun () ->
         let workspace =

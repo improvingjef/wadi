@@ -53,6 +53,17 @@ type executable = runnable
 
 type test_target = runnable
 
+type bench_target = {
+  name : string;
+  package_path : string option;
+  executable : string;
+  argv : string list;
+  env : env_binding list;
+  warmup : int option;
+  iterations : int option;
+  description : string option;
+}
+
 type command_tool = {
   name : string;
   package_path : string option;
@@ -105,6 +116,7 @@ type workspace = {
   version : int;
   defaults : workspace_defaults;
   targets : target list;
+  benches : bench_target list;
   actions : action list;
   preprocessors : command_tool list;
   ppx_tools : ppx_tool list;
@@ -199,6 +211,9 @@ let target_display_name target =
 
 let action_display_name (action : action) =
   action.name ^ package_suffix action.package_path
+
+let bench_display_name (bench : bench_target) =
+  bench.name ^ package_suffix bench.package_path
 
 let action_commands (action : action) = action.steps
 
@@ -401,9 +416,16 @@ let optional_strings path section field =
   match find_binding field section.bindings with
   | None -> Ok []
   | Some { value = Strings values; _ } -> Ok values
+    | Some binding ->
+        error path binding.line
+          (Printf.sprintf "field '%s' must be an array of strings" field)
+
+let optional_int path section field =
+  match find_binding field section.bindings with
+  | None -> Ok None
+  | Some { value = Int value; _ } -> Ok (Some value)
   | Some binding ->
-      error path binding.line
-        (Printf.sprintf "field '%s' must be an array of strings" field)
+      error path binding.line (Printf.sprintf "field '%s' must be an integer" field)
 
 let required_strings path section field =
   match find_binding field section.bindings with
@@ -754,6 +776,48 @@ let parse_executable path section name =
 let parse_test path section name =
   let* test = parse_runnable path section name in
   Ok (Test test)
+
+let parse_bench path section name =
+  let* () =
+    allowed_fields path section
+      [ "executable"; "argv"; "env"; "warmup"; "iterations"; "description" ]
+  in
+  let* executable = required_string path section "executable" in
+  let* argv = optional_strings path section "argv" in
+  let* env = optional_env_bindings path section "env" in
+  let* warmup = optional_int path section "warmup" in
+  let* iterations = optional_int path section "iterations" in
+  let* description = optional_string path section "description" in
+  let* () =
+    validate_identifier_list ~allow_empty:true path section.line "executable"
+      [ executable ]
+  in
+  let* () = validate_string_list path section.line "argv" argv in
+  let* () =
+    match warmup with
+    | None | Some 0 | Some 1 | Some 2 | Some 3 | Some 4 | Some 5 | Some 6
+    | Some 7 | Some 8 | Some 9 ->
+        Ok ()
+    | Some value when value > 0 -> Ok ()
+    | Some _ -> error path section.line "warmup must be zero or greater"
+  in
+  let* () =
+    match iterations with
+    | None -> Ok ()
+    | Some value when value > 0 -> Ok ()
+    | Some _ -> error path section.line "iterations must be a positive integer"
+  in
+  Ok
+    {
+      name;
+      package_path = None;
+      executable;
+      argv;
+      env;
+      warmup;
+      iterations;
+      description;
+    }
 
 let parse_action path section name =
   let* () =
@@ -1165,6 +1229,11 @@ let find_action (workspace : workspace) ?package_path (name : string) =
     (fun (action : action) -> action.name)
     (fun (action : action) -> action.package_path)
 
+let find_bench (workspace : workspace) ?package_path (name : string) =
+  find_scoped name package_path workspace.benches
+    (fun (bench : bench_target) -> bench.name)
+    (fun (bench : bench_target) -> bench.package_path)
+
 let find_preprocessor (workspace : workspace) ?package_path (name : string) =
   find_scoped name package_path workspace.preprocessors
     (fun (tool : command_tool) -> tool.name)
@@ -1221,6 +1290,9 @@ let rebase_target member_path = function
           package_path = Some member_path;
         }
 
+let rebase_bench member_path (bench : bench_target) =
+  { bench with package_path = Some member_path }
+
 let rebase_action member_path (action : action) =
   {
     action with
@@ -1275,10 +1347,14 @@ let load_local path =
         let sections = List.rev sections in
         let top_level = List.rev top_level in
         let* name, version, members = parse_top_level path top_level in
-        let rec collect_sections defaults_opt targets actions preprocessors ppx_tools
-            profiles overrides = function
+        let rec collect_sections defaults_opt targets benches actions preprocessors
+            ppx_tools profiles overrides = function
           | [] ->
               let* () = validate_unique_target_names path (List.rev targets) in
+              let* () =
+                validate_unique_named path "bench"
+                  (List.map (fun (bench : bench_target) -> (bench.name, 1)) benches)
+              in
               let* () =
                 validate_unique_named path "action"
                   (List.map (fun (action : action) -> (action.name, 1)) actions)
@@ -1308,6 +1384,7 @@ let load_local path =
                         | Some defaults -> defaults
                         | None -> default_defaults);
                       targets;
+                      benches = List.rev benches;
                       actions = List.rev actions;
                       preprocessors = List.rev preprocessors;
                       ppx_tools = List.rev ppx_tools;
@@ -1324,56 +1401,60 @@ let load_local path =
                     | None -> Ok ()
                     | Some _ -> error path section.line "duplicate [defaults] section"
                   in
-                  collect_sections (Some defaults) targets actions preprocessors
-                    ppx_tools profiles overrides rest
+                  collect_sections (Some defaults) targets benches actions
+                    preprocessors ppx_tools profiles overrides rest
               | [ "library"; target_name ] ->
                   let* target = parse_library path section target_name in
-                  collect_sections defaults_opt (target :: targets) actions
+                  collect_sections defaults_opt (target :: targets) benches actions
                     preprocessors ppx_tools profiles overrides rest
               | [ "executable"; target_name ] ->
                   let* target = parse_executable path section target_name in
-                  collect_sections defaults_opt (target :: targets) actions
+                  collect_sections defaults_opt (target :: targets) benches actions
                     preprocessors ppx_tools profiles overrides rest
               | [ "test"; target_name ] ->
                   let* target = parse_test path section target_name in
-                  collect_sections defaults_opt (target :: targets) actions
+                  collect_sections defaults_opt (target :: targets) benches actions
+                    preprocessors ppx_tools profiles overrides rest
+              | [ "bench"; bench_name ] ->
+                  let* bench = parse_bench path section bench_name in
+                  collect_sections defaults_opt targets (bench :: benches) actions
                     preprocessors ppx_tools profiles overrides rest
               | [ "action"; action_name ] ->
                   let* action = parse_action path section action_name in
-                  collect_sections defaults_opt targets (action :: actions)
+                  collect_sections defaults_opt targets benches (action :: actions)
                     preprocessors ppx_tools profiles overrides rest
               | [ "preprocess"; tool_name ] ->
                   let* tool =
                     parse_command_tool "preprocess" path section tool_name
                   in
-                  collect_sections defaults_opt targets actions
+                  collect_sections defaults_opt targets benches actions
                     (tool :: preprocessors) ppx_tools profiles overrides rest
               | [ "ppx"; tool_name ] ->
                   let* tool = parse_ppx_tool path section tool_name in
-                  collect_sections defaults_opt targets actions preprocessors
+                  collect_sections defaults_opt targets benches actions preprocessors
                     (tool :: ppx_tools) profiles overrides rest
               | [ "profile"; profile_name ] ->
                   let* profile = parse_profile path section profile_name in
-                  collect_sections defaults_opt targets actions preprocessors
+                  collect_sections defaults_opt targets benches actions preprocessors
                     ppx_tools (profile :: profiles) overrides rest
               | [ "profile"; profile_name; target_kind; target_name ] ->
                   let* override =
                     parse_profile_override path section profile_name target_kind
                       target_name
                   in
-                  collect_sections defaults_opt targets actions preprocessors
+                  collect_sections defaults_opt targets benches actions preprocessors
                     ppx_tools profiles (override :: overrides) rest
               | [ kind; _ ] ->
                   error path section.line
                     (Printf.sprintf
                        "unknown section kind '%s'; expected defaults, action, \
-                        preprocess, ppx, profile, library, executable, or test"
+                        preprocess, ppx, profile, library, executable, test, or bench"
                        kind)
               | _ ->
                   error path section.line
                     "section path is not supported by this manifest version")
         in
-        collect_sections None [] [] [] [] [] [] sections
+        collect_sections None [] [] [] [] [] [] [] sections
     | raw_line :: rest ->
         let line = raw_line |> String_util.strip_comment |> String.trim in
         if line = "" then
@@ -1413,19 +1494,26 @@ let rec load path =
   else
     let root_workspace = loaded.workspace in
     let root_dir = Filename.dirname path in
-    let rec load_members merged_targets merged_actions merged_preprocessors
-        merged_ppx_tools = function
+    let rec load_members merged_targets merged_benches merged_actions
+        merged_preprocessors merged_ppx_tools = function
       | [] ->
           let merged_workspace =
             {
               root_workspace with
               targets = List.rev merged_targets;
+              benches = List.rev merged_benches;
               actions = List.rev merged_actions;
               preprocessors = List.rev merged_preprocessors;
               ppx_tools = List.rev merged_ppx_tools;
             }
           in
           let* () = validate_unique_target_names path merged_workspace.targets in
+          let* () =
+            validate_unique_named path "bench"
+              (List.map
+                 (fun (bench : bench_target) -> (bench.name, 1))
+                 merged_workspace.benches)
+          in
           Ok merged_workspace
       | member_path :: rest ->
           let member_dir = Filename.concat root_dir member_path in
@@ -1463,6 +1551,9 @@ let rec load path =
           let rebased_targets =
             List.map (rebase_target member_path) member_workspace.targets
           in
+          let rebased_benches =
+            List.map (rebase_bench member_path) member_workspace.benches
+          in
           let rebased_actions =
             List.map (rebase_action member_path) member_workspace.actions
           in
@@ -1474,11 +1565,13 @@ let rec load path =
           in
           load_members
             (List.rev_append rebased_targets merged_targets)
+            (List.rev_append rebased_benches merged_benches)
             (List.rev_append rebased_actions merged_actions)
             (List.rev_append rebased_preprocessors merged_preprocessors)
             (List.rev_append rebased_ppx_tools merged_ppx_tools)
             rest
     in
-    load_members (List.rev root_workspace.targets) (List.rev root_workspace.actions)
-      (List.rev root_workspace.preprocessors) (List.rev root_workspace.ppx_tools)
+    load_members (List.rev root_workspace.targets) (List.rev root_workspace.benches)
+      (List.rev root_workspace.actions) (List.rev root_workspace.preprocessors)
+      (List.rev root_workspace.ppx_tools)
       loaded.members

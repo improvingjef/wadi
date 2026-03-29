@@ -30,8 +30,8 @@ type bench_options = {
   backend_request : Toolchain.backend_request;
   profile : string option;
   json : bool;
-  warmup : int;
-  iterations : int;
+  warmup : int option;
+  iterations : int option;
 }
 
 type clean_options = {
@@ -1025,11 +1025,11 @@ let parse_bench_args (args : string list) : (bench_options, string) result =
     | "--json" :: rest -> loop { options with json = true } rest
     | "--warmup" :: value :: rest ->
         let* warmup = parse_count "--warmup" value in
-        loop { options with warmup } rest
+        loop { options with warmup = Some warmup } rest
     | "--warmup" :: [] -> Error "--warmup requires an integer"
     | "--iterations" :: value :: rest ->
         let* iterations = parse_iterations value in
-        loop { options with iterations } rest
+        loop { options with iterations = Some iterations } rest
     | "--iterations" :: [] -> Error "--iterations requires an integer"
     | "--help" :: _ -> Error (command_usage bench_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
@@ -1044,8 +1044,8 @@ let parse_bench_args (args : string list) : (bench_options, string) result =
       backend_request = default_backend_request;
       profile = None;
       json = false;
-      warmup = 1;
-      iterations = 5;
+      warmup = None;
+      iterations = None;
     }
     args
 
@@ -1409,6 +1409,13 @@ let executable_target_candidates workspace =
       | Manifest.Library _ | Manifest.Test _ -> None)
     workspace.Manifest.targets
 
+let bench_target_candidates workspace =
+  List.map
+    (fun (bench : Manifest.bench_target) ->
+      candidate ?hint:bench.package_path bench.name)
+    workspace.Manifest.benches
+  @ executable_target_candidates workspace
+
 let test_target_names workspace =
   List.filter_map
     (function
@@ -1486,7 +1493,7 @@ let positional_completion_candidates ?workspace command_name rest =
             executable_target_candidates workspace
           else []
       | "test" -> test_target_candidates workspace
-      | "bench" -> executable_target_candidates workspace
+      | "bench" -> bench_target_candidates workspace
       | "repl" ->
           if positional_argument_count rest = 0 then
             List.map target_candidate workspace.Manifest.targets
@@ -1497,6 +1504,7 @@ let positional_completion_candidates ?workspace command_name rest =
           | [ "build" ] -> List.map target_candidate workspace.Manifest.targets
           | [ "run" ] -> executable_target_candidates workspace
           | [ "test" ] -> test_target_candidates workspace
+          | [ "bench" ] -> bench_target_candidates workspace
           | [ "install" ] -> installable_target_candidates workspace
           | _ -> [] )
       | "install" -> installable_target_candidates workspace
@@ -1721,8 +1729,8 @@ let run_bench (options : bench_options) =
       match
         Bench.report ~workspace_root:options.workspace_dir
           ~verbose:options.verbose ~backend_request:options.backend_request
-          ?profile:options.profile ~warmup:options.warmup
-          ~iterations:options.iterations ~requested_targets:options.targets
+          ?profile:options.profile ?warmup:options.warmup
+          ?iterations:options.iterations ~requested_targets:options.targets
           workspace
       with
       | Ok summaries ->

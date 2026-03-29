@@ -47,6 +47,75 @@ main = "beta"
               "bench JSON should record the benchmark target name";
             assert_string_contains ~needle:"\"iterations\": 2" bench.output
               "bench JSON should record the measured iteration count")) );
+    ( "benchmarks declared [bench.*] entries with custom argv and metadata by default",
+      (fun () ->
+        with_temp_dir "oasis-bench-declared" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+
+[bench.quick]
+executable = "demo"
+argv = ["--bench"]
+warmup = 0
+iterations = 2
+description = "quick path"
+|};
+            write_source workspace "app/main.ml"
+              {|
+let () =
+  if Array.length Sys.argv <> 2 || Sys.argv.(1) <> "--bench" then (
+    prerr_endline "missing bench argv";
+    exit 2)
+|};
+            let bench = run_oasis ~cwd:workspace [ "bench" ] in
+            assert_int_equal 0 bench.status
+              "bench should prefer declared bench entries when present";
+            assert_string_contains ~needle:"Benchmark quick ->" bench.output
+              "bench output should use the declared bench name";
+            assert_string_contains ~needle:"  executable: demo\n" bench.output
+              "bench output should report the underlying executable";
+            assert_string_contains ~needle:"  description: quick path\n"
+              bench.output
+              "bench output should report bench metadata";
+            assert_string_contains ~needle:"  argv: --bench\n" bench.output
+              "bench output should report configured argv";
+            assert_string_contains ~needle:"  warmup: 0\n" bench.output
+              "bench output should honor declared warmup counts";
+            assert_string_contains ~needle:"  iterations: 2\n" bench.output
+              "bench output should honor declared iteration counts")) );
+    ( "lets command-line warmup and iteration flags override declared bench defaults",
+      (fun () ->
+        with_temp_dir "oasis-bench-override" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+
+[bench.quick]
+executable = "demo"
+argv = ["--bench"]
+warmup = 0
+iterations = 2
+|};
+            write_source workspace "app/main.ml"
+              {|
+let () =
+  if Array.length Sys.argv <> 2 || Sys.argv.(1) <> "--bench" then exit 2
+|};
+            let bench =
+              run_oasis ~cwd:workspace
+                [ "bench"; "--warmup"; "1"; "--iterations"; "3"; "quick" ]
+            in
+            assert_int_equal 0 bench.status
+              "bench should let explicit CLI counts override declaration defaults";
+            assert_string_contains ~needle:"  warmup: 1\n" bench.output
+              "bench output should reflect the explicit warmup count";
+            assert_string_contains ~needle:"  iterations: 3\n" bench.output
+              "bench output should reflect the explicit iteration count")) );
     ( "rejects non-executable targets for bench",
       (fun () ->
         with_fixture "hello" (fun workspace ->

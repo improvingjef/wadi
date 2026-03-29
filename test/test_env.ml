@@ -138,6 +138,38 @@ main = "beta"
               "env bench should include benchmark runtime contexts";
             assert_string_contains ~needle:"BENCH_ONLY=yes\n" report.output
               "benchmark runtime contexts should include inherited host variables")) );
+    ( "prints declared bench runtime environments separately from executable build contexts",
+      (fun () ->
+        with_temp_dir "oasis-env-bench-declared" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+
+[bench.quick]
+executable = "demo"
+env = ["BENCH_MODE=quick"]
+|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            let report =
+              run_oasis_with_env ~cwd:workspace
+                ~env:[ ("BENCH_ONLY", "yes") ]
+                [ "env"; "bench"; "quick" ]
+            in
+            assert_int_equal 0 report.status
+              "env bench should resolve declared bench entries";
+            assert_string_contains ~needle:"Requested-targets: quick\n"
+              report.output
+              "env bench should preserve the requested bench name";
+            assert_string_contains ~needle:"Target: executable demo\n" report.output
+              "env bench should still include the executable build context";
+            assert_string_contains ~needle:"Target: bench quick\n" report.output
+              "env bench should render a separate runtime context for the declared bench";
+            assert_string_contains ~needle:"BENCH_MODE=quick\n" report.output
+              "declared bench runtime env should be visible";
+            assert_string_contains ~needle:"BENCH_ONLY=yes\n" report.output
+              "declared bench runtime contexts should still include inherited host variables")) );
     ( "prints machine-readable JSON env reports",
       (fun () ->
         with_temp_dir "oasis-env-json" (fun workspace ->

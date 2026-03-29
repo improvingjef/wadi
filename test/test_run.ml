@@ -315,6 +315,10 @@ main = "main"
             assert_string_equal docs.output
               (Fs.read_file (Filename.concat output_dir "docs/cli.md"))
               "release docs should come directly from oasis docs";
+            assert_string_equal docs.output
+              (Fs.read_file
+                 (Filename.concat output_dir "package/share/doc/oasis/cli.md"))
+              "release artifacts should also stage docs under a package-manager install tree";
             assert_string_equal bash_completion.output
               (Fs.read_file (Filename.concat output_dir "completions/oasis.bash"))
               "packaged bash completion should come directly from oasis completion bash";
@@ -357,6 +361,10 @@ main = "main"
         assert_string_equal docs.output
           (Fs.read_file (Filename.concat repo_root "docs/cli.md"))
           "the committed CLI reference should stay synced with oasis docs";
+        assert_string_equal docs.output
+          (Fs.read_file
+             (Filename.concat repo_root "package/share/doc/oasis/cli.md"))
+          "the committed packaged doc copy should stay synced with oasis docs";
         assert_string_equal bash_completion.output
           (Fs.read_file (Filename.concat repo_root "completions/oasis.bash"))
           "the committed bash completion should stay synced with oasis completion bash";
@@ -398,6 +406,9 @@ modules = ["core"]
 dir = "app"
 main = "main"
 
+[bench.quick]
+executable = "demo"
+
 [test.demo_suite]
 dir = "test"
 main = "main"
@@ -423,6 +434,16 @@ main = "main"
                 assert_string_contains
                   ~needle:"candidate\tdemo_suite\n" target_query.output
                   "completion queries should suggest test targets";
+                let bench_query =
+                  run_oasis ~cwd:outside
+                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "bench" ]
+                in
+                assert_int_equal 0 bench_query.status
+                  "bench completion queries should load declared benchmarks";
+                assert_string_contains ~needle:"candidate\tquick\n" bench_query.output
+                  "bench completion queries should suggest dedicated bench names";
+                assert_string_contains ~needle:"candidate\tdemo\n" bench_query.output
+                  "bench completion queries should still suggest executable targets";
                 let profile_query =
                   run_oasis ~cwd:outside
                     [

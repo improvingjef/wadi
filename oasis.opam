@@ -1,0 +1,27 @@
+opam-version: "2.0"
+synopsis: "Dune-free OCaml workspace toolbox"
+description: """
+oasis is a Dune-free OCaml workspace tool with cohesive subtools for build,
+test, run, bench, migration, install, diagnostics, and bootstrap workflows.
+"""
+maintainer: ["Jef Newsom <jef.newsom@gmail.com>"]
+authors: ["Jef Newsom"]
+depends: [
+  "ocaml" {>= "5.4.0"}
+  "ocamlfind"
+]
+build: [
+  [make "release-artifacts"]
+]
+install: [
+  [
+    "bash"
+    "scripts/install_release_tree.sh"
+    "--package-root"
+    "package"
+    "--binary"
+    "_bootstrap/bin/oasis"
+    "--prefix"
+    prefix
+  ]
+]

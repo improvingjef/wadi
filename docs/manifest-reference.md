@@ -51,11 +51,27 @@ main = "test_main"
 deps = ["core"]
 ```
 
+### Bench
+
+```toml
+[bench.quick]
+executable = "demo"
+argv = ["--quick"]
+env = ["BENCH_MODE=quick"]
+warmup = 0
+iterations = 10
+description = "quick-path benchmark"
+```
+
 Rules:
 
 - `main` is a module stem, not a filename.
 - `modules` entries are stems only. No paths. No extensions.
 - `deps` may only reference workspace libraries.
+- Bench declarations reference executable targets by name and let `oasis bench`
+  carry per-benchmark argv, env, labels, and default warmup/iteration counts.
+- If a workspace defines `[bench.*]` sections, `oasis bench` uses those by
+  default; executable targets remain valid explicit benchmark names.
 - `public_name` controls the staged install name for libraries, `META` files, and executables.
 - `wrapped = true` generates a namespace wrapper module named after the library
   stem, so `core` exposes `Core.Alpha`, `Core.Beta`, and so on.
