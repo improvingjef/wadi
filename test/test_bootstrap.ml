@@ -111,7 +111,9 @@ let copy_repo_path workspace relative_path =
   else Fs.copy_file ~src:src_path ~dst:dst_path
 
 let copy_clean_bootstrap_fixture workspace =
-  List.iter (copy_repo_path workspace) [ "Makefile"; "oasis.toml"; "src"; "scripts" ]
+  List.iter
+    (copy_repo_path workspace)
+    [ "Makefile"; "oasis.toml"; "src"; "scripts"; "test" ]
 
 let run_workspace_bootstrap ?seed_root workspace =
   let args =
@@ -439,12 +441,16 @@ env = ["TARGET=local"]
           makefile
           "bootstrap seed compilation should populate the shared object directory for reuse by the final app build";
         assert_string_contains
-          ~needle:"grep -q '^COMMON_SEED_REUSE := yes$$' \"$(1)\""
+          ~needle:"BOOTSTRAP_SHARED_OUTPUTS_HELPER := scripts/sync_bootstrap_shared_outputs.sh"
           makefile
-          "bootstrap makefile generation should consult the compiled plan before reusing shared seed objects";
-        assert_string_contains ~needle:"rm -f $(BOOTSTRAP_SHARED_OUTPUTS)"
+          "bootstrap makefile generation should define a helper for syncing shared seed objects from live metadata";
+        assert_string_not_contains ~needle:"rm -f $(BOOTSTRAP_SHARED_OUTPUTS)"
           makefile
-          "bootstrap makefile generation should drop incompatible shared seed objects instead of reusing them";
+          "bootstrap makefile generation should not rely on stale parse-time shared-output lists";
+        assert_string_contains
+          ~needle:"sh \"$(BOOTSTRAP_SHARED_OUTPUTS_HELPER)\""
+          makefile
+          "bootstrap makefile generation should delegate shared seed object syncing to the helper";
         assert_string_not_contains
           ~needle:"\"$(OCAML)\" \"$(BOOTSTRAP_LEGACY_PLANNER)\" --manifest \"$(BOOTSTRAP_MANIFEST)\" --scope app"
           makefile
@@ -494,6 +500,27 @@ env = ["TARGET=local"]
             let cached = Fs.read_file metadata_path in
             assert_string_equal generated.output cached
               "the regenerated bootstrap seed metadata should stay in sync with the built helper")) );
+    ( "bootstraps a clean full checkout without detouring through app planning or empty shared-output sync",
+      (fun () ->
+        with_temp_dir "oasis-bootstrap-clean-full-checkout" (fun workspace ->
+            copy_clean_bootstrap_fixture workspace;
+            let build =
+              run_make ~cwd:workspace
+                [ "_bootstrap/bin/oasis"; "_bootstrap/bin/test_runner" ]
+            in
+            assert_int_equal 0 build.status
+              ("clean full bootstrap should succeed without stale restart artifacts\n"
+             ^ build.output);
+            assert_string_not_contains
+              ~needle:"bootstrap.workspace-default.app.generated.mk"
+              build.output
+              "clean full bootstrap should not generate an app-only makefile while bootstrapping the seed binary";
+            assert_string_not_contains ~needle:"for path in ; do" build.output
+              "clean full bootstrap should not run shared-output sync with an empty path list";
+            assert_file_exists
+              (Filename.concat workspace "_bootstrap/bin/oasis");
+            assert_file_exists
+              (Filename.concat workspace "_bootstrap/bin/test_runner"))) );
     ( "renders transform-aware seed metadata for default-profile bootstrap libraries",
       (fun () ->
         with_temp_dir "oasis-bootstrap-seed-transforms" (fun workspace ->
