@@ -1,5 +1,7 @@
 # Wadi
 
+I had Codex build this because of friction with Dune on a project. I'm new to OCaml and just vibing a new amazing programming language (haha). But the experience of working with dune was less pleasant than I prefered, so this is my offering back to the OCaml community for such a cool language. Claude made a pretty little website polished off a few items. I'm dogfooding this right now, and it seems pretty good, but caveat lector.
+
 A fast, transparent OCaml build system. One manifest, zero guesswork.
 
 Wadi replaces dune with a single `wadi.toml` manifest, content-based incremental builds, and a focused command set. It builds the [stir compiler](https://github.com/improvingjef/stir) — 2 libraries, 139 executables, menhir parsers, ocamllex lexers — in 45 seconds from a clean checkout and 0.2 seconds on incremental rebuilds.
