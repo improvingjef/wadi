@@ -38,6 +38,8 @@ type source_descriptor = {
   mli_relative : string;
   mli_exists : bool;
   has_mli : bool;
+  mly_path : string;
+  mly_exists : bool;
 }
 
 type prepared_source = {
@@ -413,6 +415,9 @@ let materialize_wrapped_library_source ~mode ~workspace_root ~out_dir
 
 let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     ~dir stem =
+  let mly_relative = Filename.concat dir (stem ^ ".mly") in
+  let mly_path = Filename.concat workspace_root mly_relative in
+  let mly_exists = Fs.exists mly_path in
   let ml_relative = Filename.concat dir (stem ^ ".ml") in
   let workspace_ml_path = Filename.concat workspace_root ml_relative in
   let generated_ml_path = Filename.concat generated_root (stem ^ ".ml") in
@@ -420,11 +425,12 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     List.mem (stem ^ ".ml") planned_generated_outputs
   in
   let ml_path =
-    if generated_ml_declared then generated_ml_path
+    if mly_exists then generated_ml_path
+    else if generated_ml_declared then generated_ml_path
     else workspace_ml_path
   in
-  let ml_exists = Fs.exists ml_path in
-  let has_ml = ml_exists || generated_ml_declared in
+  let ml_exists = (not mly_exists) && Fs.exists ml_path in
+  let has_ml = ml_exists || mly_exists || generated_ml_declared in
   let mli_relative = Filename.concat dir (stem ^ ".mli") in
   let workspace_mli_path = Filename.concat workspace_root mli_relative in
   let generated_mli_path = Filename.concat generated_root (stem ^ ".mli") in
@@ -432,11 +438,12 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     List.mem (stem ^ ".mli") planned_generated_outputs
   in
   let mli_path =
-    if generated_mli_declared then generated_mli_path
+    if mly_exists then generated_mli_path
+    else if generated_mli_declared then generated_mli_path
     else workspace_mli_path
   in
-  let mli_exists = Fs.exists mli_path in
-  let has_mli = mli_exists || generated_mli_declared in
+  let mli_exists = (not mly_exists) && Fs.exists mli_path in
+  let has_mli = mli_exists || mly_exists || generated_mli_declared in
   if (not has_ml) && not has_mli then
     Error
       (Printf.sprintf "missing source file for module '%s': %s" stem ml_path)
@@ -452,6 +459,8 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
         mli_relative;
         mli_exists;
         has_mli;
+        mly_path;
+        mly_exists;
       }
 
 let source_descriptors ~workspace_root ~generated_root ~planned_generated_outputs
@@ -575,7 +584,11 @@ let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
         (Printf.sprintf "mli %s %s" source.mli_relative
            (if source.mli_exists then Digest.to_hex (Digest.file source.mli_path)
             else if source.has_mli then "planned-generated"
-            else "missing")))
+            else "missing"));
+      if source.mly_exists then
+        append_line buffer
+          (Printf.sprintf "mly %s %s" source.mly_path
+             (Digest.to_hex (Digest.file source.mly_path))))
     sources;
   List.iter
     (fun (dependency_name, dependency_fingerprint) ->
@@ -1015,36 +1028,113 @@ let preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
     Fs.write_file path output;
     Ok path
 
-let prepare_source ~mode ~workspace_root ~out_dir ~target_env
-    (preprocessors : Manifest.command_tool list) source =
+let menhir_root out_dir = Filename.concat out_dir "menhir"
+
+(* Phase 1 of the menhir --infer protocol: produce a mock .ml that can be
+   type-checked by ocamlc -i to discover token and nonterminal types.
+   This only needs the .mly file, not any compiled dependencies. *)
+let menhir_write_query ~verbose ~out_dir source =
+  let menhir = Toolchain.menhir_cmd () in
+  let menhir_dir = menhir_root out_dir in
+  Fs.ensure_dir menhir_dir;
+  Fs.ensure_dir (generated_root out_dir);
+  let mock_ml = Filename.concat menhir_dir (source.stem ^ ".ml") in
+  let* _ =
+    Process.ensure_success ~verbose menhir
+      [ "--infer-write-query"; mock_ml; source.mly_path ]
+  in
+  Ok mock_ml
+
+(* Phases 2-3 of the menhir --infer protocol: compile the mock .ml to get
+   type info, then feed it back to menhir to produce the real parser.ml and
+   parser.mli.  This must run after dependency .cmi files have been compiled. *)
+let menhir_infer_and_generate ~verbose ~out_dir ~include_dirs source =
+  let menhir = Toolchain.menhir_cmd () in
+  let menhir_dir = menhir_root out_dir in
+  let gen_root = generated_root out_dir in
+  let mock_ml = Filename.concat menhir_dir (source.stem ^ ".ml") in
+  let inferred_mli =
+    Filename.concat menhir_dir (source.stem ^ ".inferred.mli")
+  in
+  let compiler = Toolchain.ocamlc_cmd () in
+  let i_args = List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs in
+  let* _ =
+    Process.ensure_success ~verbose compiler
+      (i_args @ [ "-i"; mock_ml ])
+      ~stdout_path:inferred_mli
+  in
+  let* _ =
+    Process.ensure_success ~verbose menhir
+      [ "--infer-read-reply"; inferred_mli;
+        "--base"; Filename.concat menhir_dir source.stem;
+        source.mly_path ]
+  in
+  (* Menhir writes <base>.ml and <base>.mli next to the --base prefix;
+     copy them to the generated root so the compiler finds them. *)
+  let menhir_ml = Filename.concat menhir_dir (source.stem ^ ".ml") in
+  let menhir_mli = Filename.concat menhir_dir (source.stem ^ ".mli") in
+  let out_ml = Filename.concat gen_root (source.stem ^ ".ml") in
+  let out_mli = Filename.concat gen_root (source.stem ^ ".mli") in
+  if Fs.exists menhir_ml then Fs.copy_file ~src:menhir_ml ~dst:out_ml;
+  if Fs.exists menhir_mli then Fs.copy_file ~src:menhir_mli ~dst:out_mli;
+  Ok (out_ml, out_mli)
+
+let prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
+    ~target_env (preprocessors : Manifest.command_tool list) source =
+  (* When a .mly file exists, run menhir Phase 1 to produce a mock .ml.
+     The mock serves as the ocamldep input so module ordering works.
+     Phases 2-3 run later in compile_module after dependency .cmi files
+     are available. *)
+  let* menhir_mock_ml =
+    if source.mly_exists then
+      match mode with
+      | Materialize ->
+          let* mock = menhir_write_query ~verbose ~out_dir source in
+          Ok (Some mock)
+      | Plan_only ->
+          Fs.ensure_dir (generated_root out_dir);
+          Ok None
+    else Ok None
+  in
   let* ml_compile_path =
     match source.has_ml with
     | false -> Ok None
     | true ->
-        let logical_ml_path = Filename.basename source.ml_relative in
-        let* path =
-          preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
-            preprocessors logical_ml_path source.ml_path
-        in
-        Ok (Some path)
+        if Option.is_some menhir_mock_ml then
+          (* For ocamldep, use the mock .ml so dependency sorting works.
+             The real generated .ml will replace this at compile time. *)
+          Ok menhir_mock_ml
+        else
+          let logical_ml_path = Filename.basename source.ml_relative in
+          let* path =
+            preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
+              preprocessors logical_ml_path source.ml_path
+          in
+          Ok (Some path)
   in
   let* mli_compile_path =
     match source.has_mli with
     | false -> Ok None
     | true ->
-        let logical_mli_path = Filename.basename source.mli_relative in
-        let* path =
-          preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
-            preprocessors logical_mli_path source.mli_path
-        in
-        Ok (Some path)
+        if source.mly_exists then
+          (* No .mli yet; menhir will produce it at compile time.
+             For now, skip it so ocamldep does not see a nonexistent path. *)
+          Ok None
+        else
+          let logical_mli_path = Filename.basename source.mli_relative in
+          let* path =
+            preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
+              preprocessors logical_mli_path source.mli_path
+          in
+          Ok (Some path)
   in
   Ok { source; ml_compile_path; mli_compile_path }
 
-let prepare_sources ~mode ~workspace_root ~out_dir ~target_env
-    (preprocessors : Manifest.command_tool list) sources =
+let prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
+    ~target_env (preprocessors : Manifest.command_tool list) sources =
   collect_results sources
-    (prepare_source ~mode ~workspace_root ~out_dir ~target_env preprocessors)
+    (prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
+       ~target_env preprocessors)
 
 let implementation_output_paths backend out_dir stem =
   match backend with
@@ -1212,6 +1302,17 @@ let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root
 let compile_module ?(stem_prefix = "") ~session ~workspace_root ~verbose
     ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
     ~(ppx_tools : Manifest.ppx_tool list) ~env source =
+  (* For .mly modules, run menhir Phases 2-3 now that dependency .cmi files
+     are compiled and available through include_dirs. *)
+  let* source =
+    if source.source.mly_exists then
+      let* (gen_ml, gen_mli) =
+        menhir_infer_and_generate ~verbose ~out_dir ~include_dirs source.source
+      in
+      Ok { source with ml_compile_path = Some gen_ml;
+                        mli_compile_path = Some gen_mli }
+    else Ok source
+  in
   let* () =
     match source.mli_compile_path with
     | Some mli_compile_path ->
@@ -1623,14 +1724,22 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   let planned_generated_outputs =
     wrapper_generated_outputs @ planned_generated_output_names pipeline.actions
   in
+  let dependency_include_dirs =
+    String_util.dedup_preserve
+      (List.concat_map
+         (fun (output : built_library_output) ->
+           output.out_dir :: output.transitive_include_dirs)
+         dependency_outputs)
+  in
+  let include_dirs = out_dir :: dependency_include_dirs in
   let* sources =
     library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outputs
       library
   in
   let* prepared_sources =
     let target_env = pipeline.options.env in
-    prepare_sources ~mode ~workspace_root ~out_dir ~target_env
-      pipeline.preprocessors sources
+    prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
+      ~target_env pipeline.preprocessors sources
   in
   let* ordered_modules =
     match mode with
@@ -1674,14 +1783,6 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
     Layout.library_archive_for_backend ~profile workspace_root backend
       library.name
   in
-  let dependency_include_dirs =
-    String_util.dedup_preserve
-      (List.concat_map
-         (fun (output : built_library_output) ->
-           output.out_dir :: output.transitive_include_dirs)
-         dependency_outputs)
-  in
-  let include_dirs = out_dir :: dependency_include_dirs in
   let module_order_sources = List.concat_map prepared_source_files prepared_sources in
   let* module_order_command =
     match mode with
@@ -1921,6 +2022,16 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   let planned_generated_outputs =
     planned_generated_output_names pipeline.actions
   in
+  let dependency_include_dirs =
+    String_util.dedup_preserve
+      (List.concat_map
+         (fun (output : built_library_output) ->
+           output.out_dir :: output.transitive_include_dirs)
+         dependency_outputs)
+  in
+  (* Library include dirs come first so wrapped library wrapper modules
+     are found even when the executable main module shares the same name. *)
+  let include_dirs = dependency_include_dirs @ [ out_dir ] in
   let* module_sources =
     source_descriptors ~workspace_root ~generated_root:(generated_root out_dir)
       ~planned_generated_outputs ~dir:runnable.dir runnable.modules
@@ -1935,8 +2046,8 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let* prepared_sources =
     let target_env = pipeline.options.env in
-    prepare_sources ~mode ~workspace_root ~out_dir ~target_env
-      pipeline.preprocessors (module_sources @ [ main_source ])
+    prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
+      ~target_env pipeline.preprocessors (module_sources @ [ main_source ])
   in
   let module_prepared_sources =
     List.filter
@@ -2000,16 +2111,6 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     | Executable_kind -> Layout.executable_binary ~profile workspace_root runnable.name
     | Test_kind -> Layout.test_binary ~profile workspace_root runnable.name
   in
-  let dependency_include_dirs =
-    String_util.dedup_preserve
-      (List.concat_map
-         (fun (output : built_library_output) ->
-           output.out_dir :: output.transitive_include_dirs)
-         dependency_outputs)
-  in
-  (* Library include dirs come first so wrapped library wrapper modules
-     are found even when the executable main module shares the same name. *)
-  let include_dirs = dependency_include_dirs @ [ out_dir ] in
   let module_order_sources =
     List.concat_map prepared_source_files module_prepared_sources
   in
@@ -2192,8 +2293,45 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
               binary = description.binary;
             }))
 
-let build ~workspace_root ~verbose ?(requested_targets = [])
-    ?(backend_request = Toolchain.Auto) ?profile workspace =
+type build_failure = {
+  target_name : string;
+  message : string;
+  skipped_by : string option;
+}
+
+let target_deps_failed failed_set deps =
+  List.find_opt (fun dep -> List.mem dep failed_set) deps
+
+let format_build_failures failures =
+  let direct =
+    List.filter (fun f -> f.skipped_by = None) failures
+  in
+  let skipped =
+    List.filter (fun f -> f.skipped_by <> None) failures
+  in
+  let buf = Buffer.create 256 in
+  Buffer.add_string buf
+    (Printf.sprintf "%d target(s) failed" (List.length failures));
+  List.iter
+    (fun f ->
+      Buffer.add_string buf
+        (Printf.sprintf "\n  %s: %s" f.target_name f.message))
+    direct;
+  if skipped <> [] then (
+    Buffer.add_string buf
+      (Printf.sprintf "\n  %d target(s) skipped due to failed dependencies:"
+         (List.length skipped));
+    List.iter
+      (fun f ->
+        Buffer.add_string buf
+          (Printf.sprintf "\n    %s (dependency %s failed)" f.target_name
+             (match f.skipped_by with Some d -> d | None -> "?")))
+      skipped);
+  Buffer.contents buf
+
+let build ~workspace_root ~verbose ?(keep_going = false)
+    ?(requested_targets = []) ?(backend_request = Toolchain.Auto) ?profile
+    workspace =
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
   let session = Toolchain.create_session () in
@@ -2208,37 +2346,96 @@ let build ~workspace_root ~verbose ?(requested_targets = [])
   let index = index_targets workspace in
   Fs.ensure_dir (build_root_for_profile workspace_root profile);
   let library_outputs = Hashtbl.create 8 in
-  let rec loop artifacts = function
-    | [] ->
-        Ok
-          {
-            build_root = build_root_for_profile workspace_root profile;
-            artifacts = List.rev artifacts;
-          }
-    | Manifest.Library library :: rest ->
-        let* artifact =
-          build_library ~session ~workspace_root ~verbose ~manifest_path
-            ~backend_request ~backend ~compiler_version ~profile workspace
-            library library_outputs
-        in
-        loop (artifact :: artifacts) rest
-    | Manifest.Executable executable :: rest ->
-        let* artifact =
-          build_runnable ~session ~workspace_root ~verbose ~manifest_path
-            ~backend_request ~backend ~compiler_version ~profile
-            ~kind:Executable_kind workspace executable order index
-            library_outputs
-        in
-        loop (artifact :: artifacts) rest
-    | Manifest.Test test :: rest ->
-        let* artifact =
-          build_runnable ~session ~workspace_root ~verbose ~manifest_path
-            ~backend_request ~backend ~compiler_version ~profile
-            ~kind:Test_kind workspace test order index library_outputs
-        in
-        loop (artifact :: artifacts) rest
-  in
-  loop [] order
+  if not keep_going then
+    let rec loop artifacts = function
+      | [] ->
+          Ok
+            {
+              build_root = build_root_for_profile workspace_root profile;
+              artifacts = List.rev artifacts;
+            }
+      | Manifest.Library library :: rest ->
+          let* artifact =
+            build_library ~session ~workspace_root ~verbose ~manifest_path
+              ~backend_request ~backend ~compiler_version ~profile workspace
+              library library_outputs
+          in
+          loop (artifact :: artifacts) rest
+      | Manifest.Executable executable :: rest ->
+          let* artifact =
+            build_runnable ~session ~workspace_root ~verbose ~manifest_path
+              ~backend_request ~backend ~compiler_version ~profile
+              ~kind:Executable_kind workspace executable order index
+              library_outputs
+          in
+          loop (artifact :: artifacts) rest
+      | Manifest.Test test :: rest ->
+          let* artifact =
+            build_runnable ~session ~workspace_root ~verbose ~manifest_path
+              ~backend_request ~backend ~compiler_version ~profile
+              ~kind:Test_kind workspace test order index library_outputs
+          in
+          loop (artifact :: artifacts) rest
+    in
+    loop [] order
+  else
+    let rec loop artifacts failures failed_names = function
+      | [] ->
+          if failures = [] then
+            Ok
+              {
+                build_root = build_root_for_profile workspace_root profile;
+                artifacts = List.rev artifacts;
+              }
+          else Error (format_build_failures (List.rev failures))
+      | target :: rest ->
+          let name = Manifest.target_name target in
+          let deps = dependency_names target in
+          (match target_deps_failed failed_names deps with
+          | Some dep_name ->
+              let failure =
+                {
+                  target_name = name;
+                  message = "skipped";
+                  skipped_by = Some dep_name;
+                }
+              in
+              prerr_endline
+                (Printf.sprintf "Skipping %s (dependency %s failed)" name
+                   dep_name);
+              loop artifacts (failure :: failures) (name :: failed_names) rest
+          | None ->
+              let result =
+                match target with
+                | Manifest.Library library ->
+                    build_library ~session ~workspace_root ~verbose
+                      ~manifest_path ~backend_request ~backend
+                      ~compiler_version ~profile workspace library
+                      library_outputs
+                | Manifest.Executable executable ->
+                    build_runnable ~session ~workspace_root ~verbose
+                      ~manifest_path ~backend_request ~backend
+                      ~compiler_version ~profile ~kind:Executable_kind
+                      workspace executable order index library_outputs
+                | Manifest.Test test ->
+                    build_runnable ~session ~workspace_root ~verbose
+                      ~manifest_path ~backend_request ~backend
+                      ~compiler_version ~profile ~kind:Test_kind workspace
+                      test order index library_outputs
+              in
+              (match result with
+              | Ok artifact ->
+                  loop (artifact :: artifacts) failures failed_names rest
+              | Error message ->
+                  let failure =
+                    { target_name = name; message; skipped_by = None }
+                  in
+                  prerr_endline
+                    (Printf.sprintf "Failed to build %s: %s" name message);
+                  loop artifacts (failure :: failures) (name :: failed_names)
+                    rest))
+    in
+    loop [] [] [] order
 
 let explain_current ~workspace_root ?(requested_targets = [])
     ?(backend_request = Toolchain.Auto) ?profile workspace =

@@ -1172,4 +1172,126 @@ main = "main"
               "alternate profile flags should reach the compiler";
             assert_string_not_contains ~needle:"-rectypes" dev_log
               "target overrides from other profiles should not leak into dev")) );
+    ( "keep-going continues past a failed target and builds independent targets",
+      (fun () ->
+        with_temp_dir "wadi-keep-going" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "keep-going-test"
+version = 1
+
+[library.good_lib]
+dir = "good_lib"
+modules = ["good_lib"]
+
+[executable.broken]
+dir = "broken"
+main = "broken_main"
+
+[executable.healthy]
+dir = "healthy"
+main = "healthy_main"
+|};
+            write_source workspace "good_lib/good_lib.ml"
+              {|let message = "ok"|};
+            write_source workspace "broken/broken_main.ml"
+              {|let () = This_module_does_not_exist.go ()|};
+            write_source workspace "healthy/healthy_main.ml"
+              {|let () = print_endline "healthy"|};
+            let without_flag =
+              run_wadi ~cwd:workspace [ "build" ]
+            in
+            assert_true (without_flag.status <> 0)
+              "build without --keep-going should fail on first error";
+            let with_flag =
+              run_wadi ~cwd:workspace [ "build"; "--keep-going" ]
+            in
+            assert_true (with_flag.status <> 0)
+              "build with --keep-going should still exit non-zero when targets fail";
+            assert_string_contains ~needle:"target(s) failed"
+              with_flag.output
+              "keep-going should report failure summary";
+            let healthy_binary =
+              executable_path workspace "healthy"
+            in
+            assert_file_exists healthy_binary;
+            let run = run_binary healthy_binary [] in
+            assert_int_equal 0 run.status
+              "healthy executable should be built despite broken sibling";
+            assert_string_equal "healthy\n" run.output
+              "healthy executable should produce correct output")) );
+    ( "keep-going skips targets whose dependency failed",
+      (fun () ->
+        with_temp_dir "wadi-keep-going-deps" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "dep-failure-test"
+version = 1
+
+[library.broken_lib]
+dir = "broken_lib"
+modules = ["broken_lib"]
+
+[executable.depends_on_broken]
+dir = "app"
+main = "app_main"
+deps = ["broken_lib"]
+
+[executable.independent]
+dir = "independent"
+main = "ind_main"
+|};
+            write_source workspace "broken_lib/broken_lib.ml"
+              {|let x = Not_a_real_module.value|};
+            write_source workspace "app/app_main.ml"
+              {|let () = print_endline Broken_lib.x|};
+            write_source workspace "independent/ind_main.ml"
+              {|let () = print_endline "independent"|};
+            let result =
+              run_wadi ~cwd:workspace [ "build"; "--keep-going" ]
+            in
+            assert_true (result.status <> 0)
+              "build should fail when targets have errors";
+            assert_string_contains ~needle:"Skipping"
+              result.output
+              "keep-going should report skipped targets whose deps failed";
+            let ind_binary =
+              executable_path workspace "independent"
+            in
+            assert_file_exists ind_binary;
+            let run = run_binary ind_binary [] in
+            assert_int_equal 0 run.status
+              "independent executable should be built";
+            assert_string_equal "independent\n" run.output
+              "independent executable should produce correct output")) );
+    ( "keep-going short flag -k works",
+      (fun () ->
+        with_temp_dir "wadi-keep-going-k" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "k-flag-test"
+version = 1
+
+[executable.broken]
+dir = "broken"
+main = "broken_main"
+
+[executable.healthy]
+dir = "healthy"
+main = "healthy_main"
+|};
+            write_source workspace "broken/broken_main.ml"
+              {|let () = Nonexistent.x|};
+            write_source workspace "healthy/healthy_main.ml"
+              {|let () = print_endline "ok"|};
+            let result = run_wadi ~cwd:workspace [ "build"; "-k" ] in
+            assert_true (result.status <> 0)
+              "-k should still fail on broken targets";
+            assert_string_contains ~needle:"target(s) failed"
+              result.output
+              "-k should report failure summary";
+            let healthy_binary =
+              executable_path workspace "healthy"
+            in
+            assert_file_exists healthy_binary)) );
   ]

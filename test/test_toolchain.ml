@@ -56,7 +56,7 @@ let cases =
             assert_string_contains ~needle:"wadi toolchain" help.output
               "toolchain help should include the toolchain signature";
             assert_string_not_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
+              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]"
               help.output
               "toolchain help should stay scoped to the requested command")) );
   ]

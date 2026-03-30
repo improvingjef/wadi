@@ -10,6 +10,7 @@ type build_options = {
   backend_request : Toolchain.backend_request;
   profile : string option;
   lock_policy : lock_policy;
+  keep_going : bool;
 }
 
 type status_options = {
@@ -73,6 +74,7 @@ type test_options = {
   targets : string list;
   backend_request : Toolchain.backend_request;
   profile : string option;
+  jobs : int;
 }
 
 type bench_options = {
@@ -299,6 +301,14 @@ let verbose_option =
     usage = "--verbose, -v";
     flags = [ "--verbose"; "-v" ];
     description = "Print detailed process execution as commands run.";
+  }
+
+let jobs_option =
+  {
+    usage = "-j N, --jobs N";
+    flags = [ "-j"; "--jobs" ];
+    description =
+      "Run up to N test binaries concurrently (default: number of CPUs).";
   }
 
 let help_option =
@@ -553,6 +563,14 @@ let keep_going_option =
       "Keep watching after a failed run instead of exiting with the first non-zero status.";
   }
 
+let keep_going_build_option =
+  {
+    usage = "--keep-going";
+    flags = [ "--keep-going"; "-k" ];
+    description =
+      "Continue building remaining targets after a failure instead of stopping at the first error.";
+  }
+
 let include_glob_option =
   {
     usage = "--include GLOB";
@@ -719,12 +737,13 @@ let build_doc =
     name = "build";
     summary = "Compile libraries, executables, and tests into predictable artifact roots.";
     signature =
-      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]";
+      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi build";
         "wadi build hello";
         "wadi build --locked hello";
+        "wadi build --keep-going";
         "wadi build --workspace examples/hello --profile release --verbose";
       ];
     options =
@@ -734,6 +753,7 @@ let build_doc =
         backend_option;
         locked_option;
         warn_locked_option;
+        keep_going_build_option;
         verbose_option;
         help_option;
       ];
@@ -926,15 +946,15 @@ let test_doc =
     name = "test";
     summary = "Build and execute declared test targets with a direct failure summary.";
     signature =
-      "wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
+      "wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [-j N] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi test";
         "wadi test unit";
-        "wadi test unit integration";
+        "wadi test -j 8 unit integration";
         "wadi test --workspace examples/hello --profile ci --verbose";
       ];
-    options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    options = [ workspace_option; profile_option; backend_option; jobs_option; verbose_option; help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
   }
@@ -1694,6 +1714,8 @@ let parse_build_args (args : string list) : (build_options, string) result =
     | "--warn-locked" :: rest ->
         let* lock_policy = choose_lock_policy options.lock_policy Warn_locked in
         loop { options with lock_policy } rest
+    | ("--keep-going" | "-k") :: rest ->
+        loop { options with keep_going = true } rest
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage build_doc)
@@ -1709,6 +1731,7 @@ let parse_build_args (args : string list) : (build_options, string) result =
       backend_request = default_backend_request;
       profile = None;
       lock_policy = Ignore_lock;
+      keep_going = false;
     }
     args
 
@@ -1874,6 +1897,20 @@ let parse_run_args (args : string list) : (run_options, string) result =
     }
     args
 
+let parse_count flag value =
+  try
+    let parsed = int_of_string value in
+    if parsed < 0 then
+      Error (Printf.sprintf "%s requires a non-negative integer" flag)
+    else Ok parsed
+  with Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
+
+let parse_positive_count flag value =
+  let* parsed = parse_count flag value in
+  if parsed = 0 then
+    Error (Printf.sprintf "%s requires a positive integer" flag)
+  else Ok parsed
+
 let parse_test_args (args : string list) : (test_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : test_options) = function
@@ -1889,6 +1926,10 @@ let parse_test_args (args : string list) : (test_options, string) result =
         loop { options with backend_request } rest
     | "--backend" :: [] ->
         Error "--backend requires auto, native, or bytecode"
+    | ("-j" | "--jobs") :: value :: rest ->
+        let* jobs = parse_positive_count "-j" value in
+        loop { options with jobs } rest
+    | ("-j" | "--jobs") :: [] -> Error "-j requires a positive integer"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage test_doc)
@@ -1903,22 +1944,9 @@ let parse_test_args (args : string list) : (test_options, string) result =
       targets = [];
       backend_request = default_backend_request;
       profile = None;
+      jobs = 0;
     }
     args
-
-let parse_count flag value =
-  try
-    let parsed = int_of_string value in
-    if parsed < 0 then
-      Error (Printf.sprintf "%s requires a non-negative integer" flag)
-    else Ok parsed
-  with
-  | Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
-
-let parse_positive_count flag value =
-  let* parsed = parse_count flag value in
-  if parsed = 0 then Error (Printf.sprintf "%s requires a positive integer" flag)
-  else Ok parsed
 
 let parse_iterations value =
   parse_positive_count "--iterations" value
@@ -3053,7 +3081,8 @@ let run_build (options : build_options) =
       | Ok () -> (
           match
             Builder.build ~workspace_root:options.workspace_dir
-              ~verbose:options.verbose ~requested_targets:options.targets
+              ~verbose:options.verbose ~keep_going:options.keep_going
+              ~requested_targets:options.targets
               ~backend_request:options.backend_request ?profile:options.profile
               workspace
           with
@@ -3237,7 +3266,8 @@ let run_tests (options : test_options) =
       match
         Tester.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
           ~backend_request:options.backend_request
-          ?profile:options.profile ~requested_targets:options.targets workspace
+          ?profile:options.profile ~jobs:options.jobs
+          ~requested_targets:options.targets workspace
       with
       | Ok status -> Exit_code status
       | Error message -> report_error message)
