@@ -2,8 +2,10 @@
 set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+. "$ROOT_DIR/scripts/oasis_self_host.sh"
 PACKAGE_ROOT=$ROOT_DIR/package
 BINARY_PATH=${OASIS_BIN:-$ROOT_DIR/_bootstrap/bin/oasis}
+BINARY_PATH_EXPLICIT=0
 PREFIX=
 
 usage() {
@@ -39,6 +41,7 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       BINARY_PATH=$2
+      BINARY_PATH_EXPLICIT=1
       shift 2
       ;;
     --help)
@@ -51,6 +54,10 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
+
+if [ "$BINARY_PATH_EXPLICIT" -eq 0 ] && [ ! -f "$BINARY_PATH" ]; then
+  BINARY_PATH=$(oasis_resolve_repo_binary "$ROOT_DIR")
+fi
 
 if [ -z "$PREFIX" ]; then
   echo "install_release_tree.sh: --prefix is required" >&2

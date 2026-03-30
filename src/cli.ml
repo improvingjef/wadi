@@ -183,6 +183,7 @@ type package_options = {
   checksums_output : string option;
   asset_index_output : string option;
   archive_input : Packager.archive_input option;
+  source_archive_mode : Packager.source_archive_mode;
 }
 
 type release_cut_options = {
@@ -408,6 +409,14 @@ let reuse_source_archive_dir_option =
     flags = [ "--reuse-source-archive-dir" ];
     description =
       "Reuse the canonical source archive already present in DIR without rebuilding it.";
+  }
+
+let source_archive_mode_option =
+  {
+    usage = "--source-archive-mode tracked|worktree";
+    flags = [ "--source-archive-mode" ];
+    description =
+      "Choose whether rebuilt source archives come from tracked git paths only or from the live non-ignored worktree.";
   }
 
 let version_option =
@@ -1187,13 +1196,14 @@ let package_doc =
     summary =
       "Render opam, Homebrew, checksum, and release-asset metadata from canonical release facts.";
     signature =
-      "oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]";
+      "oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]";
     examples =
       [
         "oasis package";
         "oasis package --output-dir dist";
         "oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json";
         "oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS";
+        "oasis package --source-archive-dir dist --source-archive-mode worktree";
       ];
     options =
       [
@@ -1205,6 +1215,7 @@ let package_doc =
         source_archive_option;
         source_archive_dir_option;
         reuse_source_archive_dir_option;
+        source_archive_mode_option;
         help_option;
       ];
     completion_words = [];
@@ -2508,6 +2519,11 @@ let parse_package_args args =
         loop { options with archive_input } rest
     | "--reuse-source-archive-dir" :: [] ->
         Error "--reuse-source-archive-dir requires a directory"
+    | "--source-archive-mode" :: mode :: rest ->
+        let* source_archive_mode = Packager.parse_source_archive_mode mode in
+        loop { options with source_archive_mode } rest
+    | "--source-archive-mode" :: [] ->
+        Error "--source-archive-mode requires tracked or worktree"
     | "--help" :: _ -> Error (command_usage package_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -2522,6 +2538,7 @@ let parse_package_args args =
         checksums_output = None;
         asset_index_output = None;
         archive_input = None;
+        source_archive_mode = Packager.Tracked;
       }
       args
   in
@@ -2709,7 +2726,8 @@ let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
   | "--output" | "--output-dir" | "--opam-output" | "--formula-output"
   | "--checksums-output" | "--asset-index-output" | "--source-archive"
-  | "--source-archive-dir" | "--reuse-source-archive-dir" | "--script"
+  | "--source-archive-dir" | "--reuse-source-archive-dir"
+  | "--source-archive-mode" | "--script"
   | "--warmup" | "--iterations" | "--dir" | "--name" | "--member"
   | "--library" | "--executable" | "--source" | "--git" | "--url"
   | "--ref" | "--checksum" | "--poll-ms" | "--debounce-ms" | "--max-runs"
@@ -2810,6 +2828,8 @@ let value_completion_candidates ?workspace = function
   | "--url" | "--ref" | "--checksum" | "--version" | "--tap-dir"
   | "--formula" ->
       []
+  | "--source-archive-mode" ->
+      List.map (fun word -> candidate word) [ "tracked"; "worktree" ]
   | _ -> []
 
 let value_completion_response ?workspace = function
@@ -3477,6 +3497,7 @@ let generate_package ~root_dir (options : package_options) =
         checksums_output = options.checksums_output;
         asset_index_output = options.asset_index_output;
         archive_input = options.archive_input;
+        source_archive_mode = options.source_archive_mode;
       }
   with
   | Ok () -> Exit_code 0
@@ -3507,6 +3528,7 @@ let run_sync_generated (_options : sync_generated_options) =
                   Some
                     (Packager.Source_archive_dir
                        (Filename.concat root_dir "dist"));
+                source_archive_mode = Packager.Tracked;
               }
           with
           | Exit_code 0 -> Exit_code 0

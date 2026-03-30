@@ -447,7 +447,7 @@ Render opam, Homebrew, checksum, and release-asset metadata from canonical relea
 
 Usage:
 
-`oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]`
+`oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]`
 
 Options:
 - `--output-dir DIR`: Write generated files under DIR instead of the current directory.
@@ -458,6 +458,7 @@ Options:
 - `--source-archive PATH`: Reuse an explicit source archive when rendering packaging metadata instead of rebuilding one.
 - `--source-archive-dir DIR`: Refresh the canonical source archive into DIR before rendering packaging metadata.
 - `--reuse-source-archive-dir DIR`: Reuse the canonical source archive already present in DIR without rebuilding it.
+- `--source-archive-mode tracked|worktree`: Choose whether rebuilt source archives come from tracked git paths only or from the live non-ignored worktree.
 - `--help`: Print command-specific usage text.
 
 Examples:
@@ -465,6 +466,7 @@ Examples:
 - `oasis package --output-dir dist`
 - `oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json`
 - `oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS`
+- `oasis package --source-archive-dir dist --source-archive-mode worktree`
 
 ## sync-generated
 

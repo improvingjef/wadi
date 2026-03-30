@@ -222,3 +222,9 @@
 - Wrapping shell entrypoints around a first-class CLI immediately exposed one more honest seam: clean-checkout maintenance still needs a bootstrap story for finding `oasis` itself. If the wrapper has to be fed `OASIS_BIN` in tests, that friction belongs on the plan instead of hiding as test harness trivia.
 - The OCaml packaging path caught a real asset-index bug the shell script had been masking. Optional JSON fields need to be assembled as explicit lists, not interleaved through precedence-sensitive `match ... @ ...` expressions.
 - Homebrew formula drift is the checksum of the tracked tree, not just the code that “feels packaging-related.” New subtools, wrapper scripts, plan updates, and journal notes all invalidate the formula until `sync-generated` closes the loop again.
+
+## 2026-03-29
+
+- A useful `worktree` archive mode needs a narrow escape hatch. Pulling in every untracked file would happily package `dist/`, editor trash, and local logs; limiting the extra scan to untracked files under already-tracked directories captures new source modules without turning local junk into release bytes.
+- Maintenance wrappers should prefer bootstrapping the repo-local binary over falling back to some globally installed `oasis`. Running the wrong version is more dangerous than paying one local bootstrap.
+- Binary packaging needs the same self-hosting story as CLI wrappers. If `build_release_archives.sh` still assumes `_bootstrap/bin/oasis` exists, clean-checkout maintenance is only half fixed.

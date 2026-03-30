@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build source archive
-        run: ./scripts/build_release_archives.sh --source-only --output-dir dist
+        run: ./scripts/build_release_archives.sh --source-only --output-dir dist --source-archive-mode tracked
 
       - uses: actions/upload-artifact@v4
         with:

@@ -55,19 +55,20 @@ let chmod_plus_x path =
   assert_int_equal 0 chmod.status
     ("chmod +x should succeed for " ^ path ^ "\n" ^ chmod.output)
 
-let run_make ~cwd goals =
-  Process.run_capture ~cwd
-    ~env:
-      [
-        ("MAKEFLAGS", "");
-        ("MFLAGS", "");
-        ("MAKELEVEL", "0");
-        ("OCAMLOPT", "ocamlopt");
-        ("OCAMLFIND", "ocamlfind");
-        ("OCAMLFLAGS", "-g");
-        ("OASIS_BIN", oasis_bin ());
-      ]
-    "make" goals
+let run_make ?(use_oasis_bin = true) ~cwd goals =
+  let env =
+    [
+      ("MAKEFLAGS", "");
+      ("MFLAGS", "");
+      ("MAKELEVEL", "0");
+      ("OCAMLOPT", "ocamlopt");
+      ("OCAMLFIND", "ocamlfind");
+      ("OCAMLFLAGS", "-g");
+    ]
+    @ if use_oasis_bin then [ ("OASIS_BIN", oasis_bin ()) ] else []
+  in
+  if use_oasis_bin then Process.run_capture ~cwd ~env "make" goals
+  else Process.run_capture ~cwd ~env "env" ([ "-u"; "OASIS_BIN"; "make" ] @ goals)
 
 let release_metadata_eval ~cwd expr =
   let command =
@@ -461,6 +462,66 @@ let cases =
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
               "retained-archive manifest generation should match the committed Homebrew formula"));
+    ( "supports explicit tracked versus worktree source archive modes",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-source-archive-mode" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init"; "-q" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed before archive-mode checks\n"
+             ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed before archive-mode checks\n"
+             ^ add.output);
+            write_workspace_file workspace "scripts/worktree_only.txt"
+              "worktree-only file\n";
+            let archive_script =
+              Filename.concat workspace "scripts/build_release_archives.sh"
+            in
+            let tracked_dir = Filename.concat workspace "tracked-dist" in
+            let tracked =
+              Process.run_capture ~cwd:workspace archive_script
+                [ "--source-only"; "--output-dir"; tracked_dir ]
+            in
+            assert_int_equal 0 tracked.status
+              ("tracked-mode source archive generation should succeed\n"
+             ^ tracked.output);
+            let tracked_listing =
+              Process.run_capture ~cwd:tracked_dir "tar"
+                [ "-tzf"; "oasis-0.1.0-source.tar.gz" ]
+            in
+            assert_int_equal 0 tracked_listing.status
+              "tracked-mode source archive should be readable";
+            assert_string_not_contains
+              ~needle:"oasis-0.1.0/scripts/worktree_only.txt\n"
+              tracked_listing.output
+              "tracked source archives should ignore unstaged worktree-only files";
+            let worktree_dir = Filename.concat workspace "worktree-dist" in
+            let worktree =
+              Process.run_capture ~cwd:workspace archive_script
+                [
+                  "--source-only";
+                  "--output-dir";
+                  worktree_dir;
+                  "--source-archive-mode";
+                  "worktree";
+                ]
+            in
+            assert_int_equal 0 worktree.status
+              ("worktree-mode source archive generation should succeed\n"
+             ^ worktree.output);
+            let worktree_listing =
+              Process.run_capture ~cwd:worktree_dir "tar"
+                [ "-tzf"; "oasis-0.1.0-source.tar.gz" ]
+            in
+            assert_int_equal 0 worktree_listing.status
+              "worktree-mode source archive should be readable";
+            assert_string_contains
+              ~needle:"oasis-0.1.0/scripts/worktree_only.txt\n"
+              worktree_listing.output
+              "worktree source archives should include unstaged files from tracked directories"));
     ( "reuses an existing source archive directory without rebuilding it",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -759,6 +820,33 @@ let cases =
             assert_file_exists (Filename.concat workspace "dist/release-assets.json");
             assert_file_exists
               (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz")));
+    ( "make release-manifests self-hosts from a clean checkout",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-release-manifests-self-host" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init"; "-q" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed before self-hosted release-manifests\n"
+             ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed before self-hosted release-manifests\n"
+             ^ add.output);
+            let dist_dir = Filename.concat workspace "dist" in
+            if Fs.exists dist_dir then Fs.remove_tree dist_dir;
+            let generated =
+              run_make ~use_oasis_bin:false ~cwd:workspace [ "release-manifests" ]
+            in
+            assert_int_equal 0 generated.status
+              ("make release-manifests should self-host successfully\n"
+             ^ generated.output);
+            assert_file_exists (Filename.concat workspace "_bootstrap/bin/oasis");
+            assert_file_exists (Filename.concat workspace "oasis.opam");
+            assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists (Filename.concat workspace "dist/release-assets.json");
+            assert_file_exists
+              (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz")));
     ( "sync-generated refreshes bootstrap metadata and release artifacts in one pass",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -915,6 +1003,44 @@ let cases =
                 assert_true
                   (((Unix.stat release_artifacts_script).Unix.st_perm land 0o111) <> 0)
                   "the source archive should preserve execute bits for generate_release_artifacts.sh")));
+    ( "binary archive generation self-hosts from a clean checkout when no binary is supplied",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-binary-self-host" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init"; "-q" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed before self-hosted binary archives\n"
+             ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed before self-hosted binary archives\n"
+             ^ add.output);
+            let archive_script =
+              Filename.concat workspace "scripts/build_release_archives.sh"
+            in
+            let output_dir = Filename.concat workspace "dist" in
+            let generated =
+              Process.run_capture ~cwd:workspace "env"
+                [
+                  "-u";
+                  "OASIS_BIN";
+                  archive_script;
+                  "--binary-only";
+                  "--output-dir";
+                  output_dir;
+                  "--os";
+                  "linux";
+                  "--arch";
+                  "x86_64";
+                ]
+            in
+            assert_int_equal 0 generated.status
+              ("binary archive generation should self-host from a clean checkout\n"
+             ^ generated.output);
+            assert_file_exists (Filename.concat workspace "_bootstrap/bin/oasis");
+            assert_file_exists
+              (Filename.concat output_dir "oasis-0.1.0-x86_64-linux.tar.gz")));
     ( "keeps package-manager definitions aligned with the shared release install script",
       (fun () ->
         let repo_root = Sys.getcwd () in
@@ -1270,7 +1396,7 @@ let cases =
             (Filename.concat repo_root ".github/workflows/release.yml")
         in
         assert_string_contains
-          ~needle:"./scripts/build_release_archives.sh --source-only --output-dir dist"
+          ~needle:"./scripts/build_release_archives.sh --source-only --output-dir dist --source-archive-mode tracked"
           workflow
           "the release workflow should publish a deterministic source archive";
         assert_string_contains

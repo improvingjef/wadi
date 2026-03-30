@@ -201,6 +201,7 @@ let cut_release ~root_dir ~version ~create_tag =
         checksums_output = None;
         asset_index_output = Some asset_index_path;
         archive_input = Some (Packager.Source_archive_dir dist_dir);
+        source_archive_mode = Packager.Tracked;
       }
     in
     Packager.run packaging_options

@@ -458,7 +458,7 @@ actions = ["generate"]
               run.output
               "top-level usage should include the release-artifacts command";
             assert_string_contains
-              ~needle:"oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]"
+              ~needle:"oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]"
               run.output "top-level usage should include the package command";
             assert_string_contains ~needle:"oasis sync-generated" run.output
               "top-level usage should include the sync-generated command";
@@ -601,6 +601,10 @@ actions = ["generate"]
               ~needle:"- `--asset-index-output PATH`: Write a machine-readable release asset index with names, URLs, sizes, and checksums."
               docs.output
               "docs output should include the package asset-index description";
+            assert_string_contains
+              ~needle:"- `--source-archive-mode tracked|worktree`: Choose whether rebuilt source archives come from tracked git paths only or from the live non-ignored worktree."
+              docs.output
+              "docs output should include the source-archive mode description";
             assert_string_contains
               ~needle:"- `--tag`: Create the annotated git tag that matches the refreshed release version."
               docs.output

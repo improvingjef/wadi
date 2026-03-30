@@ -178,5 +178,7 @@
 169. [x] Retarget maintenance scripts and Makefile entrypoints to delegate to the new subtools so there is one canonical implementation path.
 170. [x] Add black-box coverage for the new maintenance subtools and generated-output options so release upkeep stays testable without shell-script folklore.
 171. [x] Move the remaining release-cut and Homebrew-tap maintenance flows behind first-class `oasis` subtools so packaging workflows stop bifurcating between CLI and shell helpers.
-172. [ ] Decide whether release archive generation should stay strictly `git ls-files`-based or grow an explicit worktree mode so packaging checksums stay predictable while new files are still unstaged.
-173. [ ] Let CLI-backed maintenance wrappers self-host from a clean checkout without requiring `OASIS_BIN`, a prebuilt `_bootstrap/bin/oasis`, or an installed global `oasis`, so `make release-manifests` stays friction-light even before the tool has been built once.
+172. [x] Decide whether release archive generation should stay strictly `git ls-files`-based or grow an explicit worktree mode so packaging checksums stay predictable while new files are still unstaged.
+173. [x] Let CLI-backed maintenance wrappers self-host from a clean checkout without requiring `OASIS_BIN`, a prebuilt `_bootstrap/bin/oasis`, or an installed global `oasis`, so `make release-manifests` stays friction-light even before the tool has been built once.
+174. [x] Let release archive and install scripts resolve or self-bootstrap a repo-local `oasis` binary when no explicit `--binary` or `OASIS_BIN` is provided, so clean-checkout binary packaging does not fail before maintenance wrappers can run.
+175. [ ] Document the exact `worktree` source-archive inclusion boundary, especially that root-level untracked files stay excluded while additions under tracked directories are captured, so checksum changes remain explainable instead of magical.

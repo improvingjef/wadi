@@ -3,6 +3,10 @@ type archive_input =
   | Source_archive_dir of string
   | Reuse_source_archive_dir of string
 
+type source_archive_mode =
+  | Tracked
+  | Worktree
+
 type options = {
   root_dir : string;
   output_dir : string;
@@ -11,6 +15,7 @@ type options = {
   checksums_output : string option;
   asset_index_output : string option;
   archive_input : archive_input option;
+  source_archive_mode : source_archive_mode;
 }
 
 type asset = {
@@ -123,11 +128,31 @@ let create_temp_dir prefix =
   Unix.mkdir path 0o755;
   path
 
-let build_source_archive ~root_dir ~output_dir (metadata : Release_metadata.t) =
+let source_archive_mode_flag = function
+  | Tracked -> "tracked"
+  | Worktree -> "worktree"
+
+let parse_source_archive_mode = function
+  | "tracked" -> Ok Tracked
+  | "worktree" -> Ok Worktree
+  | value ->
+      Error
+        (Printf.sprintf
+           "unknown source archive mode %S; expected tracked or worktree"
+           value)
+
+let build_source_archive ~root_dir ~output_dir ~source_archive_mode
+    (metadata : Release_metadata.t) =
   let script_path = Filename.concat root_dir "scripts/build_release_archives.sh" in
   let command =
     Process.run_capture ~cwd:root_dir script_path
-      [ "--source-only"; "--output-dir"; output_dir ]
+      [
+        "--source-only";
+        "--output-dir";
+        output_dir;
+        "--source-archive-mode";
+        source_archive_mode_flag source_archive_mode;
+      ]
   in
   if command.status <> 0 then
     Error
@@ -142,7 +167,8 @@ let build_source_archive ~root_dir ~output_dir (metadata : Release_metadata.t) =
       Error
         ("source archive was not produced at expected path: " ^ archive_path)
 
-let resolve_source_archive ~root_dir (metadata : Release_metadata.t) = function
+let resolve_source_archive ~root_dir ~source_archive_mode
+    (metadata : Release_metadata.t) = function
   | Some (Source_archive path) ->
       if Fs.exists path then Ok path
       else Error ("source archive not found: " ^ path)
@@ -154,13 +180,17 @@ let resolve_source_archive ~root_dir (metadata : Release_metadata.t) = function
       else Error ("reusable source archive not found: " ^ path)
   | Some (Source_archive_dir dir) ->
       Fs.ensure_dir dir;
-      build_source_archive ~root_dir ~output_dir:dir metadata
+      build_source_archive ~root_dir ~output_dir:dir ~source_archive_mode
+        metadata
   | None ->
       let temp_dir = create_temp_dir "oasis-release-manifests" in
       Fun.protect
         ~finally:(fun () -> Fs.remove_tree temp_dir)
         (fun () ->
-          match build_source_archive ~root_dir ~output_dir:temp_dir metadata with
+          match
+            build_source_archive ~root_dir ~output_dir:temp_dir
+              ~source_archive_mode metadata
+          with
           | Ok archive_path ->
               let retained =
                 Filename.concat root_dir
@@ -342,7 +372,9 @@ let run (options : options) =
     | None -> default_formula_output options.output_dir metadata
   in
   let* source_archive =
-    resolve_source_archive ~root_dir:options.root_dir metadata options.archive_input
+    resolve_source_archive ~root_dir:options.root_dir
+      ~source_archive_mode:options.source_archive_mode metadata
+      options.archive_input
   in
   Fs.ensure_dir options.output_dir;
   Fs.write_file opam_output (render_opam metadata);

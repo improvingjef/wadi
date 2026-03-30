@@ -4,30 +4,60 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$ROOT_DIR/release/metadata.sh"
 . "$ROOT_DIR/scripts/release_locale.sh"
+. "$ROOT_DIR/scripts/oasis_self_host.sh"
 
 oasis_apply_release_archive_env
 
 OUTPUT_DIR=$ROOT_DIR/dist
 BINARY_PATH=${OASIS_BIN:-$ROOT_DIR/_bootstrap/bin/oasis}
+BINARY_PATH_EXPLICIT=0
 BUILD_SOURCE=1
 BUILD_BINARY=1
 OS_NAME=
 ARCH_NAME=
+SOURCE_ARCHIVE_MODE=tracked
 
 usage() {
   cat <<'EOF'
-Usage: build_release_archives.sh [--output-dir DIR] [--binary PATH] [--os OS --arch ARCH] [--source-only] [--binary-only]
+Usage: build_release_archives.sh [--output-dir DIR] [--binary PATH] [--os OS --arch ARCH] [--source-only] [--binary-only] [--source-archive-mode tracked|worktree]
 
 Build deterministic source and/or binary release archives from the current
 workspace tree.
 EOF
 }
 
+tracked_worktree_roots() {
+  src_root=$1
+  git -C "$src_root" ls-files \
+    | awk -F/ 'NF > 1 { print $1 }' \
+    | sort -u
+}
+
+list_source_paths() {
+  src_root=$1
+  case "$SOURCE_ARCHIVE_MODE" in
+    tracked)
+      git -C "$src_root" ls-files --cached --modified
+      ;;
+    worktree)
+      git -C "$src_root" ls-files --cached --modified
+      tracked_roots=$(tracked_worktree_roots "$src_root")
+      if [ -n "$tracked_roots" ]; then
+        # shellcheck disable=SC2086
+        git -C "$src_root" ls-files --others --exclude-standard -- $tracked_roots
+      fi
+      ;;
+    *)
+      echo "build_release_archives.sh: unknown source archive mode '$SOURCE_ARCHIVE_MODE'" >&2
+      exit 2
+      ;;
+  esac | sort -u
+}
+
 copy_tree_files() {
   src_root=$1
   dst_root=$2
-  git -C "$src_root" ls-files --cached --modified \
-    | sort -u \
+  list_source_paths "$src_root" \
     | while IFS= read -r relative_path; do
         [ -n "$relative_path" ] || continue
         if [ "$relative_path" = "Formula/oasis.rb" ]; then
@@ -84,6 +114,9 @@ build_binary_archive() {
     echo "build_release_archives.sh: binary archives require --os and --arch" >&2
     exit 2
   fi
+  if [ "$BINARY_PATH_EXPLICIT" -eq 0 ]; then
+    BINARY_PATH=$(oasis_resolve_repo_binary "$ROOT_DIR")
+  fi
   if [ ! -f "$BINARY_PATH" ]; then
     echo "build_release_archives.sh: binary not found: $BINARY_PATH" >&2
     exit 1
@@ -122,6 +155,7 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       BINARY_PATH=$2
+      BINARY_PATH_EXPLICIT=1
       shift 2
       ;;
     --os)
@@ -149,6 +183,14 @@ while [ "$#" -gt 0 ]; do
       BUILD_SOURCE=0
       BUILD_BINARY=1
       shift
+      ;;
+    --source-archive-mode)
+      if [ "$#" -lt 2 ]; then
+        echo "build_release_archives.sh: --source-archive-mode requires tracked or worktree" >&2
+        exit 2
+      fi
+      SOURCE_ARCHIVE_MODE=$2
+      shift 2
       ;;
     --help)
       usage
