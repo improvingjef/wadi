@@ -189,6 +189,41 @@ let resolve_build_order workspace requested_targets =
   in
   Ok (List.rev !order)
 
+let compute_waves order =
+  let assigned = Hashtbl.create (List.length order) in
+  let waves = ref [] in
+  let remaining = ref order in
+  while !remaining <> [] do
+    let ready, rest =
+      List.partition
+        (fun target ->
+          List.for_all
+            (fun dep -> Hashtbl.mem assigned dep)
+            (dependency_names target))
+        !remaining
+    in
+    (match ready with
+    | [] -> remaining := []
+    | _ ->
+        List.iter
+          (fun target -> Hashtbl.add assigned (target_name target) ())
+          ready;
+        waves := ready :: !waves;
+        remaining := rest)
+  done;
+  List.rev !waves
+
+let default_jobs () =
+  try
+    let ic =
+      Unix.open_process_in
+        "getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4"
+    in
+    let line = input_line ic in
+    let _ = Unix.close_process_in ic in
+    max 1 (int_of_string (String.trim line))
+  with _ -> 4
+
 let append_line buffer line =
   Buffer.add_string buffer line;
   Buffer.add_char buffer '\n'
@@ -2369,9 +2404,10 @@ let format_build_failures failures =
       skipped);
   Buffer.contents buf
 
-let build ~workspace_root ~verbose ?(keep_going = false)
+let build ~workspace_root ~verbose ?(keep_going = false) ?(jobs = 1)
     ?(requested_targets = []) ?(backend_request = Toolchain.Auto) ?profile
     workspace =
+  let _jobs = jobs in
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
   let session = Toolchain.create_session () in

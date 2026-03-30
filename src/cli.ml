@@ -11,6 +11,7 @@ type build_options = {
   profile : string option;
   lock_policy : lock_policy;
   keep_going : bool;
+  jobs : int;
 }
 
 type status_options = {
@@ -737,7 +738,7 @@ let build_doc =
     name = "build";
     summary = "Compile libraries, executables, and tests into predictable artifact roots.";
     signature =
-      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]";
+      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi build";
@@ -1693,6 +1694,20 @@ let choose_lock_policy current requested =
   | Warn_locked, Require_locked | Require_locked, Warn_locked ->
       Error "--locked cannot be combined with --warn-locked"
 
+let parse_count flag value =
+  try
+    let parsed = int_of_string value in
+    if parsed < 0 then
+      Error (Printf.sprintf "%s requires a non-negative integer" flag)
+    else Ok parsed
+  with Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
+
+let parse_positive_count flag value =
+  let* parsed = parse_count flag value in
+  if parsed = 0 then
+    Error (Printf.sprintf "%s requires a positive integer" flag)
+  else Ok parsed
+
 let parse_build_args (args : string list) : (build_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : build_options) = function
@@ -1716,6 +1731,10 @@ let parse_build_args (args : string list) : (build_options, string) result =
         loop { options with lock_policy } rest
     | ("--keep-going" | "-k") :: rest ->
         loop { options with keep_going = true } rest
+    | ("-j" | "--jobs") :: n :: rest ->
+        let* jobs = parse_positive_count "-j" n in
+        loop { options with jobs } rest
+    | ("-j" | "--jobs") :: [] -> Error "-j requires a positive integer"
     | ("--verbose" | "-v") :: rest ->
         loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage build_doc)
@@ -1732,6 +1751,7 @@ let parse_build_args (args : string list) : (build_options, string) result =
       profile = None;
       lock_policy = Ignore_lock;
       keep_going = false;
+      jobs = 1;
     }
     args
 
@@ -1896,20 +1916,6 @@ let parse_run_args (args : string list) : (run_options, string) result =
       profile = None;
     }
     args
-
-let parse_count flag value =
-  try
-    let parsed = int_of_string value in
-    if parsed < 0 then
-      Error (Printf.sprintf "%s requires a non-negative integer" flag)
-    else Ok parsed
-  with Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
-
-let parse_positive_count flag value =
-  let* parsed = parse_count flag value in
-  if parsed = 0 then
-    Error (Printf.sprintf "%s requires a positive integer" flag)
-  else Ok parsed
 
 let parse_test_args (args : string list) : (test_options, string) result =
   let* default_backend_request = default_backend_request () in
@@ -3082,7 +3088,7 @@ let run_build (options : build_options) =
           match
             Builder.build ~workspace_root:options.workspace_dir
               ~verbose:options.verbose ~keep_going:options.keep_going
-              ~requested_targets:options.targets
+              ~jobs:options.jobs ~requested_targets:options.targets
               ~backend_request:options.backend_request ?profile:options.profile
               workspace
           with

@@ -789,6 +789,56 @@ let parse_test path section name =
   let* test = parse_runnable path section name in
   Ok (Test test)
 
+let parse_executables path section _batch_name =
+  let* () =
+    allowed_fields path section
+      [
+        "dir";
+        "names";
+        "deps";
+        "packages";
+        "actions";
+        "preprocess";
+        "ppx";
+        "compile_flags";
+        "link_flags";
+        "env";
+        "sandbox";
+      ]
+  in
+  let* dir = required_string path section "dir" in
+  let* names = required_strings path section "names" in
+  let* deps = optional_strings path section "deps" in
+  let* packages = optional_strings path section "packages" in
+  let* options = parse_target_options path section in
+  let* () =
+    validate_identifier_list ~allow_empty:false path section.line "names" names
+  in
+  let* () =
+    if List.length names <> List.length (List.sort_uniq String.compare names) then
+      error path section.line "names contains duplicates"
+    else Ok ()
+  in
+  let* () = validate_identifier_list ~allow_empty:true path section.line "deps" deps in
+  let* () = validate_package_list path section.line packages in
+  let* () = validate_relative_path ~allow_dot:false path section.line "dir" dir in
+  Ok
+    (List.map
+       (fun name ->
+         Executable
+           {
+             name;
+             public_name = None;
+             dir;
+             package_path = None;
+             main = name;
+             modules = [];
+             deps;
+             packages;
+             options;
+           })
+       names)
+
 let parse_bench path section name =
   let* () =
     allowed_fields path section
@@ -1485,6 +1535,13 @@ let load_local path =
                   collect_sections defaults_opt watch_opt (target :: targets)
                     benches actions preprocessors ppx_tools profiles overrides
                     rest
+              | [ "executables"; batch_name ] ->
+                  let* batch_targets =
+                    parse_executables path section batch_name
+                  in
+                  collect_sections defaults_opt watch_opt
+                    (batch_targets @ targets) benches actions preprocessors
+                    ppx_tools profiles overrides rest
               | [ "test"; target_name ] ->
                   let* target = parse_test path section target_name in
                   collect_sections defaults_opt watch_opt (target :: targets)

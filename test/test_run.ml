@@ -403,7 +403,7 @@ actions = ["generate"]
               ~needle:"wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]"
               run.output "top-level usage should include the init command";
             assert_string_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]"
+              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
               ~needle:"wadi status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]"
@@ -493,7 +493,7 @@ actions = ["generate"]
               ~needle:"wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
               help.output "explain help should include the explain signature";
             assert_string_not_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]"
+              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]"
               help.output
               "command-specific help should not include unrelated commands")) );
     ( "prints command-specific help from the command table",
@@ -503,7 +503,7 @@ actions = ["generate"]
             assert_true (help.status <> 0)
               "build --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]"
+              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]"
               help.output "build help should include the build signature";
             assert_string_not_contains
               ~needle:"wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
