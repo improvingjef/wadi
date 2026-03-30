@@ -165,4 +165,7 @@
 156. [x] Hot-reload root `[watch]` and `.oasiswatchignore` changes inside a running watcher so config edits take effect without restarting the poll loop.
 157. [x] Keep `oasis.toml` and `.oasiswatchignore` visible to `oasis watch` even when include globs would otherwise prune root control files, so watch-policy edits never go stale silently.
 158. [x] Keep the last good watch policy after `.oasiswatchignore` reload errors and surface reload diagnostics instead of killing the poll loop on a bad local edit.
-159. [ ] Decide which other root control files, especially `oasis.lock`, should bypass watch include-glob pruning so delegated subtools do not miss tool-relevant workspace edits.
+159. [x] Decide which other root control files, especially `oasis.lock`, should bypass watch include-glob pruning so delegated subtools do not miss tool-relevant workspace edits.
+160. [x] Split `oasis watch` root-file handling into policy-reload versus rerun-trigger roles so files like `oasis.lock` can trigger delegated subtools without inheriting `.oasiswatchignore` semantics.
+161. [x] Surface the watched root-file set in `oasis watch` startup output and add black-box coverage for lock-aware `build`, `install`, and `doctor` reruns under narrow include globs.
+162. [ ] Drive watch root-file requirements from command metadata instead of hard-coded subtool-name checks so future workspace-root inputs stay aligned with CLI evolution.

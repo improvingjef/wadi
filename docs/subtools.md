@@ -25,7 +25,9 @@ exit codes rather than hidden global state.
   change, without baking watch mode into every other command. Root workspaces
   can persist shared include/ignore globs under `[watch]`, and
   `.oasiswatchignore` can absorb local noisy trees without bloating shell
-  aliases.
+  aliases. Lock-aware delegated subtools also keep root metadata like
+  `oasis.lock` visible even when include globs narrow the watched tree to
+  source directories.
 
 ### Execution
 

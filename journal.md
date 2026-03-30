@@ -197,3 +197,9 @@
 - A watcher needs two views of the tree: control files that mutate watch policy, and selected inputs that should actually trigger reruns. Merging those sets makes `.oasiswatchignore` edits look like source changes or disappear behind include globs.
 - Root control files have to bypass ordinary include-glob pruning on purpose. If `oasis watch` can hide `oasis.toml` or its ignore file from itself, config edits become another round of build-tool superstition.
 - Bad local watch-policy edits should degrade to warnings plus “last known good” behavior. Killing the poll loop because `.oasiswatchignore` briefly became a directory is exactly the kind of hostile friction Dune has already trained people to expect.
+
+## 2026-03-29
+
+- `oasis.lock` is not just another source file and not quite a watch-policy file either. The watcher needed an explicit split between “reload policy when this changes” and “rerun the delegated subtool when this changes,” or lockfile edits would either disappear behind include globs or inherit the wrong semantics from `.oasiswatchignore`.
+- Narrow watch include globs are only trustworthy if command-critical root files bypass them on purpose. A user who says “watch `app/**`” still expects `oasis watch build --locked` or `oasis watch doctor` to notice that the root lock snapshot changed.
+- Printing the watched root-file set up front is worth the noise. Hidden watch inputs are exactly the kind of build-tool magic that turns a legitimate optimization into superstition.

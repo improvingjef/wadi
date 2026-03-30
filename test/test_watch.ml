@@ -42,6 +42,18 @@ let spawn_delayed_write ?(delay_s = 1) workspace relative_path contents =
   in
   Process.spawn ~cwd:workspace script_path []
 
+let write_demo_workspace ?(watch_block = "") workspace =
+  write_manifest workspace
+    (Printf.sprintf
+       {|
+%s
+[executable.demo]
+dir = "app"
+main = "main"
+|}
+       watch_block);
+  write_source workspace "app/main.ml" {|let () = print_endline "demo"|}
+
 let cases =
   [
     ( "reruns a selected subtool when workspace inputs change",
@@ -189,6 +201,130 @@ main = "main"
               "manifest edits should still rerun the delegated subtool";
             assert_string_contains ~needle:"Watch-run 3: run demo" watch.output
               "watch should apply the reloaded manifest policy to later changes")) );
+    ( "reruns build --locked when oasis.lock changes outside included globs",
+      (fun () ->
+        with_temp_dir "oasis-watch-build-locked" (fun workspace ->
+            write_demo_workspace
+              ~watch_block:{|
+[watch]
+include = ["app/**"]
+|}
+              workspace;
+            let locked = run_oasis ~cwd:workspace [ "lock"; "demo" ] in
+            assert_int_equal 0 locked.status
+              "lock should succeed before watching a locked build";
+            let drift_lock =
+              spawn_delayed_write workspace "oasis.lock" "{}\n"
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "build";
+                  "--locked";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] drift_lock);
+            assert_true (watch.status <> 0)
+              "watch should surface the failing rerun when the lock snapshot drifts";
+            assert_string_contains
+              ~needle:"Watch-run 2: build --locked demo"
+              watch.output
+              "watch should rerun build when oasis.lock changes outside the include globs";
+            assert_string_contains ~needle:"lock validation failed against"
+              watch.output
+              "locked build reruns should validate the changed lock file")) );
+    ( "reruns install --warn-locked when oasis.lock changes outside included globs",
+      (fun () ->
+        with_temp_dir "oasis-watch-install-locked" (fun workspace ->
+            write_demo_workspace
+              ~watch_block:{|
+[watch]
+include = ["app/**"]
+|}
+              workspace;
+            let locked = run_oasis ~cwd:workspace [ "lock"; "demo" ] in
+            assert_int_equal 0 locked.status
+              "lock should succeed before watching a lock-aware install";
+            let prefix = Filename.concat workspace "_stage" in
+            let drift_lock =
+              spawn_delayed_write workspace "oasis.lock" "{}\n"
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "install";
+                  "--warn-locked";
+                  "--prefix";
+                  prefix;
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] drift_lock);
+            assert_int_equal 0 watch.status
+              "watch should keep going when install only warns on lock drift";
+            assert_string_contains
+              ~needle:"Watch-run 2: install --warn-locked --prefix"
+              watch.output
+              "watch should rerun install when oasis.lock changes outside the include globs";
+            assert_string_contains ~needle:"lock validation failed against"
+              watch.output
+              "warn-locked install reruns should report the changed lock file")) );
+    ( "reports and watches oasis.lock for doctor by default",
+      (fun () ->
+        with_temp_dir "oasis-watch-doctor-locked" (fun workspace ->
+            write_demo_workspace
+              ~watch_block:{|
+[watch]
+include = ["app/**"]
+|}
+              workspace;
+            let locked = run_oasis ~cwd:workspace [ "lock"; "demo" ] in
+            assert_int_equal 0 locked.status
+              "lock should succeed before watching doctor";
+            let drift_lock =
+              spawn_delayed_write workspace "oasis.lock" "{}\n"
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "doctor";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] drift_lock);
+            assert_int_equal 0 watch.status
+              "doctor should keep warning, not failing, when the lock file drifts";
+            assert_string_contains
+              ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore, oasis.lock"
+              watch.output
+              "watch should report lock-aware root files for doctor";
+            assert_string_contains ~needle:"Watch-run 2: doctor demo" watch.output
+              "watch should rerun doctor when oasis.lock changes outside the include globs";
+            assert_string_contains ~needle:"failed to read"
+              watch.output
+              "doctor reruns should inspect the changed lock file")) );
     ( "keeps the last watch policy after an ignore-file reload error",
       (fun () ->
         with_temp_dir "oasis-watch-ignore-reload-error" (fun workspace ->
