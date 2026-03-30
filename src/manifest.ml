@@ -107,6 +107,11 @@ type workspace_defaults = {
   options : target_options;
 }
 
+type watch_config = {
+  include_globs : string list;
+  ignore_globs : string list;
+}
+
 type target =
   | Library of library
   | Executable of executable
@@ -116,6 +121,7 @@ type workspace = {
   name : string option;
   version : int;
   defaults : workspace_defaults;
+  watch : watch_config;
   targets : target list;
   benches : bench_target list;
   actions : action list;
@@ -163,6 +169,8 @@ let empty_target_options =
     env = [];
     sandbox = None;
   }
+
+let default_watch_config = { include_globs = []; ignore_globs = [] }
 
 let ( let* ) = Result.bind
 
@@ -1033,6 +1041,16 @@ let parse_defaults path section =
   let* options = parse_target_options path section in
   Ok { default_profile; options }
 
+let parse_watch path section =
+  let* () = allowed_fields path section [ "include"; "ignore" ] in
+  let* include_globs = optional_strings path section "include" in
+  let* ignore_globs = optional_strings path section "ignore" in
+  let* () =
+    validate_string_list path section.line "watch include" include_globs
+  in
+  let* () = validate_string_list path section.line "watch ignore" ignore_globs in
+  Ok { include_globs; ignore_globs }
+
 let parse_profile path section name =
   let* () =
     allowed_fields path section
@@ -1388,8 +1406,8 @@ let load_local path =
         let sections = List.rev sections in
         let top_level = List.rev top_level in
         let* name, version, members = parse_top_level path top_level in
-        let rec collect_sections defaults_opt targets benches actions preprocessors
-            ppx_tools profiles overrides = function
+        let rec collect_sections defaults_opt watch_opt targets benches actions
+            preprocessors ppx_tools profiles overrides = function
           | [] ->
               let* () = validate_unique_target_names path (List.rev targets) in
               let* () =
@@ -1424,6 +1442,10 @@ let load_local path =
                         (match defaults_opt with
                         | Some defaults -> defaults
                         | None -> default_defaults);
+                      watch =
+                        (match watch_opt with
+                        | Some watch -> watch
+                        | None -> default_watch_config);
                       targets;
                       benches = List.rev benches;
                       actions = List.rev actions;
@@ -1442,60 +1464,77 @@ let load_local path =
                     | None -> Ok ()
                     | Some _ -> error path section.line "duplicate [defaults] section"
                   in
-                  collect_sections (Some defaults) targets benches actions
+                  collect_sections (Some defaults) watch_opt targets benches actions
                     preprocessors ppx_tools profiles overrides rest
+              | [ "watch" ] ->
+                  let* watch = parse_watch path section in
+                  let* () =
+                    match watch_opt with
+                    | None -> Ok ()
+                    | Some _ -> error path section.line "duplicate [watch] section"
+                  in
+                  collect_sections defaults_opt (Some watch) targets benches
+                    actions preprocessors ppx_tools profiles overrides rest
               | [ "library"; target_name ] ->
                   let* target = parse_library path section target_name in
-                  collect_sections defaults_opt (target :: targets) benches actions
-                    preprocessors ppx_tools profiles overrides rest
+                  collect_sections defaults_opt watch_opt (target :: targets)
+                    benches actions preprocessors ppx_tools profiles overrides
+                    rest
               | [ "executable"; target_name ] ->
                   let* target = parse_executable path section target_name in
-                  collect_sections defaults_opt (target :: targets) benches actions
-                    preprocessors ppx_tools profiles overrides rest
+                  collect_sections defaults_opt watch_opt (target :: targets)
+                    benches actions preprocessors ppx_tools profiles overrides
+                    rest
               | [ "test"; target_name ] ->
                   let* target = parse_test path section target_name in
-                  collect_sections defaults_opt (target :: targets) benches actions
-                    preprocessors ppx_tools profiles overrides rest
+                  collect_sections defaults_opt watch_opt (target :: targets)
+                    benches actions preprocessors ppx_tools profiles overrides
+                    rest
               | [ "bench"; bench_name ] ->
                   let* bench = parse_bench path section bench_name in
-                  collect_sections defaults_opt targets (bench :: benches) actions
-                    preprocessors ppx_tools profiles overrides rest
+                  collect_sections defaults_opt watch_opt targets
+                    (bench :: benches) actions preprocessors ppx_tools profiles
+                    overrides rest
               | [ "action"; action_name ] ->
                   let* action = parse_action path section action_name in
-                  collect_sections defaults_opt targets benches (action :: actions)
-                    preprocessors ppx_tools profiles overrides rest
+                  collect_sections defaults_opt watch_opt targets benches
+                    (action :: actions) preprocessors ppx_tools profiles
+                    overrides rest
               | [ "preprocess"; tool_name ] ->
                   let* tool =
                     parse_command_tool "preprocess" path section tool_name
                   in
-                  collect_sections defaults_opt targets benches actions
+                  collect_sections defaults_opt watch_opt targets benches actions
                     (tool :: preprocessors) ppx_tools profiles overrides rest
               | [ "ppx"; tool_name ] ->
                   let* tool = parse_ppx_tool path section tool_name in
-                  collect_sections defaults_opt targets benches actions preprocessors
-                    (tool :: ppx_tools) profiles overrides rest
+                  collect_sections defaults_opt watch_opt targets benches actions
+                    preprocessors (tool :: ppx_tools) profiles overrides rest
               | [ "profile"; profile_name ] ->
                   let* profile = parse_profile path section profile_name in
-                  collect_sections defaults_opt targets benches actions preprocessors
-                    ppx_tools (profile :: profiles) overrides rest
+                  collect_sections defaults_opt watch_opt targets benches
+                    actions preprocessors ppx_tools (profile :: profiles)
+                    overrides rest
               | [ "profile"; profile_name; target_kind; target_name ] ->
                   let* override =
                     parse_profile_override path section profile_name target_kind
                       target_name
                   in
-                  collect_sections defaults_opt targets benches actions preprocessors
-                    ppx_tools profiles (override :: overrides) rest
+                  collect_sections defaults_opt watch_opt targets benches actions
+                    preprocessors ppx_tools profiles (override :: overrides)
+                    rest
               | [ kind; _ ] ->
                   error path section.line
                     (Printf.sprintf
-                       "unknown section kind '%s'; expected defaults, action, \
-                        preprocess, ppx, profile, library, executable, test, or bench"
+                       "unknown section kind '%s'; expected defaults, watch, \
+                        action, preprocess, ppx, profile, library, executable, \
+                        test, or bench"
                        kind)
               | _ ->
                   error path section.line
                     "section path is not supported by this manifest version")
         in
-        collect_sections None [] [] [] [] [] [] [] sections
+        collect_sections None None [] [] [] [] [] [] [] sections
     | raw_line :: rest ->
         let line = raw_line |> String_util.strip_comment |> String.trim in
         if line = "" then
@@ -1528,6 +1567,57 @@ let load_local path =
                     sections rest)
   in
   parse_lines 1 None [] [] lines
+
+let load_watch_config path =
+  let lines = Fs.read_lines path in
+  let finalize_section current_section watch_config =
+    match current_section with
+    | None -> Ok watch_config
+    | Some section ->
+        let* watch = parse_watch path section in
+        let* () =
+          match watch_config with
+          | None -> Ok ()
+          | Some _ -> error path section.line "duplicate [watch] section"
+        in
+        Ok (Some watch)
+  in
+  let rec loop line_number current_section watch_config = function
+    | [] ->
+        let* watch_config = finalize_section current_section watch_config in
+        Ok
+          (match watch_config with
+          | Some watch -> watch
+          | None -> default_watch_config)
+    | raw_line :: rest ->
+        let line = raw_line |> String_util.strip_comment |> String.trim in
+        if line = "" then loop (line_number + 1) current_section watch_config rest
+        else if String_util.starts_with ~prefix:"[" line then
+          let* watch_config = finalize_section current_section watch_config in
+          let* next_section = parse_section_header path line_number line in
+          let current_section =
+            match next_section.path with
+            | [ "watch" ] -> Some next_section
+            | _ -> None
+          in
+          loop (line_number + 1) current_section watch_config rest
+        else
+          match current_section with
+          | None -> loop (line_number + 1) None watch_config rest
+          | Some section -> (
+              match String_util.split_once ~on:'=' line with
+              | None -> error path line_number "expected 'key = value'"
+              | Some (raw_key, raw_value) ->
+                  let key = String.trim raw_key in
+                  let value_text = String.trim raw_value in
+                  let* value = parse_value path line_number value_text in
+                  let* bindings =
+                    add_binding path line_number key value section.bindings
+                  in
+                  let current_section = Some { section with bindings } in
+                  loop (line_number + 1) current_section watch_config rest)
+  in
+  loop 1 None None lines
 
 let rec load path =
   let* loaded = load_local path in
@@ -1582,6 +1672,11 @@ let rec load path =
             if member_workspace.defaults <> default_defaults then
               member_workspace_feature_error member_manifest_path
                 "defaults sections"
+            else Ok ()
+          in
+          let* () =
+            if member_workspace.watch <> default_watch_config then
+              member_workspace_feature_error member_manifest_path "watch sections"
             else Ok ()
           in
           let* () =

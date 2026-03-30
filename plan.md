@@ -160,5 +160,6 @@
 151. [x] Add configurable ignore/include globs to `oasis watch` so large repositories can trim noisy non-input trees without editing the hard-coded watch roots.
 152. [x] Teach `oasis doctor` or a sibling maintenance subtool to report generated-asset drift for `docs/cli.md`, packaged completions, and release metadata before packaging tests fail.
 153. [x] Resolve the live `oasis` executable through `PATH` when `watch` or maintenance checks reinvoke the current binary so installed workflows do not assume a cwd-relative `argv[0]`.
-154. [ ] Let workspaces persist watch include/ignore globs in manifest or ignore-file form so teams stop repeating long `oasis watch --include ... --ignore ...` command lines.
-155. [ ] Detect and explain conflicting inner `--workspace` flags under `oasis watch` so the polled tree and delegated subtool cannot silently point at different repositories.
+154. [x] Let workspaces persist watch include/ignore globs in manifest or ignore-file form so teams stop repeating long `oasis watch --include ... --ignore ...` command lines.
+155. [x] Detect and explain conflicting inner `--workspace` flags under `oasis watch` so the polled tree and delegated subtool cannot silently point at different repositories.
+156. [ ] Hot-reload root `[watch]` and `.oasiswatchignore` changes inside a running watcher so config edits take effect without restarting the poll loop.

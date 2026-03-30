@@ -222,6 +222,29 @@ modules = ["greeting"]
             assert_true library.wrapped
               "library wrapped mode should parse from boolean manifest fields"
         | _ -> fail "expected a single wrapped library target")) ;
+    ( "parses root watch configuration",
+      (fun () ->
+        let workspace =
+          expect_ok
+            (load_manifest
+               {|
+[watch]
+include = ["app/**", "lib/**"]
+ignore = ["vendor/**", "docs/**"]
+|})
+        in
+        assert_string_equal "app/**"
+          (List.nth workspace.Manifest.watch.include_globs 0)
+          "watch includes should preserve manifest order";
+        assert_string_equal "lib/**"
+          (List.nth workspace.Manifest.watch.include_globs 1)
+          "watch includes should keep multiple globs";
+        assert_string_equal "vendor/**"
+          (List.nth workspace.Manifest.watch.ignore_globs 0)
+          "watch ignores should preserve manifest order";
+        assert_string_equal "docs/**"
+          (List.nth workspace.Manifest.watch.ignore_globs 1)
+          "watch ignores should keep multiple globs")) ;
     ( "allows wrapped libraries to declare no child modules",
       (fun () ->
         let workspace =
@@ -576,6 +599,31 @@ modules = ["core"]
               ~needle:"member manifests may not define defaults sections"
               error
               "member manifests should keep workspace defaults in the root manifest")) );
+    ( "rejects watch sections in member manifests",
+      (fun () ->
+        with_temp_dir "oasis-member-watch" (fun workspace_root ->
+            write_manifest workspace_root
+              {|
+workspace = "demo"
+version = 1
+members = ["packages/core"]
+|};
+            write_workspace_file workspace_root "packages/core/oasis.toml"
+              {|
+[watch]
+include = ["lib/**"]
+
+[library.core]
+dir = "lib"
+modules = ["core"]
+|};
+            let error =
+              expect_error (Manifest.load (manifest_path workspace_root))
+            in
+            assert_string_contains
+              ~needle:"member manifests may not define watch sections"
+              error
+              "member manifests should keep watch policy in the root manifest")) );
     ( "rejects invalid environment bindings",
       (fun () ->
         let error =

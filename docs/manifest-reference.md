@@ -14,6 +14,24 @@ members = ["packages/core"]     # optional
 `members` entries are workspace-relative directories that contain their own
 `oasis.toml`.
 
+## Watch
+
+```toml
+[watch]
+include = ["lib/**", "app/**"]
+ignore = ["vendor/**", "docs/**"]
+```
+
+Rules:
+
+- `include` narrows `oasis watch` to matching paths when present.
+- `ignore` adds workspace-wide ignore globs on top of the built-in `.git`,
+  `_oasis`, and `_bootstrap` exclusions.
+- Command-line `--include` and `--ignore` flags append to the persisted watch
+  globs instead of replacing them.
+- A root-level `.oasiswatchignore` file may list one ignore glob per line.
+  Blank lines and `#` comments are ignored.
+
 ## Targets
 
 ### Library
@@ -209,6 +227,9 @@ Member manifests may define:
 
 Member manifests may not define workspace-wide sections such as `defaults` or
 `profile.*`.
+
+They also may not define `[watch]`; watch policy belongs to the root workspace
+manifest.
 
 Package-local behavior:
 

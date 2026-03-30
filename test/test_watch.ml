@@ -228,4 +228,157 @@ main = "main"
               "watch should rerun after an included path changes";
             assert_string_contains ~needle:"second\n" watch.output
               "watch should ignore changes outside the included glob set")) );
+    ( "uses persisted manifest watch globs",
+      (fun () ->
+        with_temp_dir "oasis-watch-manifest-globs" (fun workspace ->
+            write_manifest workspace
+              {|
+[watch]
+include = ["app/**"]
+ignore = ["docs/**"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "first"|};
+            write_source workspace "docs/notes.txt" "notes\n";
+            let ignored_change =
+              spawn_delayed_write ~delay_s:1 workspace "docs/notes.txt"
+                "updated notes\n"
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "app/main.ml"
+                {|let () = print_endline "second"|}
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] ignored_change);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should use persisted root-manifest include and ignore globs";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "watch should rerun after a manifest-included path changes";
+            assert_string_contains ~needle:"second\n" watch.output
+              "watch should keep ignoring persisted ignored paths")) );
+    ( "loads extra ignore globs from .oasiswatchignore",
+      (fun () ->
+        with_temp_dir "oasis-watch-ignore-file" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "first"|};
+            write_source workspace "docs/notes.txt" "notes\n";
+            write_workspace_file workspace ".oasiswatchignore"
+              {|
+# Ignore generated docs noise.
+docs/**
+|};
+            let ignored_change =
+              spawn_delayed_write ~delay_s:1 workspace "docs/notes.txt"
+                "updated notes\n"
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "app/main.ml"
+                {|let () = print_endline "second"|}
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] ignored_change);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should merge ignore globs from the workspace ignore file";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "watch should rerun after a non-ignored source change";
+            assert_string_contains ~needle:"second\n" watch.output
+              "watch should keep the ignore-file-filtered docs tree from retriggering")) );
+    ( "rejects conflicting inner --workspace flags",
+      (fun () ->
+        with_temp_dir "oasis-watch-conflict" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "demo"|};
+            let other_workspace = Filename.concat workspace "other-workspace" in
+            Unix.mkdir other_workspace 0o755;
+            write_manifest other_workspace
+              {|
+[executable.other]
+dir = "app"
+main = "main"
+|};
+            write_source other_workspace "app/main.ml"
+              {|let () = print_endline "other"|};
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--max-runs";
+                  "1";
+                  "run";
+                  "--workspace";
+                  other_workspace;
+                  "demo";
+                ]
+            in
+            assert_true (watch.status <> 0)
+              "watch should reject an inner subtool workspace that points elsewhere";
+            assert_string_contains ~needle:"conflicts with watched workspace"
+              watch.output
+              "watch should explain why differing workspaces are unsafe")) );
+    ( "allows a redundant inner --workspace for the same tree",
+      (fun () ->
+        with_temp_dir "oasis-watch-same-workspace" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "demo"|};
+            let watch =
+              run_oasis ~cwd:workspace
+                [ "watch"; "--max-runs"; "1"; "run"; "--workspace"; "."; "demo" ]
+            in
+            assert_int_equal 0 watch.status
+              "watch should allow a redundant inner workspace that resolves to the same root";
+            assert_string_contains ~needle:"Watch-run 1: run --workspace . demo"
+              watch.output
+              "watch should still execute the selected subtool when the workspace matches";
+            assert_string_contains ~needle:"demo\n" watch.output
+              "watch should keep forwarding the delegated subtool output")) );
   ]

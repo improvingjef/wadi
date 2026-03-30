@@ -22,7 +22,10 @@ exit codes rather than hidden global state.
   was rebuilt. Persist a machine-readable `.oasis-explain.json` sibling for
   editors and CI.
 - `oasis watch`: poll the workspace and rerun a selected subtool when files
-  change, without baking watch mode into every other command.
+  change, without baking watch mode into every other command. Root workspaces
+  can persist shared include/ignore globs under `[watch]`, and
+  `.oasiswatchignore` can absorb local noisy trees without bloating shell
+  aliases.
 
 ### Execution
 

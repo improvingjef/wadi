@@ -25,6 +25,8 @@ type compiled_options = {
 
 let default_ignore_globs = [ ".git/**"; "_oasis/**"; "_bootstrap/**" ]
 
+let ignore_file_name = ".oasiswatchignore"
+
 let command_line command_name command_args =
   String.concat " " (command_name :: command_args)
 
@@ -120,6 +122,17 @@ let compile_options (options : options) =
       (default_ignore_globs @ options.ignore_globs)
       |> String_util.dedup_preserve |> compile_globs;
   }
+
+let parse_ignore_file_line line =
+  let trimmed = line |> String_util.strip_comment |> String.trim in
+  if trimmed = "" then None else Some trimmed
+
+let load_ignore_file_globs workspace_root =
+  let path = Filename.concat workspace_root ignore_file_name in
+  if not (Fs.exists path) then Ok []
+  else if Fs.is_directory path then
+    Error (Printf.sprintf "watch ignore file is a directory: %s" path)
+  else Ok (Fs.read_lines path |> List.filter_map parse_ignore_file_line)
 
 let stat_signature path =
   let stats = Unix.lstat path in

@@ -2468,6 +2468,22 @@ let watch_command_candidates () =
       if doc.name = "watch" then None else Some (candidate doc.name))
     command_docs
 
+let resolve_path_from cwd path =
+  let path =
+    if Filename.is_relative path then Filename.concat cwd path else path
+  in
+  Fs.realpath path
+
+let watch_inner_workspace_dir args =
+  let rec loop current = function
+    | [] | "--" :: _ -> current
+    | "--workspace" :: dir :: rest -> loop (Some dir) rest
+    | "--workspace" :: [] -> current
+    | option :: _ :: rest when option_expects_value option -> loop current rest
+    | _ :: rest -> loop current rest
+  in
+  loop None args
+
 let rec completion_response workspace ~previous ~current =
   match previous with
   | [] -> completion_candidates_response ~current (root_command_candidates ())
@@ -2668,7 +2684,36 @@ let run_watch (options : watch_options) =
     let manifest_path = Filename.concat workspace_root Manifest.default_filename in
     if not (Fs.exists manifest_path) then
       report_error (Printf.sprintf "manifest not found: %s" manifest_path)
-    else
+    else (
+      let run_with_watch_config command_name watch_config ignore_file_globs =
+        let status =
+          Watch.run
+            {
+              Watch.workspace_root = workspace_root;
+              poll_ms = options.poll_ms;
+              debounce_ms = options.debounce_ms;
+              max_runs = options.max_runs;
+              keep_going = options.keep_going;
+              include_globs =
+                watch_config.Manifest.include_globs @ options.include_globs;
+              ignore_globs =
+                watch_config.Manifest.ignore_globs @ ignore_file_globs
+                @ options.ignore_globs;
+              command_name;
+              command_args = options.command_args;
+            }
+        in
+        Forward_status status
+      in
+      let start_watch command_name =
+        match Manifest.load_watch_config manifest_path with
+        | Error message -> report_error message
+        | Ok watch_config -> (
+            match Watch.load_ignore_file_globs workspace_root with
+            | Error message -> report_error message
+            | Ok ignore_file_globs ->
+                run_with_watch_config command_name watch_config ignore_file_globs)
+      in
       match options.command_name with
       | None -> report_error "watch requires a subtool name"
       | Some "watch" ->
@@ -2678,22 +2723,22 @@ let run_watch (options : watch_options) =
           | None ->
               report_error
                 (Printf.sprintf "unknown subtool '%s' for watch" command_name)
-          | Some _ ->
-              let status =
-                Watch.run
-                  {
-                    Watch.workspace_root = workspace_root;
-                    poll_ms = options.poll_ms;
-                    debounce_ms = options.debounce_ms;
-                    max_runs = options.max_runs;
-                    keep_going = options.keep_going;
-                    include_globs = options.include_globs;
-                    ignore_globs = options.ignore_globs;
-                    command_name;
-                    command_args = options.command_args;
-                  }
-              in
-              Forward_status status)
+          | Some _ -> (
+              match watch_inner_workspace_dir options.command_args with
+              | Some inner_workspace_dir ->
+                  let inner_workspace_root =
+                    resolve_path_from workspace_root inner_workspace_dir
+                  in
+                  if inner_workspace_root <> workspace_root then
+                    report_error
+                      (Printf.sprintf
+                         "watch subtool workspace %s conflicts with watched \
+                          workspace %s; remove the inner --workspace or point \
+                          it at the same tree"
+                         inner_workspace_root workspace_root)
+                  else
+                    start_watch command_name
+              | None -> start_watch command_name)))
 
 let run_init (options : init_options) =
   match

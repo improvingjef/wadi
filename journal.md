@@ -185,3 +185,9 @@
 - Polling snapshots can support include/ignore globs without trusting directory mtimes as invalidation signals. Recording directories as structural markers while filtering files by glob keeps unrelated tree churn from triggering reruns.
 - Maintenance drift checks should execute the same release-generation scripts the repo already ships, not a hand-maintained reimplementation. The useful signal is whether regenerated docs/completions/metadata byte-match the committed artifacts.
 - Reinvoking the current binary through `Sys.executable_name` is not reliable when the command came from `PATH`. Self-hosted commands like `watch` and generator-backed `doctor` checks need an explicit executable resolver instead of assuming `argv[0]` is cwd-relative.
+
+## 2026-03-29
+
+- Persistent watch policy needs a tolerant root-only parser. Forcing `oasis watch` to fully load a broken workspace before it can start would sabotage the exact edit-fix loop watch mode is meant to preserve.
+- Shared watch filters and local noise filters are different kinds of state. `[watch]` belongs in reviewed manifest config, while `.oasiswatchignore` is a better home for per-repo churn like docs or vendored trees that should not keep leaking into shell history.
+- Once `oasis watch` delegates back into `oasis`, an inner `--workspace` flag becomes a second repository selector. If the polled tree and the delegated subtool can drift apart, the watcher is lying about what it is observing.
