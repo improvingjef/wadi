@@ -65,17 +65,19 @@ bootstrap-smoke:
 test: bootstrap-smoke $(BIN_DIR)/wadi $(BIN_DIR)/test_runner
 	WADI_BIN=$(abspath $(BIN_DIR)/wadi) $(BIN_DIR)/test_runner
 
-FUZZ_TARGETS := $(BIN_DIR)/fuzz_manifest $(BIN_DIR)/fuzz_paths $(BIN_DIR)/fuzz_cli
+FUZZ_TARGETS := $(BIN_DIR)/fuzz_manifest $(BIN_DIR)/fuzz_paths $(BIN_DIR)/fuzz_cli $(BIN_DIR)/fuzz_locker $(BIN_DIR)/fuzz_migrate $(BIN_DIR)/fuzz_release $(BIN_DIR)/fuzz_watch $(BIN_DIR)/fuzz_vendor $(BIN_DIR)/fuzz_toolchain $(BIN_DIR)/fuzz_init $(BIN_DIR)/fuzz_explain $(BIN_DIR)/fuzz_process
 LIB_OBJS := $(patsubst %,$(OBJ_DIR)/%.cmx,string_util fs process toolchain manifest explain layout builder actioner cleaner promoter installer deps ppx_tool env_report graph vendor init locker migrate repl release_metadata release_artifacts packager bootstrap bench maintenance watch doctor status)
 
 $(BIN_DIR)/fuzz_%: fuzz/fuzz_%.ml $(LIB_OBJS) | $(BIN_DIR)
 	$(OCAMLFIND) $(OCAMLOPT) -package unix,crowbar -linkpkg $(OCAMLFLAGS) -I $(OBJ_DIR) $(LIB_OBJS) $< -o $@
 
 fuzz: $(FUZZ_TARGETS)
-	@echo "Running fuzzers in quickcheck mode..."
-	$(BIN_DIR)/fuzz_manifest
-	$(BIN_DIR)/fuzz_paths
-	WADI_BIN=$(abspath $(BIN_DIR)/wadi) $(BIN_DIR)/fuzz_cli
+	@echo "Running all fuzzers in crowbar quickcheck mode..."
+	@for f in $(FUZZ_TARGETS); do \
+		echo "--- $$(basename $$f) ---"; \
+		WADI_BIN=$(abspath $(BIN_DIR)/wadi) $$f || exit 1; \
+	done
+	@echo "All fuzzers passed."
 
 release-artifacts:
 	./scripts/generate_release_artifacts.sh
