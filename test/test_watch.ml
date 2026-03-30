@@ -9,6 +9,20 @@ let write_executable workspace relative_path contents =
   Unix.chmod path 0o755;
   path
 
+let spawn_delayed_script ?(delay_s = 1) workspace name body =
+  let script_name =
+    "watch-script-"
+    ^ (name |> String.map (function '/' | '.' | ' ' -> '_' | ch -> ch))
+    ^ "-"
+    ^ string_of_int delay_s
+    ^ ".sh"
+  in
+  let script_path =
+    write_executable workspace script_name
+      (Printf.sprintf "#!/bin/sh\nset -eu\nsleep %d\n%s\n" delay_s body)
+  in
+  Process.spawn ~cwd:workspace script_path []
+
 let spawn_delayed_write ?(delay_s = 1) workspace relative_path contents =
   let script_name =
     "rewrite-"
@@ -72,6 +86,165 @@ main = "main"
               "watch should execute the selected subtool a second time";
             assert_string_contains ~needle:"second\n" watch.output
               "watch should include output from the rerun")) );
+    ( "reloads .oasiswatchignore changes without restarting the watcher",
+      (fun () ->
+        with_temp_dir "oasis-watch-ignore-reload" (fun workspace ->
+            write_manifest workspace
+              {|
+[watch]
+include = ["app/**", "docs/**"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "demo"|};
+            write_source workspace "docs/notes.txt" "notes\n";
+            write_workspace_file workspace ".oasiswatchignore" {|
+docs/**
+|};
+            let reload_ignore =
+              spawn_delayed_write workspace ".oasiswatchignore" ""
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "docs/notes.txt"
+                "updated notes\n"
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] reload_ignore);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should keep running long enough for ignore-file reloads to matter";
+            assert_string_contains ~needle:"Watch-config: reloaded" watch.output
+              "watch should report that the ignore-file policy reloaded";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "watch should rerun after a newly unignored path changes")) );
+    ( "reloads manifest watch globs even when includes were previously narrower",
+      (fun () ->
+        with_temp_dir "oasis-watch-manifest-reload" (fun workspace ->
+            write_manifest workspace
+              {|
+[watch]
+include = ["app/**"]
+ignore = ["docs/**"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "demo"|};
+            write_source workspace "docs/notes.txt" "notes\n";
+            let reload_manifest =
+              spawn_delayed_write workspace Manifest.default_filename
+                {|
+[watch]
+include = ["app/**", "docs/**"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|}
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "docs/notes.txt"
+                "updated notes\n"
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "3";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] reload_manifest);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should survive a manifest watch-policy edit and keep running";
+            assert_string_contains ~needle:"Watch-config: reloaded include=app/**, docs/**"
+              watch.output
+              "watch should report the broadened manifest include policy";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "manifest edits should still rerun the delegated subtool";
+            assert_string_contains ~needle:"Watch-run 3: run demo" watch.output
+              "watch should apply the reloaded manifest policy to later changes")) );
+    ( "keeps the last watch policy after an ignore-file reload error",
+      (fun () ->
+        with_temp_dir "oasis-watch-ignore-reload-error" (fun workspace ->
+            write_manifest workspace
+              {|
+[watch]
+include = ["app/**", "docs/**"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "first"|};
+            write_source workspace "docs/notes.txt" "notes\n";
+            write_workspace_file workspace ".oasiswatchignore" {|
+docs/**
+|};
+            let break_ignore_file =
+              spawn_delayed_script workspace "break-ignore-file"
+                (Printf.sprintf "rm -f %s\nmkdir %s"
+                   (Filename.quote
+                      (Filename.concat workspace ".oasiswatchignore"))
+                   (Filename.quote
+                      (Filename.concat workspace ".oasiswatchignore")))
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "app/main.ml"
+                {|let () = print_endline "second"|}
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] break_ignore_file);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should keep running after a broken ignore-file reload";
+            assert_string_contains
+              ~needle:"Watch-config: keeping previous policy after reload error:"
+              watch.output
+              "watch should explain that it retained the prior watch policy";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "watch should still rerun on later source edits after the reload error";
+            assert_string_contains ~needle:"second\n" watch.output
+              "watch should continue forwarding delegated subtool output after the warning")) );
     ( "stops on the first failing run without --keep-going",
       (fun () ->
         with_temp_dir "oasis-watch-stop" (fun workspace ->

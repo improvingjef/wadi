@@ -162,4 +162,7 @@
 153. [x] Resolve the live `oasis` executable through `PATH` when `watch` or maintenance checks reinvoke the current binary so installed workflows do not assume a cwd-relative `argv[0]`.
 154. [x] Let workspaces persist watch include/ignore globs in manifest or ignore-file form so teams stop repeating long `oasis watch --include ... --ignore ...` command lines.
 155. [x] Detect and explain conflicting inner `--workspace` flags under `oasis watch` so the polled tree and delegated subtool cannot silently point at different repositories.
-156. [ ] Hot-reload root `[watch]` and `.oasiswatchignore` changes inside a running watcher so config edits take effect without restarting the poll loop.
+156. [x] Hot-reload root `[watch]` and `.oasiswatchignore` changes inside a running watcher so config edits take effect without restarting the poll loop.
+157. [x] Keep `oasis.toml` and `.oasiswatchignore` visible to `oasis watch` even when include globs would otherwise prune root control files, so watch-policy edits never go stale silently.
+158. [x] Keep the last good watch policy after `.oasiswatchignore` reload errors and surface reload diagnostics instead of killing the poll loop on a bad local edit.
+159. [ ] Decide which other root control files, especially `oasis.lock`, should bypass watch include-glob pruning so delegated subtools do not miss tool-relevant workspace edits.

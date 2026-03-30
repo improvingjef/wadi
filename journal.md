@@ -191,3 +191,9 @@
 - Persistent watch policy needs a tolerant root-only parser. Forcing `oasis watch` to fully load a broken workspace before it can start would sabotage the exact edit-fix loop watch mode is meant to preserve.
 - Shared watch filters and local noise filters are different kinds of state. `[watch]` belongs in reviewed manifest config, while `.oasiswatchignore` is a better home for per-repo churn like docs or vendored trees that should not keep leaking into shell history.
 - Once `oasis watch` delegates back into `oasis`, an inner `--workspace` flag becomes a second repository selector. If the polled tree and the delegated subtool can drift apart, the watcher is lying about what it is observing.
+
+## 2026-03-29
+
+- A watcher needs two views of the tree: control files that mutate watch policy, and selected inputs that should actually trigger reruns. Merging those sets makes `.oasiswatchignore` edits look like source changes or disappear behind include globs.
+- Root control files have to bypass ordinary include-glob pruning on purpose. If `oasis watch` can hide `oasis.toml` or its ignore file from itself, config edits become another round of build-tool superstition.
+- Bad local watch-policy edits should degrade to warnings plus “last known good” behavior. Killing the poll loop because `.oasiswatchignore` briefly became a directory is exactly the kind of hostile friction Dune has already trained people to expect.

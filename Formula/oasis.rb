@@ -2,7 +2,7 @@ class Oasis < Formula
   desc "Dune-free OCaml workspace toolbox"
   homepage "https://github.com/jef/oasis"
   url "https://github.com/jef/oasis/releases/download/v0.1.0/oasis-0.1.0-source.tar.gz"
-  sha256 "658c6d932a2ca70d8d63528840b23a89ddb3e5ba3d8eeb4c9d922a8f10b829db"
+  sha256 "7c67ddeb5d7340d85aece84316a9aaa4dec91c96c4df6b989d5cbc886d37467c"
   license "MIT"
 
   depends_on "ocaml"

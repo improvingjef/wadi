@@ -6,8 +6,8 @@ type options = {
   keep_going : bool;
   command_name : string;
   command_args : string list;
-  include_globs : string list;
-  ignore_globs : string list;
+  cli_include_globs : string list;
+  cli_ignore_globs : string list;
 }
 
 type compiled_options = {
@@ -19,13 +19,30 @@ type compiled_options = {
   command_name : string;
   command_args : string list;
   executable_path : string;
-  include_globs : string list list;
-  ignore_globs : string list list;
+  cli_include_globs : string list;
+  cli_ignore_globs : string list;
 }
 
 let default_ignore_globs = [ ".git/**"; "_oasis/**"; "_bootstrap/**" ]
 
 let ignore_file_name = ".oasiswatchignore"
+
+let manifest_relative_path = Manifest.default_filename
+
+type policy = {
+  include_globs_text : string list;
+  ignore_globs_text : string list;
+  include_globs : string list list;
+  ignore_globs : string list list;
+}
+
+type state = {
+  policy : policy;
+  selected_snapshot : string list;
+  control_snapshot : string list;
+}
+
+let ( let* ) = Result.bind
 
 let command_line command_name command_args =
   String.concat " " (command_name :: command_args)
@@ -116,11 +133,8 @@ let compile_options (options : options) =
     command_name = options.command_name;
     command_args = options.command_args;
     executable_path = Fs.resolve_executable Sys.executable_name;
-    include_globs =
-      options.include_globs |> String_util.dedup_preserve |> compile_globs;
-    ignore_globs =
-      (default_ignore_globs @ options.ignore_globs)
-      |> String_util.dedup_preserve |> compile_globs;
+    cli_include_globs = options.cli_include_globs;
+    cli_ignore_globs = options.cli_ignore_globs;
   }
 
 let parse_ignore_file_line line =
@@ -133,6 +147,43 @@ let load_ignore_file_globs workspace_root =
   else if Fs.is_directory path then
     Error (Printf.sprintf "watch ignore file is a directory: %s" path)
   else Ok (Fs.read_lines path |> List.filter_map parse_ignore_file_line)
+
+let protect_load path f =
+  try f () with
+  | Sys_error message -> Error message
+  | Unix.Unix_error (error, _, _) ->
+      Error
+        (Printf.sprintf "%s: %s" path (Unix.error_message error))
+  | exn -> Error (Printf.sprintf "%s: %s" path (Printexc.to_string exn))
+
+let load_policy options =
+  let manifest_path =
+    Filename.concat options.workspace_root Manifest.default_filename
+  in
+  let* watch_config =
+    protect_load manifest_path (fun () -> Manifest.load_watch_config manifest_path)
+  in
+  let* ignore_file_globs =
+    protect_load
+      (Filename.concat options.workspace_root ignore_file_name)
+      (fun () -> load_ignore_file_globs options.workspace_root)
+  in
+  let include_globs_text =
+    String_util.dedup_preserve
+      (watch_config.Manifest.include_globs @ options.cli_include_globs)
+  in
+  let ignore_globs_text =
+    String_util.dedup_preserve
+      (default_ignore_globs @ watch_config.Manifest.ignore_globs @ ignore_file_globs
+     @ options.cli_ignore_globs)
+  in
+  Ok
+    {
+      include_globs_text;
+      ignore_globs_text;
+      include_globs = compile_globs include_globs_text;
+      ignore_globs = compile_globs ignore_globs_text;
+    }
 
 let stat_signature path =
   let stats = Unix.lstat path in
@@ -151,24 +202,56 @@ let stat_signature path =
   | Unix.S_FIFO -> "fifo"
   | Unix.S_SOCK -> "socket"
 
-let path_is_ignored options relative_path =
-  relative_path <> "" && matches_any_glob options.ignore_globs relative_path
+let stat_signature_or_missing path =
+  if Fs.exists path then stat_signature path else "missing"
 
-let path_is_relevant options relative_path =
-  options.include_globs = [] || matches_any_prefix options.include_globs relative_path
+let path_is_manifest relative_path =
+  String.equal relative_path manifest_relative_path
 
-let path_is_selected options relative_path =
-  options.include_globs = [] || matches_any_glob options.include_globs relative_path
+let path_is_ignore_file relative_path = String.equal relative_path ignore_file_name
 
-let snapshot options =
+let path_is_control_file relative_path =
+  path_is_manifest relative_path || path_is_ignore_file relative_path
+
+let path_is_ignored policy relative_path =
+  relative_path <> "" && not (path_is_control_file relative_path)
+  && matches_any_glob policy.ignore_globs relative_path
+
+let path_is_relevant policy relative_path =
+  path_is_manifest relative_path || policy.include_globs = []
+  || matches_any_prefix policy.include_globs relative_path
+
+let path_is_selected policy relative_path =
+  if path_is_ignore_file relative_path then false
+  else if path_is_manifest relative_path then true
+  else policy.include_globs = [] || matches_any_glob policy.include_globs relative_path
+
+let render_globs empty_label globs =
+  match globs with
+  | [] -> empty_label
+  | globs -> String.concat ", " globs
+
+let render_policy policy =
+  Printf.sprintf "include=%s ignore=%s"
+    (render_globs "<all>" policy.include_globs_text)
+    (render_globs "<none>" policy.ignore_globs_text)
+
+let policy_changed previous next =
+  previous.include_globs_text <> next.include_globs_text
+  || previous.ignore_globs_text <> next.ignore_globs_text
+
+let selected_snapshot options policy =
   let rec collect relative_path path acc =
-    if path_is_ignored options relative_path || not (path_is_relevant options relative_path)
+    if path_is_ignore_file relative_path then acc
+    else if
+      path_is_ignored policy relative_path
+      || not (path_is_relevant policy relative_path)
     then acc
     else
       let signature = stat_signature path in
       let include_entry =
-        relative_path = "" || path_is_selected options relative_path
-        || (signature = "dir" && path_is_relevant options relative_path)
+        relative_path = "" || path_is_selected policy relative_path
+        || (signature = "dir" && path_is_relevant policy relative_path)
       in
       let label = if relative_path = "" then "." else relative_path in
       let acc =
@@ -190,6 +273,27 @@ let snapshot options =
   in
   collect "" options.workspace_root [] |> List.rev
 
+let control_snapshot options =
+  [
+    manifest_relative_path
+    ^ "\t"
+    ^ stat_signature_or_missing
+        (Filename.concat options.workspace_root manifest_relative_path);
+    ignore_file_name
+    ^ "\t"
+    ^ stat_signature_or_missing
+        (Filename.concat options.workspace_root ignore_file_name);
+  ]
+
+let initial_state options =
+  let* policy = load_policy options in
+  Ok
+    {
+      policy;
+      selected_snapshot = selected_snapshot options policy;
+      control_snapshot = control_snapshot options;
+    }
+
 let render_status status = Process.status_to_text status
 
 let execute_run options run_index =
@@ -205,34 +309,82 @@ let execute_run options run_index =
     (Printf.sprintf "Watch-result %d: %s" run_index (render_status status));
   status
 
-let rec wait_for_change options previous_snapshot =
+let rec wait_for_change options (state : state) =
   sleep_ms options.poll_ms;
-  let next_snapshot = snapshot options in
-  if next_snapshot = previous_snapshot then
-    wait_for_change options previous_snapshot
+  let next_control_snapshot = control_snapshot options in
+  let selected_snapshot_before_reload =
+    selected_snapshot options state.policy
+  in
+  if
+    next_control_snapshot = state.control_snapshot
+    && selected_snapshot_before_reload = state.selected_snapshot
+  then wait_for_change options state
   else (
     if options.debounce_ms > 0 then sleep_ms options.debounce_ms;
-    snapshot options)
+    let next_control_snapshot = control_snapshot options in
+    let selected_snapshot_before_reload =
+      selected_snapshot options state.policy
+    in
+    let control_changed = next_control_snapshot <> state.control_snapshot in
+    if not control_changed then
+      if selected_snapshot_before_reload = state.selected_snapshot then
+        wait_for_change options state
+      else { state with selected_snapshot = selected_snapshot_before_reload }
+    else
+      match load_policy options with
+      | Ok policy ->
+          if policy_changed state.policy policy then
+            print_endline
+              (Printf.sprintf "Watch-config: reloaded %s" (render_policy policy));
+          let next_state =
+            {
+              policy;
+              selected_snapshot = selected_snapshot options policy;
+              control_snapshot = next_control_snapshot;
+            }
+          in
+          if selected_snapshot_before_reload = state.selected_snapshot then
+            wait_for_change options next_state
+          else next_state
+      | Error message ->
+          print_endline
+            (Printf.sprintf
+               "Watch-config: keeping previous policy after reload error: %s"
+               message);
+          let next_state =
+            {
+              state with
+              selected_snapshot = selected_snapshot_before_reload;
+              control_snapshot = next_control_snapshot;
+            }
+          in
+          if selected_snapshot_before_reload = state.selected_snapshot then
+            wait_for_change options next_state
+          else next_state)
 
 let run options =
   let options = compile_options options in
+  let* state = initial_state options in
   print_endline
     (Printf.sprintf
        "Watching %s (poll=%dms debounce=%dms) for `oasis %s`"
        options.workspace_root options.poll_ms options.debounce_ms
        (command_line options.command_name options.command_args));
-  let rec loop run_index current_snapshot =
+  print_endline
+    (Printf.sprintf "Watch-config: %s" (render_policy state.policy));
+  let rec loop run_index state =
     let status = execute_run options run_index in
-    let current_snapshot = snapshot options in
-    if not (Process.is_success status) && not options.keep_going then status
+    let state =
+      { state with selected_snapshot = selected_snapshot options state.policy }
+    in
+    if not (Process.is_success status) && not options.keep_going then Ok status
     else
       match options.max_runs with
-      | Some limit when run_index >= limit -> status
+      | Some limit when run_index >= limit -> Ok status
       | _ ->
           print_endline "Watch-waiting: watching for workspace changes";
-          let next_snapshot = wait_for_change options current_snapshot in
+          let next_state = wait_for_change options state in
           print_endline "Watch-change: rerunning";
-          loop (run_index + 1) next_snapshot
+          loop (run_index + 1) next_state
   in
-  let initial_snapshot = snapshot options in
-  loop 1 initial_snapshot
+  loop 1 state

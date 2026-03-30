@@ -2685,8 +2685,8 @@ let run_watch (options : watch_options) =
     if not (Fs.exists manifest_path) then
       report_error (Printf.sprintf "manifest not found: %s" manifest_path)
     else (
-      let run_with_watch_config command_name watch_config ignore_file_globs =
-        let status =
+      let start_watch command_name =
+        match
           Watch.run
             {
               Watch.workspace_root = workspace_root;
@@ -2694,25 +2694,14 @@ let run_watch (options : watch_options) =
               debounce_ms = options.debounce_ms;
               max_runs = options.max_runs;
               keep_going = options.keep_going;
-              include_globs =
-                watch_config.Manifest.include_globs @ options.include_globs;
-              ignore_globs =
-                watch_config.Manifest.ignore_globs @ ignore_file_globs
-                @ options.ignore_globs;
+              cli_include_globs = options.include_globs;
+              cli_ignore_globs = options.ignore_globs;
               command_name;
               command_args = options.command_args;
             }
-        in
-        Forward_status status
-      in
-      let start_watch command_name =
-        match Manifest.load_watch_config manifest_path with
+        with
+        | Ok status -> Forward_status status
         | Error message -> report_error message
-        | Ok watch_config -> (
-            match Watch.load_ignore_file_globs workspace_root with
-            | Error message -> report_error message
-            | Ok ignore_file_globs ->
-                run_with_watch_config command_name watch_config ignore_file_globs)
       in
       match options.command_name with
       | None -> report_error "watch requires a subtool name"
