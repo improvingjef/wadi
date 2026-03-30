@@ -38,6 +38,8 @@ type source_descriptor = {
   mli_relative : string;
   mli_exists : bool;
   has_mli : bool;
+  mll_path : string;
+  mll_exists : bool;
   mly_path : string;
   mly_exists : bool;
 }
@@ -415,6 +417,8 @@ let materialize_wrapped_library_source ~mode ~workspace_root ~out_dir
 
 let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     ~dir stem =
+  let mll_path = Filename.concat workspace_root (Filename.concat dir (stem ^ ".mll")) in
+  let mll_exists = Fs.exists mll_path in
   let mly_relative = Filename.concat dir (stem ^ ".mly") in
   let mly_path = Filename.concat workspace_root mly_relative in
   let mly_exists = Fs.exists mly_path in
@@ -430,7 +434,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
     else workspace_ml_path
   in
   let ml_exists = (not mly_exists) && Fs.exists ml_path in
-  let has_ml = ml_exists || mly_exists || generated_ml_declared in
+  let has_ml = ml_exists || mll_exists || mly_exists || generated_ml_declared in
   let mli_relative = Filename.concat dir (stem ^ ".mli") in
   let workspace_mli_path = Filename.concat workspace_root mli_relative in
   let generated_mli_path = Filename.concat generated_root (stem ^ ".mli") in
@@ -459,6 +463,8 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
         mli_relative;
         mli_exists;
         has_mli;
+        mll_path;
+        mll_exists;
         mly_path;
         mly_exists;
       }
@@ -468,6 +474,25 @@ let source_descriptors ~workspace_root ~generated_root ~planned_generated_output
   collect_results stems
     (source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
        ~dir)
+
+let needs_ocamllex (source : source_descriptor) =
+  source.mll_exists
+  && (not source.ml_exists
+      || (Unix.stat source.mll_path).Unix.st_mtime
+         > (Unix.stat source.ml_path).Unix.st_mtime)
+
+let run_ocamllex ~verbose (source : source_descriptor) =
+  if needs_ocamllex source then
+    let ocamllex = Toolchain.ocamllex_cmd () in
+    let* _ =
+      Process.ensure_success ~cwd:(Filename.dirname source.mll_path) ~verbose
+        ocamllex [ source.mll_path ]
+    in
+    Ok { source with ml_exists = true }
+  else Ok source
+
+let generate_ocamllex_sources ~verbose sources =
+  collect_results sources (run_ocamllex ~verbose)
 
 let library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outputs
     (library : Manifest.library) =
@@ -585,6 +610,10 @@ let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
            (if source.mli_exists then Digest.to_hex (Digest.file source.mli_path)
             else if source.has_mli then "planned-generated"
             else "missing"));
+      if source.mll_exists then
+        append_line buffer
+          (Printf.sprintf "mll %s %s" source.mll_path
+             (Digest.to_hex (Digest.file source.mll_path)));
       if source.mly_exists then
         append_line buffer
           (Printf.sprintf "mly %s %s" source.mly_path
@@ -1736,6 +1765,11 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
     library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outputs
       library
   in
+  let* sources =
+    match mode with
+    | Materialize -> generate_ocamllex_sources ~verbose sources
+    | Plan_only -> Ok sources
+  in
   let* prepared_sources =
     let target_env = pipeline.options.env in
     prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
@@ -2044,10 +2078,16 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     require_implementation_source ~target_kind:(runnable_kind_name kind)
       ~target_name:runnable.name main_source
   in
+  let all_sources = module_sources @ [ main_source ] in
+  let* all_sources =
+    match mode with
+    | Materialize -> generate_ocamllex_sources ~verbose all_sources
+    | Plan_only -> Ok all_sources
+  in
   let* prepared_sources =
     let target_env = pipeline.options.env in
     prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
-      ~target_env pipeline.preprocessors (module_sources @ [ main_source ])
+      ~target_env pipeline.preprocessors all_sources
   in
   let module_prepared_sources =
     List.filter

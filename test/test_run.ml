@@ -424,7 +424,7 @@ actions = ["generate"]
               ~needle:"wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               run.output "top-level usage should include the run command";
             assert_string_contains
-              ~needle:"wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]"
+              ~needle:"wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [-j N] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the test command";
             assert_string_contains
               ~needle:"wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
