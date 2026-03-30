@@ -30,11 +30,8 @@ let init_git_repo source =
 
 let sha256 path =
   let run prog args =
-    let outcome =
-      Process.run_capture ~env:[ ("LC_ALL", "C"); ("LANG", "C") ] prog args
-    in
-    assert_int_equal 0 outcome.status
-      ("expected checksum helper to succeed for " ^ path);
+    let outcome = Process.run_capture ~env:[ ("LC_ALL", "C"); ("LANG", "C") ] prog args in
+    assert_int_equal 0 outcome.status ("expected checksum helper to succeed for " ^ path);
     match String_util.split_whitespace outcome.output with
     | digest :: _ -> digest
     | [] -> fail ("missing checksum output for " ^ path)
@@ -44,16 +41,14 @@ let sha256 path =
   | None -> (
       match Toolchain.resolve_executable_path "sha256sum" with
       | Some prog -> run prog [ path ]
-      | None ->
-          fail "expected shasum or sha256sum to be available for vendoring tests")
+      | None -> fail "expected shasum or sha256sum to be available for vendoring tests")
 
 let cases =
   [
     ( "vendors a local package into vendor/ and registers it as a member",
       fun () ->
         with_temp_dir "wadi-vendor-src" (fun source ->
-            write_member_manifest source
-              {|
+            write_member_manifest source {|
 [library.dep]
 dir = "lib"
 modules = ["dep"]
@@ -101,8 +96,7 @@ modules = ["dep"]
 |};
             write_source source "lib/dep.ml" {|let message = "bad"|};
             with_temp_dir "wadi-vendor-root" (fun workspace ->
-                write_manifest workspace
-                  {|
+                write_manifest workspace {|
 workspace = "demo"
 version = 1
 |};
@@ -112,15 +106,12 @@ version = 1
                 in
                 assert_true (vendor.status <> 0)
                   "vendor should reject non-member-safe manifests";
-                assert_string_contains
-                  ~needle:"defines a top-level workspace name"
-                  vendor.output
-                  "vendor should explain the member-safety violation")) );
+                assert_string_contains ~needle:"defines a top-level workspace name"
+                  vendor.output "vendor should explain the member-safety violation")) );
     ( "replaces an existing vendored checkout with force",
       fun () ->
         with_temp_dir "wadi-vendor-force-src" (fun source ->
-            write_member_manifest source
-              {|
+            write_member_manifest source {|
 [library.dep]
 dir = "lib"
 modules = ["dep"]
@@ -143,8 +134,7 @@ deps = ["dep"]
                   run_wadi ~cwd:workspace
                     [ "vendor"; "--source"; source; "--name"; "dep" ]
                 in
-                assert_int_equal 0 first.status
-                  "the first vendor command should succeed";
+                assert_int_equal 0 first.status "the first vendor command should succeed";
                 write_source source "lib/dep.ml" {|let message = "second"|};
                 let rejected =
                   run_wadi ~cwd:workspace
@@ -152,8 +142,7 @@ deps = ["dep"]
                 in
                 assert_true (rejected.status <> 0)
                   "vendor should refuse to replace an existing checkout without force";
-                assert_string_contains ~needle:"rerun with --force"
-                  rejected.output
+                assert_string_contains ~needle:"rerun with --force" rejected.output
                   "vendor should explain how to replace an existing checkout";
                 let forced =
                   run_wadi ~cwd:workspace
@@ -169,8 +158,7 @@ deps = ["dep"]
     ( "vendors a git source with a pinned commit checksum",
       fun () ->
         with_temp_dir "wadi-vendor-git-src" (fun source ->
-            write_member_manifest source
-              {|
+            write_member_manifest source {|
 [library.dep]
 dir = "lib"
 modules = ["dep"]
@@ -192,18 +180,9 @@ deps = ["dep"]
                   {|let () = print_endline Dep.message|};
                 let vendor =
                   run_wadi ~cwd:workspace
-                    [
-                      "vendor";
-                      "--git";
-                      source;
-                      "--checksum";
-                      revision;
-                      "--name";
-                      "dep";
-                    ]
+                    [ "vendor"; "--git"; source; "--checksum"; revision; "--name"; "dep" ]
                 in
-                assert_int_equal 0 vendor.status
-                  "vendor should clone a pinned git source";
+                assert_int_equal 0 vendor.status "vendor should clone a pinned git source";
                 let run = run_wadi ~cwd:workspace [ "run"; "demo" ] in
                 assert_int_equal 0 run.status
                   "git-vendored packages should participate in normal builds";
@@ -214,8 +193,7 @@ deps = ["dep"]
         with_temp_dir "wadi-vendor-url-parent" (fun parent ->
             let source = Filename.concat parent "dep-src" in
             Unix.mkdir source 0o755;
-            write_member_manifest source
-              {|
+            write_member_manifest source {|
 [library.dep]
 dir = "lib"
 modules = ["dep"]
@@ -223,8 +201,7 @@ modules = ["dep"]
             write_source source "lib/dep.ml" {|let message = "url-vendored"|};
             let archive_path = Filename.concat parent "dep-src.tar.gz" in
             let archive =
-              Process.run_capture "tar"
-                [ "-czf"; archive_path; "-C"; parent; "dep-src" ]
+              Process.run_capture "tar" [ "-czf"; archive_path; "-C"; parent; "dep-src" ]
             in
             assert_int_equal 0 archive.status
               "tar should create a vendored source archive";
@@ -247,9 +224,9 @@ deps = ["dep"]
                     [
                       "vendor";
                       "--url";
-                      ("file://" ^ archive_path);
+                      "file://" ^ archive_path;
                       "--checksum";
-                      ("sha256:" ^ checksum);
+                      "sha256:" ^ checksum;
                       "--name";
                       "dep";
                     ]
@@ -264,8 +241,7 @@ deps = ["dep"]
     ( "rejects git vendoring when the pinned checksum does not match",
       fun () ->
         with_temp_dir "wadi-vendor-git-mismatch-src" (fun source ->
-            write_member_manifest source
-              {|
+            write_member_manifest source {|
 [library.dep]
 dir = "lib"
 modules = ["dep"]
@@ -273,26 +249,19 @@ modules = ["dep"]
             write_source source "lib/dep.ml" {|let message = "bad"|};
             ignore (init_git_repo source);
             with_temp_dir "wadi-vendor-git-mismatch-workspace" (fun workspace ->
-                write_manifest workspace
-                  {|
+                write_manifest workspace {|
 workspace = "demo"
 version = 1
 |};
                 let vendor =
                   run_wadi ~cwd:workspace
                     [
-                      "vendor";
-                      "--git";
-                      source;
-                      "--checksum";
-                      "deadbeef";
-                      "--name";
-                      "dep";
+                      "vendor"; "--git"; source; "--checksum"; "deadbeef"; "--name"; "dep";
                     ]
                 in
                 assert_true (vendor.status <> 0)
                   "vendor should reject mismatched git checksum pins";
                 assert_string_contains ~needle:"git source checksum mismatch"
-                  vendor.output
-                  "vendor should explain the checksum mismatch directly")) );
+                  vendor.output "vendor should explain the checksum mismatch directly"))
+    );
   ]

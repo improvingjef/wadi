@@ -1,12 +1,10 @@
 let ( let* ) = Result.bind
-
-let report_detail ~verbose message =
-  if verbose then prerr_endline message
-
+let report_detail ~verbose message = if verbose then prerr_endline message
 let wadi_root = Layout.artifact_root
 
 let describe_target target =
-  Printf.sprintf "%s %s" (Manifest.target_kind_name target)
+  Printf.sprintf "%s %s"
+    (Manifest.target_kind_name target)
     (Manifest.target_display_name target)
 
 let resolve_targets workspace requested_targets =
@@ -26,7 +24,8 @@ let resolve_targets workspace requested_targets =
 
 let rec prune_empty_directories ~stop_at path =
   if path = stop_at || path = "." || path = "/" then ()
-  else if Fs.exists path && Sys.is_directory path && Array.length (Sys.readdir path) = 0 then (
+  else if Fs.exists path && Sys.is_directory path && Array.length (Sys.readdir path) = 0
+  then (
     Unix.rmdir path;
     prune_empty_directories ~stop_at (Filename.dirname path))
 
@@ -35,8 +34,7 @@ let clean_target ~workspace_root ~profile ~verbose target =
   if Fs.exists artifact_dir then (
     report_detail ~verbose ("Cleaning " ^ artifact_dir);
     Fs.remove_tree artifact_dir;
-    prune_empty_directories ~stop_at:workspace_root
-      (Filename.dirname artifact_dir);
+    prune_empty_directories ~stop_at:workspace_root (Filename.dirname artifact_dir);
     print_endline
       (Printf.sprintf "Removed %s -> %s" (describe_target target) artifact_dir);
     true)
@@ -56,8 +54,7 @@ let clean_workspace ~workspace_root ~profile ~verbose =
     Fs.remove_tree path;
     print_endline
       (match profile with
-      | Some profile ->
-          Printf.sprintf "Removed profile %s artifacts -> %s" profile path
+      | Some profile -> Printf.sprintf "Removed profile %s artifacts -> %s" profile path
       | None -> Printf.sprintf "Removed workspace artifacts -> %s" path))
   else
     print_endline
@@ -72,10 +69,8 @@ let clean_targets ~workspace_root ~profile ~verbose ~requested_targets workspace
   let removed_count =
     List.fold_left
       (fun count target ->
-        if clean_target ~workspace_root ~profile ~verbose target then count + 1
-        else count)
+        if clean_target ~workspace_root ~profile ~verbose target then count + 1 else count)
       0 targets
   in
-  if removed_count = 0 then
-    print_endline "Nothing to clean for the requested targets";
+  if removed_count = 0 then print_endline "Nothing to clean for the requested targets";
   Ok ()

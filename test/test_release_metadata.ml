@@ -3,7 +3,7 @@ open Test_support
 let cases =
   [
     ( "loads release metadata and derives canonical release names",
-      (fun () ->
+      fun () ->
         let metadata =
           expect_ok
             (Release_metadata.load
@@ -23,9 +23,9 @@ let cases =
           "release metadata should derive the source archive URL";
         assert_string_equal "https://github.com/jef/homebrew-wadi"
           (Release_metadata.homebrew_tap_clone_url metadata)
-          "release metadata should derive the default tap clone URL") );
+          "release metadata should derive the default tap clone URL" );
     ( "rejects release metadata files that omit required fields",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-release-metadata" (fun workspace ->
             let metadata_path = Filename.concat workspace "metadata.sh" in
             Fs.write_file metadata_path
@@ -35,7 +35,6 @@ WADI_PACKAGE_NAME='wadi'
 WADI_RELEASE_VERSION='0.1.0'
 |};
             let error = expect_error (Release_metadata.load metadata_path) in
-            assert_string_contains
-              ~needle:"missing required metadata WADI_FORMULA_CLASS" error
-              "release metadata loading should fail on missing canonical fields")) );
+            assert_string_contains ~needle:"missing required metadata WADI_FORMULA_CLASS"
+              error "release metadata loading should fail on missing canonical fields") );
   ]

@@ -16,14 +16,12 @@ let replace_once ~needle ~replacement text =
   match find 0 with
   | Some index ->
       String.sub text 0 index ^ replacement
-      ^ String.sub text (index + needle_length)
-          (text_length - index - needle_length)
+      ^ String.sub text (index + needle_length) (text_length - index - needle_length)
   | None -> fail ("missing substring to replace: " ^ needle)
 
 let resolve_package_path package_name =
   let outcome = Process.run_capture "ocamlfind" [ "query"; package_name ] in
-  assert_int_equal 0 outcome.status
-    ("expected ocamlfind query to resolve " ^ package_name);
+  assert_int_equal 0 outcome.status ("expected ocamlfind query to resolve " ^ package_name);
   String.trim outcome.output
 
 let resolve_compiler_version () =
@@ -33,8 +31,7 @@ let resolve_compiler_version () =
 
 let resolve_package_roots () =
   let outcome = Process.run_capture "ocamlfind" [ "printconf"; "path" ] in
-  assert_int_equal 0 outcome.status
-    "expected ocamlfind printconf path to succeed";
+  assert_int_equal 0 outcome.status "expected ocamlfind printconf path to succeed";
   String_util.split_lines outcome.output
 
 let cases =
@@ -60,8 +57,7 @@ deps = ["core"]
             write_source workspace "lib/core.ml" {|let message = "locked"|};
             write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
-            assert_int_equal 0 lock.status
-              "lock should write the default lock file";
+            assert_int_equal 0 lock.status "lock should write the default lock file";
             assert_string_contains ~needle:"Wrote lock file" lock.output
               "lock should report where it wrote the snapshot";
             assert_file_exists (lock_path workspace);
@@ -72,24 +68,22 @@ deps = ["core"]
               "lock files should record the root manifest path";
             assert_string_contains ~needle:{|"name":"demo"|} contents
               "lock files should record resolved targets";
-            assert_string_contains ~needle:{|"external_packages":["unix"]|}
-              contents
+            assert_string_contains ~needle:{|"external_packages":["unix"]|} contents
               "lock files should record external package closure";
-            assert_string_contains ~needle:{|"selected_backend":{"ok":"|}
-              contents
+            assert_string_contains ~needle:{|"selected_backend":{"ok":"|} contents
               "lock files should record the resolved backend") );
     ( "prints lock JSON to stdout without writing the default file",
       fun () ->
         with_fixture "hello" (fun workspace ->
             let lock = run_wadi ~cwd:workspace [ "lock"; "--stdout"; "hello" ] in
-            assert_int_equal 0 lock.status
-              "lock --stdout should emit JSON directly";
-            assert_true (not (Fs.exists (lock_path workspace)))
+            assert_int_equal 0 lock.status "lock --stdout should emit JSON directly";
+            assert_true
+              (not (Fs.exists (lock_path workspace)))
               "lock --stdout should not create the default lock file";
-            assert_string_contains ~needle:{|"requested_targets":["hello"]|}
-              lock.output "stdout output should preserve the requested target list";
-            assert_string_contains ~needle:{|"resolved_targets":["hello"]|}
-              lock.output "stdout output should preserve the resolved target list") );
+            assert_string_contains ~needle:{|"requested_targets":["hello"]|} lock.output
+              "stdout output should preserve the requested target list";
+            assert_string_contains ~needle:{|"resolved_targets":["hello"]|} lock.output
+              "stdout output should preserve the resolved target list") );
     ( "writes selected targets to a custom lock path",
       fun () ->
         with_temp_dir "wadi-lock-output" (fun workspace ->
@@ -116,15 +110,13 @@ main = "unit"
             write_source workspace "test/unit.ml" {|let () = ()|};
             let output_path = Filename.concat workspace "custom.lock" in
             let lock =
-              run_wadi ~cwd:workspace
-                [ "lock"; "--output"; output_path; "demo" ]
+              run_wadi ~cwd:workspace [ "lock"; "--output"; output_path; "demo" ]
             in
-            assert_int_equal 0 lock.status
-              "lock should support custom output paths";
+            assert_int_equal 0 lock.status "lock should support custom output paths";
             assert_file_exists output_path;
             let contents = Fs.read_file output_path in
-            assert_string_contains ~needle:{|"resolved_targets":["demo"]|}
-              contents "custom lock files should preserve the selected targets";
+            assert_string_contains ~needle:{|"resolved_targets":["demo"]|} contents
+              "custom lock files should preserve the selected targets";
             assert_string_not_contains ~needle:{|"name":"unit"|} contents
               "custom lock files should omit unrelated targets") );
     ( "build --locked accepts a matching lock snapshot",
@@ -144,8 +136,7 @@ deps = ["core"]
 |};
             write_source workspace "lib/core.ml"
               {|let message = Unix.getcwd () |> Filename.basename|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline Core.message|};
+            write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before strict validation is exercised";
@@ -170,15 +161,12 @@ main = "main"
 deps = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let message = "locked"|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline Core.message|};
+            write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before drift is introduced";
             let unix_path = resolve_package_path "unix" in
-            let package_entry =
-              Printf.sprintf {|"name":"unix","path":"%s"|} unix_path
-            in
+            let package_entry = Printf.sprintf {|"name":"unix","path":"%s"|} unix_path in
             let drifted =
               replace_once ~needle:package_entry
                 ~replacement:{|"name":"unix","path":"/tmp/drifted-unix"|}
@@ -188,8 +176,7 @@ deps = ["core"]
             let build = run_wadi ~cwd:workspace [ "build"; "--locked"; "demo" ] in
             assert_true (build.status <> 0)
               "build --locked should fail when a locked package path changes";
-            assert_string_contains ~needle:"package 'unix' path drifted"
-              build.output
+            assert_string_contains ~needle:"package 'unix' path drifted" build.output
               "strict lock validation should explain which package drifted";
             assert_string_contains ~needle:"Refresh the snapshot with `wadi lock`."
               build.output
@@ -210,8 +197,7 @@ main = "main"
 deps = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let message = "locked"|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline Core.message|};
+            write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before toolchain drift is introduced";
@@ -229,8 +215,7 @@ deps = ["core"]
             assert_true (build.status <> 0)
               "build --locked should fail when locked toolchain facts change";
             assert_string_contains ~needle:"toolchain compiler version drifted"
-              build.output
-              "strict lock validation should report toolchain drift directly";
+              build.output "strict lock validation should report toolchain drift directly";
             assert_string_contains ~needle:"Refresh the snapshot with `wadi lock`."
               build.output
               "strict lock validation should explain how to refresh toolchain drift") );
@@ -250,8 +235,7 @@ main = "main"
 deps = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let message = "locked"|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline Core.message|};
+            write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before package-root drift is introduced";
@@ -273,10 +257,8 @@ deps = ["core"]
             let build = run_wadi ~cwd:workspace [ "build"; "--locked"; "demo" ] in
             assert_true (build.status <> 0)
               "build --locked should fail when locked package roots change";
-            assert_string_contains
-              ~needle:"toolchain package search roots drifted"
-              build.output
-              "strict lock validation should surface package-root drift") );
+            assert_string_contains ~needle:"toolchain package search roots drifted"
+              build.output "strict lock validation should surface package-root drift") );
     ( "install --warn-locked reports drift but still stages artifacts",
       fun () ->
         with_fixture "hello" (fun workspace ->
@@ -284,7 +266,8 @@ deps = ["core"]
             assert_int_equal 0 lock.status
               "lock should succeed before warning-mode validation is exercised";
             let drifted =
-              replace_once ~needle:{|"path":"wadi.toml"|} ~replacement:{|"path":"stale.toml"|}
+              replace_once ~needle:{|"path":"wadi.toml"|}
+                ~replacement:{|"path":"stale.toml"|}
                 (Fs.read_file (lock_path workspace))
             in
             Fs.write_file (lock_path workspace) drifted;
@@ -296,7 +279,6 @@ deps = ["core"]
             assert_int_equal 0 install.status
               "install --warn-locked should continue when the snapshot is stale";
             assert_string_contains ~needle:"warning: lock validation failed against"
-              install.output
-              "warning mode should surface the lock drift";
+              install.output "warning mode should surface the lock drift";
             assert_file_exists (Filename.concat prefix "bin/hello")) );
   ]

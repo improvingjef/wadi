@@ -5,15 +5,9 @@ type value =
   | Strings of string list
   | String_arrays of string list list
 
-type array_item =
-  | Item_string of string
-  | Item_strings of string list
-
+type array_item = Item_string of string | Item_strings of string list
 type env_binding = string * string
-
-type sandbox =
-  | Workspace
-  | Target
+type sandbox = Workspace | Target
 
 type target_options = {
   actions : string list;
@@ -50,7 +44,6 @@ type runnable = {
 }
 
 type executable = runnable
-
 type test_target = runnable
 
 type bench_target = {
@@ -102,20 +95,9 @@ type profile = {
   target_overrides : (string * target_options) list;
 }
 
-type workspace_defaults = {
-  default_profile : string;
-  options : target_options;
-}
-
-type watch_config = {
-  include_globs : string list;
-  ignore_globs : string list;
-}
-
-type target =
-  | Library of library
-  | Executable of executable
-  | Test of test_target
+type workspace_defaults = { default_profile : string; options : target_options }
+type watch_config = { include_globs : string list; ignore_globs : string list }
+type target = Library of library | Executable of executable | Test of test_target
 
 type workspace = {
   name : string option;
@@ -130,22 +112,9 @@ type workspace = {
   profiles : profile list;
 }
 
-type loaded_manifest = {
-  workspace : workspace;
-  members : string list;
-}
-
-type binding = {
-  key : string;
-  value : value;
-  line : int;
-}
-
-type section = {
-  path : string list;
-  line : int;
-  bindings : binding list;
-}
+type loaded_manifest = { workspace : workspace; members : string list }
+type binding = { key : string; value : value; line : int }
+type section = { path : string list; line : int; bindings : binding list }
 
 type profile_override = {
   profile_name : string;
@@ -156,7 +125,6 @@ type profile_override = {
 }
 
 let default_filename = "wadi.toml"
-
 let default_profile_name = "default"
 
 let empty_target_options =
@@ -171,11 +139,8 @@ let empty_target_options =
   }
 
 let default_watch_config = { include_globs = []; ignore_globs = [] }
-
 let ( let* ) = Result.bind
-
-let error path line message =
-  Error (Printf.sprintf "%s:%d: %s" path line message)
+let error path line message = Error (Printf.sprintf "%s:%d: %s" path line message)
 
 let target_name = function
   | Library library -> library.name
@@ -206,14 +171,10 @@ let target_package_path = function
   | Executable executable -> executable.package_path
   | Test test -> test.package_path
 
-let package_label = function
-  | Some package_path -> package_path
-  | None -> "root"
+let package_label = function Some package_path -> package_path | None -> "root"
 
 let package_suffix package_path =
-  match package_path with
-  | Some package_path -> " (" ^ package_path ^ ")"
-  | None -> ""
+  match package_path with Some package_path -> " (" ^ package_path ^ ")" | None -> ""
 
 let target_display_name target =
   target_name target ^ package_suffix (target_package_path target)
@@ -225,9 +186,7 @@ let bench_display_name (bench : bench_target) =
   bench.name ^ package_suffix bench.package_path
 
 let action_commands (action : action) = action.steps
-
-let action_is_multistep (action : action) =
-  List.length action.steps > 1
+let action_is_multistep (action : action) = List.length action.steps > 1
 
 let action_output_is_checked_in_source (action : action) relative_path =
   List.mem relative_path action.checked_in_sources
@@ -235,8 +194,7 @@ let action_output_is_checked_in_source (action : action) relative_path =
 let command_tool_display_name (tool : command_tool) =
   tool.name ^ package_suffix tool.package_path
 
-let ppx_tool_display_name (tool : ppx_tool) =
-  tool.name ^ package_suffix tool.package_path
+let ppx_tool_display_name (tool : ppx_tool) = tool.name ^ package_suffix tool.package_path
 
 let target_packages = function
   | Library library -> library.packages
@@ -270,8 +228,7 @@ let parse_quoted_string path line text start_index =
         match text.[index] with
         | '"' -> Ok (Buffer.contents buffer, index + 1)
         | '\\' ->
-            if index + 1 >= length then
-              error path line "unterminated escape sequence"
+            if index + 1 >= length then error path line "unterminated escape sequence"
             else
               let escaped =
                 match text.[index + 1] with
@@ -301,9 +258,7 @@ let parse_string_array path line text =
   let length = String.length text in
   let rec skip_whitespace index =
     if index < length then
-      match text.[index] with
-      | ' ' | '\t' -> skip_whitespace (index + 1)
-      | _ -> index
+      match text.[index] with ' ' | '\t' -> skip_whitespace (index + 1) | _ -> index
     else index
   in
   let rec parse_array index =
@@ -322,18 +277,15 @@ let parse_string_array path line text =
                   | [] -> Ok (Strings (List.rev acc))
                   | Item_string value :: rest -> collect_strings (value :: acc) rest
                   | Item_strings _ :: _ ->
-                      error path line
-                        "arrays cannot mix strings and nested arrays"
+                      error path line "arrays cannot mix strings and nested arrays"
                 in
                 collect_strings [] (List.rev acc)
             | Item_strings _ :: _ ->
                 let rec collect_arrays acc = function
                   | [] -> Ok (String_arrays (List.rev acc))
-                  | Item_strings values :: rest ->
-                      collect_arrays (values :: acc) rest
+                  | Item_strings values :: rest -> collect_arrays (values :: acc) rest
                   | Item_string _ :: _ ->
-                      error path line
-                        "arrays cannot mix strings and nested arrays"
+                      error path line "arrays cannot mix strings and nested arrays"
                 in
                 collect_arrays [] (List.rev acc)
           in
@@ -343,19 +295,17 @@ let parse_string_array path line text =
           let* item, next_index = parse_array_item index in
           let next_index = skip_whitespace next_index in
           if next_index >= length then error path line "unterminated array literal"
-          else if text.[next_index] = ',' then
-            parse_items (next_index + 1) (item :: acc)
-          else if text.[next_index] = ']' then
-            parse_items next_index (item :: acc)
+          else if text.[next_index] = ',' then parse_items (next_index + 1) (item :: acc)
+          else if text.[next_index] = ']' then parse_items next_index (item :: acc)
           else error path line "expected a comma between array elements"
       and parse_array_item index =
         match text.[index] with
         | '"' ->
             let* item, next_index = parse_quoted_string path line text index in
             Ok (Item_string item, next_index)
-        | '[' ->
+        | '[' -> (
             let* nested, next_index = parse_array index in
-            (match nested with
+            match nested with
             | Strings values -> Ok (Item_strings values, next_index)
             | String_arrays _ ->
                 error path line "nested arrays may be only one level deep"
@@ -376,8 +326,7 @@ let parse_value path line text =
   if String_util.starts_with ~prefix:"\"" text then
     let* value = parse_string_value path line text in
     Ok (String value)
-  else if String_util.starts_with ~prefix:"[" text then
-    parse_string_array path line text
+  else if String_util.starts_with ~prefix:"[" text then parse_string_array path line text
   else if text = "true" then Ok (Bool true)
   else if text = "false" then Ok (Bool false)
   else
@@ -402,35 +351,33 @@ let parse_section_header path line text =
     if components = [] then error path line "section path cannot be empty"
     else Ok { path = components; line; bindings = [] }
 
-let find_binding key bindings =
-  List.find_opt (fun binding -> binding.key = key) bindings
+let find_binding key bindings = List.find_opt (fun binding -> binding.key = key) bindings
 
 let required_string path section field =
   match find_binding field section.bindings with
   | None ->
       error path section.line
         (Printf.sprintf "section [%s] is missing required field '%s'"
-           (String_util.join_dot section.path) field)
+           (String_util.join_dot section.path)
+           field)
   | Some { value = String value; _ } -> Ok value
   | Some binding ->
-      error path binding.line
-        (Printf.sprintf "field '%s' must be a string" field)
+      error path binding.line (Printf.sprintf "field '%s' must be a string" field)
 
 let optional_string path section field =
   match find_binding field section.bindings with
   | None -> Ok None
   | Some { value = String value; _ } -> Ok (Some value)
   | Some binding ->
-      error path binding.line
-        (Printf.sprintf "field '%s' must be a string" field)
+      error path binding.line (Printf.sprintf "field '%s' must be a string" field)
 
 let optional_strings path section field =
   match find_binding field section.bindings with
   | None -> Ok []
   | Some { value = Strings values; _ } -> Ok values
-    | Some binding ->
-        error path binding.line
-          (Printf.sprintf "field '%s' must be an array of strings" field)
+  | Some binding ->
+      error path binding.line
+        (Printf.sprintf "field '%s' must be an array of strings" field)
 
 let optional_int path section field =
   match find_binding field section.bindings with
@@ -444,7 +391,8 @@ let required_strings path section field =
   | None ->
       error path section.line
         (Printf.sprintf "section [%s] is missing required field '%s'"
-           (String_util.join_dot section.path) field)
+           (String_util.join_dot section.path)
+           field)
   | Some { value = Strings values; _ } -> Ok values
   | Some binding ->
       error path binding.line
@@ -464,8 +412,7 @@ let optional_bool path section field =
   | None -> Ok None
   | Some { value = Bool value; _ } -> Ok (Some value)
   | Some binding ->
-      error path binding.line
-        (Printf.sprintf "field '%s' must be a boolean" field)
+      error path binding.line (Printf.sprintf "field '%s' must be a boolean" field)
 
 let allowed_fields path section fields =
   match
@@ -490,15 +437,13 @@ let validate_identifier_list ~allow_empty path line label items =
           else if String.contains item '/' then
             error path line
               (Printf.sprintf
-                 "%s entries must be file stems relative to dir, not paths: '%s'"
-                 label item)
+                 "%s entries must be file stems relative to dir, not paths: '%s'" label
+                 item)
           else if String.contains item '.' then
             error path line
-              (Printf.sprintf "%s entries must omit file extensions: '%s'" label
-                 item)
+              (Printf.sprintf "%s entries must omit file extensions: '%s'" label item)
           else if Hashtbl.mem seen item then
-            error path line
-              (Printf.sprintf "duplicate %s entry '%s'" label item)
+            error path line (Printf.sprintf "duplicate %s entry '%s'" label item)
           else (
             Hashtbl.add seen item ();
             loop rest)
@@ -519,8 +464,7 @@ let validate_named_list path line label items =
           error path line
             (Printf.sprintf "%s entries must not contain dots: '%s'" label item)
         else if Hashtbl.mem seen item then
-          error path line
-            (Printf.sprintf "duplicate %s entry '%s'" label item)
+          error path line (Printf.sprintf "duplicate %s entry '%s'" label item)
         else (
           Hashtbl.add seen item ();
           loop rest)
@@ -543,9 +487,7 @@ let validate_step_list path line label steps =
     let rec loop index = function
       | [] -> Ok ()
       | step :: rest ->
-          let step_label =
-            Printf.sprintf "%s entry %d" label (index + 1)
-          in
+          let step_label = Printf.sprintf "%s entry %d" label (index + 1) in
           if step = [] then
             error path line (Printf.sprintf "%s cannot be empty" step_label)
           else
@@ -559,11 +501,9 @@ let validate_package_list path line packages =
   let rec loop = function
     | [] -> Ok ()
     | package_name :: rest ->
-        if package_name = "" then
-          error path line "packages cannot contain an empty entry"
+        if package_name = "" then error path line "packages cannot contain an empty entry"
         else if Hashtbl.mem seen package_name then
-          error path line
-            (Printf.sprintf "duplicate packages entry '%s'" package_name)
+          error path line (Printf.sprintf "duplicate packages entry '%s'" package_name)
         else (
           Hashtbl.add seen package_name ();
           loop rest)
@@ -572,16 +512,14 @@ let validate_package_list path line packages =
 
 let validate_relative_path ~allow_dot path line label value =
   let segments = String.split_on_char '/' value in
-  if value = "" then
-    error path line (Printf.sprintf "%s cannot be empty" label)
+  if value = "" then error path line (Printf.sprintf "%s cannot be empty" label)
   else if (not allow_dot) && value = "." then
     error path line (Printf.sprintf "%s cannot be '.'" label)
   else if not (Filename.is_relative value) then
     error path line
       (Printf.sprintf "%s must be relative to the workspace: '%s'" label value)
   else if List.exists (fun segment -> segment = "..") segments then
-    error path line
-      (Printf.sprintf "%s must not escape the workspace: '%s'" label value)
+    error path line (Printf.sprintf "%s must not escape the workspace: '%s'" label value)
   else Ok ()
 
 let validate_relative_paths path line label values =
@@ -625,8 +563,7 @@ let validate_env_bindings path line bindings =
     | [] -> Ok ()
     | (name, _) :: rest ->
         if Hashtbl.mem seen name then
-          error path line
-            (Printf.sprintf "duplicate environment entry '%s'" name)
+          error path line (Printf.sprintf "duplicate environment entry '%s'" name)
         else (
           Hashtbl.add seen name ();
           loop rest)
@@ -650,9 +587,7 @@ let parse_sandbox path line value =
   match String.lowercase_ascii (String.trim value) with
   | "workspace" -> Ok Workspace
   | "target" -> Ok Target
-  | _ ->
-      error path line
-        "sandbox must be one of: target, workspace"
+  | _ -> error path line "sandbox must be one of: target, workspace"
 
 let optional_sandbox path section field =
   match find_binding field section.bindings with
@@ -661,8 +596,7 @@ let optional_sandbox path section field =
       let* sandbox = parse_sandbox path line value in
       Ok (Some sandbox)
   | Some binding ->
-      error path binding.line
-        (Printf.sprintf "field '%s' must be a string" field)
+      error path binding.line (Printf.sprintf "field '%s' must be a string" field)
 
 let parse_target_options path section =
   let* actions = optional_strings path section "actions" in
@@ -711,8 +645,7 @@ let parse_library path section name =
   let* packages = optional_strings path section "packages" in
   let* options = parse_target_options path section in
   let* () =
-    validate_identifier_list ~allow_empty:wrapped path section.line "modules"
-      modules
+    validate_identifier_list ~allow_empty:wrapped path section.line "modules" modules
   in
   let* () = validate_identifier_list ~allow_empty:true path section.line "deps" deps in
   let* () = validate_package_list path section.line packages in
@@ -757,8 +690,7 @@ let parse_runnable path section name =
   let* packages = optional_strings path section "packages" in
   let* options = parse_target_options path section in
   let* () =
-    validate_identifier_list ~allow_empty:true path section.line "modules"
-      modules
+    validate_identifier_list ~allow_empty:true path section.line "modules" modules
   in
   let* () = validate_identifier_list ~allow_empty:true path section.line "deps" deps in
   let* () = validate_package_list path section.line packages in
@@ -811,9 +743,7 @@ let parse_executables path section _batch_name =
   let* deps = optional_strings path section "deps" in
   let* packages = optional_strings path section "packages" in
   let* options = parse_target_options path section in
-  let* () =
-    validate_identifier_list ~allow_empty:false path section.line "names" names
-  in
+  let* () = validate_identifier_list ~allow_empty:false path section.line "names" names in
   let* () =
     if List.length names <> List.length (List.sort_uniq String.compare names) then
       error path section.line "names contains duplicates"
@@ -857,8 +787,17 @@ let parse_bench path section name =
   let* () = validate_string_list path section.line "argv" argv in
   let* () =
     match warmup with
-    | None | Some 0 | Some 1 | Some 2 | Some 3 | Some 4 | Some 5 | Some 6
-    | Some 7 | Some 8 | Some 9 ->
+    | None
+    | Some 0
+    | Some 1
+    | Some 2
+    | Some 3
+    | Some 4
+    | Some 5
+    | Some 6
+    | Some 7
+    | Some 8
+    | Some 9 ->
         Ok ()
     | Some value when value > 0 -> Ok ()
     | Some _ -> error path section.line "warmup must be zero or greater"
@@ -869,17 +808,7 @@ let parse_bench path section name =
     | Some value when value > 0 -> Ok ()
     | Some _ -> error path section.line "iterations must be a positive integer"
   in
-  Ok
-    {
-      name;
-      package_path = None;
-      executable;
-      argv;
-      env;
-      warmup;
-      iterations;
-      description;
-    }
+  Ok { name; package_path = None; executable; argv; env; warmup; iterations; description }
 
 let parse_action path section name =
   let* () =
@@ -902,8 +831,7 @@ let parse_action path section name =
     match find_binding "argv" section.bindings with
     | None -> Ok None
     | Some { value = Strings values; _ } -> Ok (Some values)
-    | Some binding ->
-        error path binding.line "field 'argv' must be an array of strings"
+    | Some binding -> error path binding.line "field 'argv' must be an array of strings"
   in
   let* steps =
     match find_binding "steps" section.bindings with
@@ -911,8 +839,7 @@ let parse_action path section name =
     | Some { value = String_arrays values; _ } -> Ok (Some values)
     | Some { value = Strings []; _ } -> Ok (Some [])
     | Some binding ->
-        error path binding.line
-          "field 'steps' must be an array of string arrays"
+        error path binding.line "field 'steps' must be an array of string arrays"
   in
   let* cwd = optional_string path section "cwd" in
   let* deps = optional_strings path section "deps" in
@@ -926,10 +853,8 @@ let parse_action path section name =
   let* steps =
     match (argv, steps) with
     | Some _, Some _ ->
-        error path section.line
-          "action must set exactly one of argv or steps, not both"
-    | None, None ->
-        error path section.line "action must set argv or steps"
+        error path section.line "action must set exactly one of argv or steps, not both"
+    | None, None -> error path section.line "action must set argv or steps"
     | Some argv, None ->
         let* () = validate_step_list path section.line "argv" [ argv ] in
         Ok [ argv ]
@@ -940,13 +865,10 @@ let parse_action path section name =
   let* () = validate_relative_paths path section.line "deps" deps in
   let* () = validate_relative_paths path section.line "outputs" outputs in
   let* () =
-    validate_relative_paths path section.line "checked_in_sources"
-      checked_in_sources
+    validate_relative_paths path section.line "checked_in_sources" checked_in_sources
   in
   let* () =
-    if outputs = [] then
-      error path section.line "outputs cannot be empty"
-    else Ok ()
+    if outputs = [] then error path section.line "outputs cannot be empty" else Ok ()
   in
   let* () =
     let seen = Hashtbl.create (List.length checked_in_sources) in
@@ -955,13 +877,12 @@ let parse_action path section name =
       | relative_path :: rest ->
           if Hashtbl.mem seen relative_path then
             error path section.line
-              (Printf.sprintf "duplicate checked_in_sources entry '%s'"
-                 relative_path)
+              (Printf.sprintf "duplicate checked_in_sources entry '%s'" relative_path)
           else if not (List.mem relative_path outputs) then
             error path section.line
               (Printf.sprintf
-                 "checked_in_sources entry '%s' must name one of the declared \
-                  action outputs"
+                 "checked_in_sources entry '%s' must name one of the declared action \
+                  outputs"
                  relative_path)
           else if
             not
@@ -969,8 +890,7 @@ let parse_action path section name =
               || String_util.ends_with ~suffix:".mli" relative_path)
           then
             error path section.line
-              (Printf.sprintf
-                 "checked_in_sources entry '%s' must be a .ml or .mli output"
+              (Printf.sprintf "checked_in_sources entry '%s' must be a .ml or .mli output"
                  relative_path)
           else (
             Hashtbl.add seen relative_path ();
@@ -987,21 +907,17 @@ let parse_action path section name =
     match stdin_path with
     | None -> Ok ()
     | Some stdin_path ->
-        validate_relative_path ~allow_dot:false path section.line "stdin_path"
-          stdin_path
+        validate_relative_path ~allow_dot:false path section.line "stdin_path" stdin_path
   in
   let* () =
     match stdout with
     | None -> Ok ()
     | Some stdout ->
         let* () =
-          validate_relative_path ~allow_dot:false path section.line "stdout"
-            stdout
+          validate_relative_path ~allow_dot:false path section.line "stdout" stdout
         in
         if List.mem stdout outputs then Ok ()
-        else
-          error path section.line
-            "stdout must name one of the declared action outputs"
+        else error path section.line "stdout must name one of the declared action outputs"
   in
   let* () =
     match (stdin, stdin_path) with
@@ -1026,9 +942,7 @@ let parse_action path section name =
     }
 
 let parse_command_tool label path section name =
-  let* () =
-    allowed_fields path section [ "argv"; "cwd"; "env"; "stdin_path"; "deps" ]
-  in
+  let* () = allowed_fields path section [ "argv"; "cwd"; "env"; "stdin_path"; "deps" ] in
   let* argv = required_strings path section "argv" in
   let* cwd = optional_string path section "cwd" in
   let* env = optional_env_bindings path section "env" in
@@ -1050,8 +964,7 @@ let parse_command_tool label path section name =
     match stdin_path with
     | None -> Ok ()
     | Some stdin_path ->
-        validate_relative_path ~allow_dot:false path section.line "stdin_path"
-          stdin_path
+        validate_relative_path ~allow_dot:false path section.line "stdin_path" stdin_path
   in
   Ok { name; package_path = None; argv; cwd; env; stdin_path; deps }
 
@@ -1084,8 +997,7 @@ let parse_defaults path section =
     match find_binding "profile" section.bindings with
     | None -> Ok default_profile_name
     | Some { value = String value; _ } when String.trim value <> "" -> Ok value
-    | Some { value = String _; line; _ } ->
-        error path line "profile cannot be empty"
+    | Some { value = String _; line; _ } -> error path line "profile cannot be empty"
     | Some binding -> error path binding.line "profile must be a string"
   in
   let* options = parse_target_options path section in
@@ -1095,24 +1007,14 @@ let parse_watch path section =
   let* () = allowed_fields path section [ "include"; "ignore" ] in
   let* include_globs = optional_strings path section "include" in
   let* ignore_globs = optional_strings path section "ignore" in
-  let* () =
-    validate_string_list path section.line "watch include" include_globs
-  in
+  let* () = validate_string_list path section.line "watch include" include_globs in
   let* () = validate_string_list path section.line "watch ignore" ignore_globs in
   Ok { include_globs; ignore_globs }
 
 let parse_profile path section name =
   let* () =
     allowed_fields path section
-      [
-        "actions";
-        "preprocess";
-        "ppx";
-        "compile_flags";
-        "link_flags";
-        "env";
-        "sandbox";
-      ]
+      [ "actions"; "preprocess"; "ppx"; "compile_flags"; "link_flags"; "env"; "sandbox" ]
   in
   let* options = parse_target_options path section in
   Ok (name, options, section.line)
@@ -1120,15 +1022,7 @@ let parse_profile path section name =
 let parse_profile_override path section profile_name target_kind target_name =
   let* () =
     allowed_fields path section
-      [
-        "actions";
-        "preprocess";
-        "ppx";
-        "compile_flags";
-        "link_flags";
-        "env";
-        "sandbox";
-      ]
+      [ "actions"; "preprocess"; "ppx"; "compile_flags"; "link_flags"; "env"; "sandbox" ]
   in
   let* options = parse_target_options path section in
   Ok { profile_name; target_kind; target_name; options; line = section.line }
@@ -1139,8 +1033,7 @@ let parse_top_level path bindings =
     match List.find_opt (fun binding -> not (List.mem binding.key allowed)) bindings with
     | None -> Ok ()
     | Some binding ->
-        error path binding.line
-          (Printf.sprintf "unknown top-level key '%s'" binding.key)
+        error path binding.line (Printf.sprintf "unknown top-level key '%s'" binding.key)
   in
   let name =
     match find_binding "workspace" bindings with
@@ -1176,8 +1069,7 @@ let validate_unique_target_names path targets =
     | target :: rest ->
         let name = target_name target in
         if Hashtbl.mem seen name then
-          error path 1
-            (Printf.sprintf "duplicate target name '%s' across workspace" name)
+          error path 1 (Printf.sprintf "duplicate target name '%s' across workspace" name)
         else (
           Hashtbl.add seen name ();
           loop rest)
@@ -1190,16 +1082,14 @@ let validate_unique_named path label items =
     | [] -> Ok ()
     | (name, line) :: rest ->
         if Hashtbl.mem seen name then
-          error path line
-            (Printf.sprintf "duplicate %s '%s'" label name)
+          error path line (Printf.sprintf "duplicate %s '%s'" label name)
         else (
           Hashtbl.add seen name ();
           loop rest)
   in
   loop items
 
-let merge_env_bindings (base : env_binding list)
-    (override_bindings : env_binding list) =
+let merge_env_bindings (base : env_binding list) (override_bindings : env_binding list) =
   let table = Hashtbl.create (List.length base + List.length override_bindings) in
   List.iter (fun (name, value) -> Hashtbl.replace table name value) base;
   List.iter (fun (name, value) -> Hashtbl.replace table name value) override_bindings;
@@ -1213,12 +1103,10 @@ let merge_env_bindings (base : env_binding list)
       | None -> None)
     ordered_names
 
-let merge_target_options (base : target_options)
-    (override_options : target_options) =
+let merge_target_options (base : target_options) (override_options : target_options) =
   {
     actions = String_util.dedup_preserve (base.actions @ override_options.actions);
-    preprocess =
-      String_util.dedup_preserve (base.preprocess @ override_options.preprocess);
+    preprocess = String_util.dedup_preserve (base.preprocess @ override_options.preprocess);
     ppx = String_util.dedup_preserve (base.ppx @ override_options.ppx);
     compile_flags = base.compile_flags @ override_options.compile_flags;
     link_flags = base.link_flags @ override_options.link_flags;
@@ -1231,7 +1119,8 @@ let merge_target_options (base : target_options)
 
 let build_profiles path targets profile_sections override_sections =
   let* () =
-    validate_unique_named path "profile" (List.map (fun (name, _, line) -> (name, line)) profile_sections)
+    validate_unique_named path "profile"
+      (List.map (fun (name, _, line) -> (name, line)) profile_sections)
   in
   let target_index = Hashtbl.create (List.length targets) in
   List.iter
@@ -1241,7 +1130,7 @@ let build_profiles path targets profile_sections override_sections =
   let override_keys =
     List.map
       (fun override ->
-        ((override.profile_name ^ ":" ^ override.target_name), override.line))
+        (override.profile_name ^ ":" ^ override.target_name, override.line))
       override_sections
   in
   let* () = validate_unique_named path "profile target override" override_keys in
@@ -1252,17 +1141,16 @@ let build_profiles path targets profile_sections override_sections =
           match Hashtbl.find_opt target_index override.target_name with
           | None ->
               error path override.line
-                (Printf.sprintf
-                   "profile '%s' overrides unknown target '%s'"
+                (Printf.sprintf "profile '%s' overrides unknown target '%s'"
                    override.profile_name override.target_name)
           | Some actual_kind ->
               if actual_kind <> override.target_kind then
                 error path override.line
                   (Printf.sprintf
-                     "profile '%s' override kind mismatch for target '%s': \
-                      expected %s but manifest defines %s"
-                     override.profile_name override.target_name
-                     override.target_kind actual_kind)
+                     "profile '%s' override kind mismatch for target '%s': expected %s \
+                      but manifest defines %s"
+                     override.profile_name override.target_name override.target_kind
+                     actual_kind)
               else loop rest)
     in
     loop override_sections
@@ -1273,26 +1161,23 @@ let build_profiles path targets profile_sections override_sections =
       @ List.map (fun override -> override.profile_name) override_sections)
   in
   let profile_options name =
-    match List.find_opt (fun (profile_name, _, _) -> profile_name = name) profile_sections with
+    match
+      List.find_opt (fun (profile_name, _, _) -> profile_name = name) profile_sections
+    with
     | Some (_, options, _) -> options
     | None -> empty_target_options
   in
   let overrides_for name =
     List.filter_map
       (fun override ->
-        if override.profile_name = name then
-          Some (override.target_name, override.options)
+        if override.profile_name = name then Some (override.target_name, override.options)
         else None)
       override_sections
   in
   Ok
     (List.map
        (fun name ->
-         {
-           name;
-           options = profile_options name;
-           target_overrides = overrides_for name;
-         })
+         { name; options = profile_options name; target_overrides = overrides_for name })
        profile_names)
 
 let default_defaults =
@@ -1301,8 +1186,7 @@ let default_defaults =
 let default_profile (workspace : workspace) = workspace.defaults.default_profile
 
 let find_profile (workspace : workspace) (name : string) =
-  List.find_opt (fun (profile : profile) -> profile.name = name)
-    workspace.profiles
+  List.find_opt (fun (profile : profile) -> profile.name = name) workspace.profiles
 
 let resolve_target_options (workspace : workspace) profile_name target =
   let base = merge_target_options workspace.defaults.options (target_options target) in
@@ -1407,11 +1291,9 @@ let rebase_action member_path (action : action) =
     action with
     package_path = Some member_path;
     steps = List.map (rebase_command_argv member_path) action.steps;
-    cwd =
-      Option.map (rebase_relative_path ~allow_dot:true member_path) action.cwd;
+    cwd = Option.map (rebase_relative_path ~allow_dot:true member_path) action.cwd;
     stdin_path =
-      Option.map (rebase_relative_path ~allow_dot:false member_path)
-        action.stdin_path;
+      Option.map (rebase_relative_path ~allow_dot:false member_path) action.stdin_path;
     deps = List.map (rebase_relative_path ~allow_dot:false member_path) action.deps;
   }
 
@@ -1422,8 +1304,7 @@ let rebase_preprocessor member_path (tool : command_tool) =
     argv = rebase_command_argv member_path tool.argv;
     cwd = Option.map (rebase_relative_path ~allow_dot:true member_path) tool.cwd;
     stdin_path =
-      Option.map (rebase_relative_path ~allow_dot:false member_path)
-        tool.stdin_path;
+      Option.map (rebase_relative_path ~allow_dot:false member_path) tool.stdin_path;
     deps = List.map (rebase_relative_path ~allow_dot:false member_path) tool.deps;
   }
 
@@ -1440,8 +1321,9 @@ let member_error member_manifest_path message =
 
 let member_workspace_feature_error member_manifest_path feature =
   member_error member_manifest_path
-    (Printf.sprintf "member manifests may not define %s; keep workspace-wide \
-                     configuration in the root manifest"
+    (Printf.sprintf
+       "member manifests may not define %s; keep workspace-wide configuration in the \
+        root manifest"
        feature)
 
 let load_local path =
@@ -1470,9 +1352,7 @@ let load_local path =
               in
               let* () =
                 validate_unique_named path "preprocess tool"
-                  (List.map
-                     (fun (tool : command_tool) -> (tool.name, 1))
-                     preprocessors)
+                  (List.map (fun (tool : command_tool) -> (tool.name, 1)) preprocessors)
               in
               let* () =
                 validate_unique_named path "ppx tool"
@@ -1523,44 +1403,34 @@ let load_local path =
                     | None -> Ok ()
                     | Some _ -> error path section.line "duplicate [watch] section"
                   in
-                  collect_sections defaults_opt (Some watch) targets benches
-                    actions preprocessors ppx_tools profiles overrides rest
+                  collect_sections defaults_opt (Some watch) targets benches actions
+                    preprocessors ppx_tools profiles overrides rest
               | [ "library"; target_name ] ->
                   let* target = parse_library path section target_name in
-                  collect_sections defaults_opt watch_opt (target :: targets)
-                    benches actions preprocessors ppx_tools profiles overrides
-                    rest
+                  collect_sections defaults_opt watch_opt (target :: targets) benches
+                    actions preprocessors ppx_tools profiles overrides rest
               | [ "executable"; target_name ] ->
                   let* target = parse_executable path section target_name in
-                  collect_sections defaults_opt watch_opt (target :: targets)
-                    benches actions preprocessors ppx_tools profiles overrides
-                    rest
+                  collect_sections defaults_opt watch_opt (target :: targets) benches
+                    actions preprocessors ppx_tools profiles overrides rest
               | [ "executables"; batch_name ] ->
-                  let* batch_targets =
-                    parse_executables path section batch_name
-                  in
-                  collect_sections defaults_opt watch_opt
-                    (batch_targets @ targets) benches actions preprocessors
-                    ppx_tools profiles overrides rest
+                  let* batch_targets = parse_executables path section batch_name in
+                  collect_sections defaults_opt watch_opt (batch_targets @ targets)
+                    benches actions preprocessors ppx_tools profiles overrides rest
               | [ "test"; target_name ] ->
                   let* target = parse_test path section target_name in
-                  collect_sections defaults_opt watch_opt (target :: targets)
-                    benches actions preprocessors ppx_tools profiles overrides
-                    rest
+                  collect_sections defaults_opt watch_opt (target :: targets) benches
+                    actions preprocessors ppx_tools profiles overrides rest
               | [ "bench"; bench_name ] ->
                   let* bench = parse_bench path section bench_name in
-                  collect_sections defaults_opt watch_opt targets
-                    (bench :: benches) actions preprocessors ppx_tools profiles
-                    overrides rest
+                  collect_sections defaults_opt watch_opt targets (bench :: benches)
+                    actions preprocessors ppx_tools profiles overrides rest
               | [ "action"; action_name ] ->
                   let* action = parse_action path section action_name in
                   collect_sections defaults_opt watch_opt targets benches
-                    (action :: actions) preprocessors ppx_tools profiles
-                    overrides rest
+                    (action :: actions) preprocessors ppx_tools profiles overrides rest
               | [ "preprocess"; tool_name ] ->
-                  let* tool =
-                    parse_command_tool "preprocess" path section tool_name
-                  in
+                  let* tool = parse_command_tool "preprocess" path section tool_name in
                   collect_sections defaults_opt watch_opt targets benches actions
                     (tool :: preprocessors) ppx_tools profiles overrides rest
               | [ "ppx"; tool_name ] ->
@@ -1569,30 +1439,27 @@ let load_local path =
                     preprocessors (tool :: ppx_tools) profiles overrides rest
               | [ "profile"; profile_name ] ->
                   let* profile = parse_profile path section profile_name in
-                  collect_sections defaults_opt watch_opt targets benches
-                    actions preprocessors ppx_tools (profile :: profiles)
-                    overrides rest
+                  collect_sections defaults_opt watch_opt targets benches actions
+                    preprocessors ppx_tools (profile :: profiles) overrides rest
               | [ "profile"; profile_name; target_kind; target_name ] ->
                   let* override =
                     parse_profile_override path section profile_name target_kind
                       target_name
                   in
                   collect_sections defaults_opt watch_opt targets benches actions
-                    preprocessors ppx_tools profiles (override :: overrides)
-                    rest
+                    preprocessors ppx_tools profiles (override :: overrides) rest
               | [ kind; _ ] ->
                   error path section.line
                     (Printf.sprintf
-                       "unknown section kind '%s'; expected defaults, watch, \
-                        action, preprocess, ppx, profile, library, executable, \
-                        test, or bench"
+                       "unknown section kind '%s'; expected defaults, watch, action, \
+                        preprocess, ppx, profile, library, executable, test, or bench"
                        kind)
               | _ ->
                   error path section.line
                     "section path is not supported by this manifest version")
         in
         collect_sections None None [] [] [] [] [] [] [] sections
-    | raw_line :: rest ->
+    | raw_line :: rest -> (
         let line = raw_line |> String_util.strip_comment |> String.trim in
         if line = "" then
           parse_lines (line_number + 1) current_section top_level sections rest
@@ -1607,11 +1474,11 @@ let load_local path =
         else
           match String_util.split_once ~on:'=' line with
           | None -> error path line_number "expected 'key = value'"
-          | Some (raw_key, raw_value) ->
+          | Some (raw_key, raw_value) -> (
               let key = String.trim raw_key in
               let value_text = String.trim raw_value in
               let* value = parse_value path line_number value_text in
-              (match current_section with
+              match current_section with
               | None ->
                   let* top_level = add_binding path line_number key value top_level in
                   parse_lines (line_number + 1) current_section top_level sections rest
@@ -1620,8 +1487,8 @@ let load_local path =
                     add_binding path line_number key value section.bindings
                   in
                   let updated_section = { section with bindings } in
-                  parse_lines (line_number + 1) (Some updated_section) top_level
-                    sections rest)
+                  parse_lines (line_number + 1) (Some updated_section) top_level sections
+                    rest))
   in
   parse_lines 1 None [] [] lines
 
@@ -1642,20 +1509,15 @@ let load_watch_config path =
   let rec loop line_number current_section watch_config = function
     | [] ->
         let* watch_config = finalize_section current_section watch_config in
-        Ok
-          (match watch_config with
-          | Some watch -> watch
-          | None -> default_watch_config)
-    | raw_line :: rest ->
+        Ok (match watch_config with Some watch -> watch | None -> default_watch_config)
+    | raw_line :: rest -> (
         let line = raw_line |> String_util.strip_comment |> String.trim in
         if line = "" then loop (line_number + 1) current_section watch_config rest
         else if String_util.starts_with ~prefix:"[" line then
           let* watch_config = finalize_section current_section watch_config in
           let* next_section = parse_section_header path line_number line in
           let current_section =
-            match next_section.path with
-            | [ "watch" ] -> Some next_section
-            | _ -> None
+            match next_section.path with [ "watch" ] -> Some next_section | _ -> None
           in
           loop (line_number + 1) current_section watch_config rest
         else
@@ -1672,7 +1534,7 @@ let load_watch_config path =
                     add_binding path line_number key value section.bindings
                   in
                   let current_section = Some { section with bindings } in
-                  loop (line_number + 1) current_section watch_config rest)
+                  loop (line_number + 1) current_section watch_config rest))
   in
   loop 1 None None lines
 
@@ -1682,8 +1544,8 @@ let rec load path =
   else
     let root_workspace = loaded.workspace in
     let root_dir = Filename.dirname path in
-    let rec load_members merged_targets merged_benches merged_actions
-        merged_preprocessors merged_ppx_tools = function
+    let rec load_members merged_targets merged_benches merged_actions merged_preprocessors
+        merged_ppx_tools = function
       | [] ->
           let merged_workspace =
             {
@@ -1705,16 +1567,13 @@ let rec load path =
           Ok merged_workspace
       | member_path :: rest ->
           let member_dir = Filename.concat root_dir member_path in
-          let member_manifest_path =
-            Filename.concat member_dir default_filename
-          in
+          let member_manifest_path = Filename.concat member_dir default_filename in
           let* () =
             if not (Fs.is_directory member_dir) then
               member_error member_manifest_path
                 (Printf.sprintf "member directory does not exist: %s" member_dir)
             else if not (Fs.exists member_manifest_path) then
-              member_error member_manifest_path
-                "member manifest not found"
+              member_error member_manifest_path "member manifest not found"
             else Ok ()
           in
           let* member_workspace = load member_manifest_path in
@@ -1727,8 +1586,7 @@ let rec load path =
           in
           let* () =
             if member_workspace.defaults <> default_defaults then
-              member_workspace_feature_error member_manifest_path
-                "defaults sections"
+              member_workspace_feature_error member_manifest_path "defaults sections"
             else Ok ()
           in
           let* () =
@@ -1764,7 +1622,10 @@ let rec load path =
             (List.rev_append rebased_ppx_tools merged_ppx_tools)
             rest
     in
-    load_members (List.rev root_workspace.targets) (List.rev root_workspace.benches)
-      (List.rev root_workspace.actions) (List.rev root_workspace.preprocessors)
+    load_members
+      (List.rev root_workspace.targets)
+      (List.rev root_workspace.benches)
+      (List.rev root_workspace.actions)
+      (List.rev root_workspace.preprocessors)
       (List.rev root_workspace.ppx_tools)
       loaded.members

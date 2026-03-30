@@ -1,5 +1,4 @@
 let exists path = Sys.file_exists path
-
 let is_directory path = exists path && Sys.is_directory path
 
 let is_executable_file path =
@@ -10,21 +9,14 @@ let is_executable_file path =
   | _ -> false
   | exception Unix.Unix_error _ -> false
 
-type materialize_strategy =
-  | Clone_copy
-  | Reflink_copy
-  | Plain_copy
+type materialize_strategy = Clone_copy | Reflink_copy | Plain_copy
 
 let materialize_strategy : materialize_strategy option ref = ref None
-
-let realpath path =
-  try Unix.realpath path with
-  | Unix.Unix_error _ -> path
+let realpath path = try Unix.realpath path with Unix.Unix_error _ -> path
 
 let resolve_executable path =
   let absolute_path path =
-    if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
-    else path
+    if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path else path
   in
   if String.contains path '/' then realpath (absolute_path path)
   else
@@ -34,9 +26,8 @@ let resolve_executable path =
         match
           search_path |> String.split_on_char ':'
           |> List.filter_map (fun dir ->
-                 let candidate = Filename.concat dir path in
-                 if is_executable_file candidate then Some (realpath candidate)
-                 else None)
+              let candidate = Filename.concat dir path in
+              if is_executable_file candidate then Some (realpath candidate) else None)
         with
         | resolved :: _ -> resolved
         | [] -> path)
@@ -99,14 +90,11 @@ let copy_file ~src ~dst =
       loop ();
       Unix.chmod dst permissions)
 
-let close_noerr fd =
-  try Unix.close fd with
-  | Unix.Unix_error _ -> ()
+let close_noerr fd = try Unix.close fd with Unix.Unix_error _ -> ()
 
 let waitpid_nointr pid =
   let rec loop () =
-    try snd (Unix.waitpid [] pid) with
-    | Unix.Unix_error (Unix.EINTR, _, _) -> loop ()
+    try snd (Unix.waitpid [] pid) with Unix.Unix_error (Unix.EINTR, _, _) -> loop ()
   in
   loop ()
 
@@ -117,12 +105,10 @@ let run_quiet_status prog args =
     (fun () ->
       try
         let pid =
-          Unix.create_process prog (Array.of_list (prog :: args)) null_fd null_fd
-            null_fd
+          Unix.create_process prog (Array.of_list (prog :: args)) null_fd null_fd null_fd
         in
         waitpid_nointr pid
-      with
-      | Unix.Unix_error _ -> Unix.WEXITED 127)
+      with Unix.Unix_error _ -> Unix.WEXITED 127)
 
 let try_clone_copy ~src ~dst =
   match run_quiet_status "cp" [ "-c"; "-p"; src; dst ] with
@@ -131,8 +117,7 @@ let try_clone_copy ~src ~dst =
 
 let try_reflink_copy ~src ~dst =
   match
-    run_quiet_status "cp"
-      [ "--reflink=auto"; "--preserve=mode,timestamps"; src; dst ]
+    run_quiet_status "cp" [ "--reflink=auto"; "--preserve=mode,timestamps"; src; dst ]
   with
   | Unix.WEXITED 0 -> true
   | Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _ -> false
@@ -144,8 +129,7 @@ let rec materialize_file ~src ~dst =
         if try_clone_copy ~src ~dst then materialize_strategy := Some Clone_copy
         else with_strategy Reflink_copy
     | Reflink_copy ->
-        if try_reflink_copy ~src ~dst then
-          materialize_strategy := Some Reflink_copy
+        if try_reflink_copy ~src ~dst then materialize_strategy := Some Reflink_copy
         else with_strategy Plain_copy
     | Plain_copy ->
         materialize_strategy := Some Plain_copy;
@@ -167,21 +151,19 @@ let rec copy_tree ~src ~dst =
   ensure_dir dst;
   Sys.readdir src
   |> Array.iter (fun entry ->
-         let src_path = Filename.concat src entry in
-         let dst_path = Filename.concat dst entry in
-         if Sys.is_directory src_path then copy_tree ~src:src_path ~dst:dst_path
-         else copy_file ~src:src_path ~dst:dst_path)
+      let src_path = Filename.concat src entry in
+      let dst_path = Filename.concat dst entry in
+      if Sys.is_directory src_path then copy_tree ~src:src_path ~dst:dst_path
+      else copy_file ~src:src_path ~dst:dst_path)
 
 let rec materialize_tree ~src ~dst =
   ensure_dir dst;
   Sys.readdir src
   |> Array.iter (fun entry ->
-         let src_path = Filename.concat src entry in
-         let dst_path = Filename.concat dst entry in
-         if Sys.is_directory src_path then
-           materialize_tree ~src:src_path ~dst:dst_path
-         else materialize_file ~src:src_path ~dst:dst_path)
+      let src_path = Filename.concat src entry in
+      let dst_path = Filename.concat dst entry in
+      if Sys.is_directory src_path then materialize_tree ~src:src_path ~dst:dst_path
+      else materialize_file ~src:src_path ~dst:dst_path)
 
 let materialize_path ~src ~dst =
-  if Sys.is_directory src then materialize_tree ~src ~dst
-  else materialize_file ~src ~dst
+  if Sys.is_directory src then materialize_tree ~src ~dst else materialize_file ~src ~dst

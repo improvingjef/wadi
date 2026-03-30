@@ -1,25 +1,13 @@
-type backend =
-  | Native
-  | Bytecode
-
-type backend_request =
-  | Auto
-  | Select of backend
+type backend = Native | Bytecode
+type backend_request = Auto | Select of backend
 
 type package_resolution = {
   packages : string list;
   package_paths : (string * string) list;
 }
 
-type invocation = {
-  prog : string;
-  args : string list;
-}
-
-type resolved_command = {
-  configured : string;
-  resolved : string option;
-}
+type invocation = { prog : string; args : string list }
+type resolved_command = { configured : string; resolved : string option }
 
 type report = {
   ocamlc : resolved_command;
@@ -82,42 +70,22 @@ let command_override name default =
   | None -> default
 
 let ocamlc_cmd () = command_override "OCAMLC" "ocamlc"
-
 let ocamlopt_cmd () = command_override "OCAMLOPT" "ocamlopt"
-
 let ocamldep_cmd () = command_override "OCAMLDEP" "ocamldep"
-
 let ocamlfind_cmd () = command_override "OCAMLFIND" "ocamlfind"
-
 let ocamlmktop_cmd () = command_override "OCAMLMKTOP" "ocamlmktop"
-
 let ocamllex_cmd () = command_override "OCAMLLEX" "ocamllex"
-
 let menhir_cmd () = command_override "MENHIR" "menhir"
-
-let backend_name = function
-  | Native -> "native"
-  | Bytecode -> "bytecode"
+let backend_name = function Native -> "native" | Bytecode -> "bytecode"
 
 let backend_request_name = function
   | Auto -> "auto"
   | Select backend -> backend_name backend
 
-let compiler_kind = function
-  | Native -> "ocamlopt"
-  | Bytecode -> "ocamlc"
-
-let compiler_cmd = function
-  | Native -> ocamlopt_cmd ()
-  | Bytecode -> ocamlc_cmd ()
-
-let object_extension = function
-  | Native -> ".cmx"
-  | Bytecode -> ".cmo"
-
-let library_archive_extension = function
-  | Native -> ".cmxa"
-  | Bytecode -> ".cma"
+let compiler_kind = function Native -> "ocamlopt" | Bytecode -> "ocamlc"
+let compiler_cmd = function Native -> ocamlopt_cmd () | Bytecode -> ocamlc_cmd ()
+let object_extension = function Native -> ".cmx" | Bytecode -> ".cmo"
+let library_archive_extension = function Native -> ".cmxa" | Bytecode -> ".cma"
 
 let parse_backend value =
   match String.lowercase_ascii (String.trim value) with
@@ -125,8 +93,7 @@ let parse_backend value =
   | "bytecode" -> Ok Bytecode
   | value ->
       Error
-        (Printf.sprintf
-           "unknown backend '%s'; expected auto, native, or bytecode" value)
+        (Printf.sprintf "unknown backend '%s'; expected auto, native, or bytecode" value)
 
 let parse_backend_request value =
   match String.lowercase_ascii (String.trim value) with
@@ -153,11 +120,10 @@ let executable_candidates command =
 let uncached_resolve_executable_path command =
   executable_candidates command
   |> List.find_opt (fun path ->
-         try
-           Unix.access path [ Unix.X_OK ];
-           true
-         with
-         | Unix.Unix_error _ -> false)
+      try
+        Unix.access path [ Unix.X_OK ];
+        true
+      with Unix.Unix_error _ -> false)
   |> Option.map Fs.realpath
 
 let resolve_executable_path ?session command =
@@ -170,9 +136,7 @@ let resolve_executable_path ?session command =
 let version_of prog =
   let outcome = Process.run_capture prog [ "-version" ] in
   if outcome.status = 0 then Ok (String.trim outcome.output)
-  else
-    Error
-      (Printf.sprintf "failed to query %s version\n%s" prog outcome.output)
+  else Error (Printf.sprintf "failed to query %s version\n%s" prog outcome.output)
 
 let uncached_command_is_available prog =
   let outcome = Process.run_capture prog [ "-version" ] in
@@ -200,23 +164,20 @@ let resolve_backend ?session request =
         else if command_is_available ?session (compiler_cmd Bytecode) then Ok Bytecode
         else
           Error
-            (Printf.sprintf
-               "no working OCaml compiler found; tried %s and %s"
+            (Printf.sprintf "no working OCaml compiler found; tried %s and %s"
                (ocamlopt_cmd ()) (ocamlc_cmd ()))
   in
   match session with
   | None -> resolve ()
   | Some session ->
-      with_cached_table session.backend_resolutions
-        (backend_request_name request) resolve
+      with_cached_table session.backend_resolutions (backend_request_name request) resolve
 
 let compiler_version ?session backend =
   let key = backend_name backend in
   let resolve () = version_of (compiler_cmd backend) in
   match session with
   | None -> resolve ()
-  | Some session ->
-      with_cached_table session.compiler_versions key resolve
+  | Some session -> with_cached_table session.compiler_versions key resolve
 
 let uncached_stdlib_dir () =
   let ocamlc = ocamlc_cmd () in
@@ -225,12 +186,9 @@ let uncached_stdlib_dir () =
     let path = String.trim outcome.output in
     if path = "" then
       Error
-        (Printf.sprintf "failed to determine the stdlib directory via %s -where"
-           ocamlc)
+        (Printf.sprintf "failed to determine the stdlib directory via %s -where" ocamlc)
     else Ok path
-  else
-    Error
-      (Printf.sprintf "failed to query %s -where\n%s" ocamlc outcome.output)
+  else Error (Printf.sprintf "failed to query %s -where\n%s" ocamlc outcome.output)
 
 let stdlib_dir ?session () =
   match session with
@@ -251,8 +209,7 @@ let resolve_library_dir ~exists ~stdlib_dir library =
 
 let validate_ocamlfind prog =
   let outcome = Process.run_capture prog [ "printconf"; "path" ] in
-  if outcome.status = 0 then Ok ()
-  else Error outcome.output
+  if outcome.status = 0 then Ok () else Error outcome.output
 
 let fallback_ocamlfind () =
   let outcome = Process.run_capture (ocamlc_cmd ()) [ "-where" ] in
@@ -274,8 +231,8 @@ let uncached_ensure_ocamlfind () =
           | Ok () -> Ok candidate
           | Error _ ->
               Error
-                "external packages require ocamlfind; install it with `opam \
-                 install ocamlfind`")
+                "external packages require ocamlfind; install it with `opam install \
+                 ocamlfind`")
       | None ->
           Error
             "external packages require ocamlfind; install it with `opam install \
@@ -297,9 +254,7 @@ let uncached_package_search_roots ?session () =
   let outcome = Process.run_capture ocamlfind [ "printconf"; "path" ] in
   if outcome.status = 0 then Ok (String_util.split_lines outcome.output)
   else
-    Error
-      (Printf.sprintf "failed to query %s package roots\n%s" ocamlfind
-         outcome.output)
+    Error (Printf.sprintf "failed to query %s package roots\n%s" ocamlfind outcome.output)
 
 let package_search_roots ?session () =
   match session with
@@ -325,26 +280,21 @@ let resolve_packages ?session packages =
               loop ((package_name, package_path) :: acc) rest
             else
               Error
-                (Printf.sprintf "package '%s' is not available via ocamlfind"
-                   package_name)
+                (Printf.sprintf "package '%s' is not available via ocamlfind" package_name)
       in
       loop [] packages
   in
   match session with
   | None -> resolve ()
   | Some session ->
-      with_cached_table session.package_resolutions
-        (package_cache_key packages) resolve
+      with_cached_table session.package_resolutions (package_cache_key packages) resolve
 
 let package_args resolution =
   match resolution.packages with
   | [] -> []
   | packages -> [ "-package"; String.concat "," packages ]
 
-let link_args resolution =
-  match resolution.packages with
-  | [] -> []
-  | _ -> [ "-linkpkg" ]
+let link_args resolution = match resolution.packages with [] -> [] | _ -> [ "-linkpkg" ]
 
 let compiler_invocation ?session backend resolution args =
   match resolution.packages with
@@ -362,22 +312,14 @@ let ocamldep_invocation ?session resolution args =
   | [] -> Ok { prog = ocamldep_cmd (); args }
   | _ ->
       let* ocamlfind = ensure_ocamlfind ?session () in
-      Ok
-        {
-          prog = ocamlfind;
-          args = ("ocamldep" :: package_args resolution) @ args;
-        }
+      Ok { prog = ocamlfind; args = ("ocamldep" :: package_args resolution) @ args }
 
 let ocamlmktop_invocation ?session resolution args =
   match resolution.packages with
   | [] -> Ok { prog = ocamlmktop_cmd (); args }
   | _ ->
       let* ocamlfind = ensure_ocamlfind ?session () in
-      Ok
-        {
-          prog = ocamlfind;
-          args = ("ocamlmktop" :: package_args resolution) @ args;
-        }
+      Ok { prog = ocamlfind; args = ("ocamlmktop" :: package_args resolution) @ args }
 
 let render_invocation ?cwd ?(env = []) invocation =
   Process.render ?cwd ~env invocation.prog invocation.args
@@ -396,8 +338,7 @@ let ensure_success_ocamlmktop ?session ?(env = []) ~verbose resolution args =
 
 let sort_sources ?session ?(env = []) ~verbose resolution source_files =
   let* outcome =
-    ensure_success_ocamldep ?session ~env ~verbose resolution
-      ("-sort" :: source_files)
+    ensure_success_ocamldep ?session ~env ~verbose resolution ("-sort" :: source_files)
   in
   Ok (String_util.split_whitespace outcome.Process.output)
 
@@ -446,8 +387,7 @@ let inspect ?session () =
   let stdlib = stdlib_dir ?session () in
   let unix_dir =
     match stdlib with
-    | Ok path ->
-        Ok (resolve_library_dir ~exists:Sys.file_exists ~stdlib_dir:path "unix")
+    | Ok path -> Ok (resolve_library_dir ~exists:Sys.file_exists ~stdlib_dir:path "unix")
     | Error message -> Error message
   in
   {
@@ -455,8 +395,7 @@ let inspect ?session () =
     ocamlopt = configured_command_report ?session (ocamlopt_cmd ());
     ocamldep = configured_command_report ?session (ocamldep_cmd ());
     ocamlfind = resolved_ocamlfind_report ?session ();
-    selected_backend =
-      Result.bind (env_backend_request ()) (resolve_backend ?session);
+    selected_backend = Result.bind (env_backend_request ()) (resolve_backend ?session);
     compiler_version =
       Result.bind
         (Result.bind (env_backend_request ()) (resolve_backend ?session))
@@ -476,8 +415,7 @@ let render_command_report name command =
 
 let render_result name = function
   | Ok value -> Printf.sprintf "%s: %s" name value
-  | Error message ->
-      Printf.sprintf "%s-error: %s" name (String.trim message)
+  | Error message -> Printf.sprintf "%s-error: %s" name (String.trim message)
 
 let render_report report =
   let base_lines =
@@ -488,15 +426,13 @@ let render_report report =
       render_command_report "ocamlfind" report.ocamlfind;
       (match report.selected_backend with
       | Ok backend -> "selected-backend: " ^ backend_name backend
-      | Error message ->
-          "selected-backend-error: " ^ String.trim message);
+      | Error message -> "selected-backend-error: " ^ String.trim message);
       render_result "compiler-version" report.compiler_version;
       render_result "stdlib" report.stdlib;
       (match report.unix_dir with
       | Ok (Some path) -> "unix-library-dir: " ^ path
       | Ok None -> "unix-library-dir: unavailable"
-      | Error message ->
-          "unix-library-dir-error: " ^ String.trim message);
+      | Error message -> "unix-library-dir-error: " ^ String.trim message);
     ]
   in
   match report.package_roots with
@@ -504,5 +440,4 @@ let render_report report =
       String.concat "\n"
         (base_lines @ ("package-roots:" :: List.map (fun root -> "  " ^ root) roots))
   | Error message ->
-      String.concat "\n"
-        (base_lines @ [ "package-roots-error: " ^ String.trim message ])
+      String.concat "\n" (base_lines @ [ "package-roots-error: " ^ String.trim message ])

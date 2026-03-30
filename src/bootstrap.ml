@@ -1,10 +1,5 @@
-type scope =
-  | Executable_only
-  | Full
-
-type render_format =
-  | Makefile
-  | Seed_metadata
+type scope = Executable_only | Full
+type render_format = Makefile | Seed_metadata
 
 type module_plan = {
   stem : string;
@@ -34,15 +29,8 @@ type workspace_plan = {
   test : target_plan option;
 }
 
-type module_owner = {
-  kind : string;
-  target_name : string;
-  source_path : string;
-}
-
-type runnable_kind =
-  | Executable_kind
-  | Test_kind
+type module_owner = { kind : string; target_name : string; source_path : string }
+type runnable_kind = Executable_kind | Test_kind
 
 let ( let* ) = Result.bind
 
@@ -60,13 +48,12 @@ let find_single_target label select workspace =
   | [ target ] -> Ok target
   | [] ->
       Error
-        (Printf.sprintf
-           "bootstrap manifest requires exactly one %s target, found none" label)
+        (Printf.sprintf "bootstrap manifest requires exactly one %s target, found none"
+           label)
   | targets ->
       Error
-        (Printf.sprintf
-           "bootstrap manifest requires exactly one %s target, found %d" label
-           (List.length targets))
+        (Printf.sprintf "bootstrap manifest requires exactly one %s target, found %d"
+           label (List.length targets))
 
 let index_targets workspace =
   let table = Hashtbl.create (List.length workspace.Manifest.targets) in
@@ -99,8 +86,7 @@ let choose_bootstrap_library ~manifest_path workspace =
       | Some library -> Ok library
       | None ->
           Error
-            (Printf.sprintf
-               "bootstrap library '%s' was not found in %s" requested
+            (Printf.sprintf "bootstrap library '%s' was not found in %s" requested
                manifest_path))
   | None -> (
       match
@@ -113,26 +99,20 @@ let choose_bootstrap_library ~manifest_path workspace =
           match libraries with
           | [ library ] -> Ok library
           | [] ->
-              Error
-                (Printf.sprintf "no [library.*] section found in %s" manifest_path)
+              Error (Printf.sprintf "no [library.*] section found in %s" manifest_path)
           | libraries ->
               Error
                 (Printf.sprintf
-                   "multiple libraries found in %s; set BOOTSTRAP_LIBRARY to \
-                    choose one (%s)"
+                   "multiple libraries found in %s; set BOOTSTRAP_LIBRARY to choose one \
+                    (%s)"
                    manifest_path
                    (String.concat ", "
                       (List.map
                          (fun (library : Manifest.library) -> library.name)
                          libraries)))))
 
-let scope_name = function
-  | Executable_only -> "app"
-  | Full -> "full"
-
-let runnable_kind_name = function
-  | Executable_kind -> "executable"
-  | Test_kind -> "test"
+let scope_name = function Executable_only -> "app" | Full -> "full"
+let runnable_kind_name = function Executable_kind -> "executable" | Test_kind -> "test"
 
 let resolve_profile workspace = function
   | Some profile when String.trim profile <> "" -> profile
@@ -145,7 +125,8 @@ let normalize_workspace_root workspace_root =
 let workspace_relative_path ~workspace_root path =
   let normalized_root = normalize_workspace_root workspace_root in
   if String_util.starts_with ~prefix:normalized_root path then
-    String.sub path (String.length normalized_root)
+    String.sub path
+      (String.length normalized_root)
       (String.length path - String.length normalized_root)
   else path
 
@@ -156,17 +137,14 @@ let seed_snapshot_dir ~seed_root ~profile (library : Manifest.library) =
   Filename.concat seed_root
     (Filename.concat profile (Printf.sprintf "library-%s" library.name))
 
-let render_shell_words words =
-  String.concat " " (List.map String_util.shell_quote words)
+let render_shell_words words = String.concat " " (List.map String_util.shell_quote words)
 
 let render_env_prefix env =
   match env with
   | [] -> ""
   | env ->
       String.concat " "
-        (List.map
-           (fun (name, value) -> name ^ "=" ^ String_util.shell_quote value)
-           env)
+        (List.map (fun (name, value) -> name ^ "=" ^ String_util.shell_quote value) env)
       ^ " "
 
 let render_env_words env =
@@ -174,9 +152,7 @@ let render_env_words env =
   | [] -> ""
   | env ->
       String.concat " "
-        (List.map
-           (fun (name, value) -> name ^ "=" ^ String_util.shell_quote value)
-           env)
+        (List.map (fun (name, value) -> name ^ "=" ^ String_util.shell_quote value) env)
 
 let package_flags packages =
   let resolution : Toolchain.package_resolution = { packages; package_paths = [] } in
@@ -192,37 +168,33 @@ let rec dependency_packages index seen name =
     Hashtbl.add seen name ();
     match Hashtbl.find_opt index name with
     | None ->
-        Error
-          (Printf.sprintf
-             "bootstrap manifest refers to unknown dependency '%s'" name)
+        Error (Printf.sprintf "bootstrap manifest refers to unknown dependency '%s'" name)
     | Some (Manifest.Library library) ->
-        let* packages =
-          collect_results library.deps (dependency_packages index seen)
-        in
-        Ok
-          (String_util.dedup_preserve
-             (library.packages @ List.concat packages))
+        let* packages = collect_results library.deps (dependency_packages index seen) in
+        Ok (String_util.dedup_preserve (library.packages @ List.concat packages))
     | Some target ->
         Error
           (Printf.sprintf
-             "bootstrap manifest dependency '%s' resolved to %s; only libraries \
-              can contribute bootstrap packages"
-             name (Manifest.target_kind_name target)))
+             "bootstrap manifest dependency '%s' resolved to %s; only libraries can \
+              contribute bootstrap packages"
+             name
+             (Manifest.target_kind_name target)))
 
 let effective_packages index target =
   let* packages =
     collect_results (Manifest.target_deps target)
       (dependency_packages index (Hashtbl.create 8))
   in
-  Ok
-    (String_util.dedup_preserve
-       (Manifest.target_packages target @ List.concat packages))
+  Ok (String_util.dedup_preserve (Manifest.target_packages target @ List.concat packages))
 
 let rec tracked_input_paths path =
   if not (Fs.exists path) then [ path ]
   else if Fs.is_directory path then
     let entries = Sys.readdir path |> Array.to_list |> List.sort String.compare in
-    path :: List.concat_map (fun entry -> tracked_input_paths (Filename.concat path entry)) entries
+    path
+    :: List.concat_map
+         (fun entry -> tracked_input_paths (Filename.concat path entry))
+         entries
   else [ path ]
 
 let resolve_input_path ~workspace_root path =
@@ -241,50 +213,36 @@ let command_input_paths ~workspace_root argv =
       else []
 
 let action_input_paths ~workspace_root (action : Manifest.action) =
-  List.concat_map
-    (command_input_paths ~workspace_root)
-    (Manifest.action_commands action)
-  @ List.concat_map
-      (existing_workspace_inputs ~workspace_root)
-      action.deps
+  List.concat_map (command_input_paths ~workspace_root) (Manifest.action_commands action)
+  @ List.concat_map (existing_workspace_inputs ~workspace_root) action.deps
 
 let preprocessor_input_paths ~workspace_root (tool : Manifest.command_tool) =
   command_input_paths ~workspace_root tool.argv
-  @ List.concat_map
-      (existing_workspace_inputs ~workspace_root)
-      tool.deps
+  @ List.concat_map (existing_workspace_inputs ~workspace_root) tool.deps
 
 let ppx_input_paths ~workspace_root (tool : Manifest.ppx_tool) =
   command_input_paths ~workspace_root tool.argv
-  @ List.concat_map
-      (existing_workspace_inputs ~workspace_root)
-      tool.deps
+  @ List.concat_map (existing_workspace_inputs ~workspace_root) tool.deps
 
 let pipeline_input_paths ~workspace_root (pipeline : Builder.resolved_pipeline) =
   List.concat_map (action_input_paths ~workspace_root) pipeline.actions
-  @ List.concat_map
-      (preprocessor_input_paths ~workspace_root)
-      pipeline.preprocessors
+  @ List.concat_map (preprocessor_input_paths ~workspace_root) pipeline.preprocessors
   @ List.concat_map (ppx_input_paths ~workspace_root) pipeline.ppx_tools
 
 let source_input_paths ~workspace_root sources =
   sources
   |> List.concat_map (fun (source : Builder.source_descriptor) ->
-         (if
-            source.has_ml
-            && source.ml_path
-               = resolve_input_path ~workspace_root source.ml_relative
-          then
-            existing_workspace_inputs ~workspace_root source.ml_relative
-          else [])
-         @
-         if
-           source.has_mli
-           && source.mli_path
-              = resolve_input_path ~workspace_root source.mli_relative
-         then
-           existing_workspace_inputs ~workspace_root source.mli_relative
-         else [])
+      (if
+         source.has_ml
+         && source.ml_path = resolve_input_path ~workspace_root source.ml_relative
+       then existing_workspace_inputs ~workspace_root source.ml_relative
+       else [])
+      @
+      if
+        source.has_mli
+        && source.mli_path = resolve_input_path ~workspace_root source.mli_relative
+      then existing_workspace_inputs ~workspace_root source.mli_relative
+      else [])
 
 let bootstrap_target_out_dir ~workspace_root ~profile target =
   Filename.concat workspace_root
@@ -310,11 +268,9 @@ let ordered_module_plans ~workspace_root ordered_stems prepared_sources =
               {
                 stem = source.source.stem;
                 logical_ml_path =
-                  if source.source.has_ml then Some source.source.ml_relative
-                  else None;
+                  (if source.source.has_ml then Some source.source.ml_relative else None);
                 logical_mli_path =
-                  if source.source.has_mli then Some source.source.mli_relative
-                  else None;
+                  (if source.source.has_mli then Some source.source.mli_relative else None);
                 ml_path =
                   Option.map
                     (workspace_relative_path ~workspace_root)
@@ -328,8 +284,8 @@ let ordered_module_plans ~workspace_root ordered_stems prepared_sources =
             loop (module_plan :: acc) rest
         | None ->
             Error
-              (Printf.sprintf
-                 "bootstrap planning lost source descriptor for module '%s'" stem))
+              (Printf.sprintf "bootstrap planning lost source descriptor for module '%s'"
+                 stem))
   in
   loop [] ordered_stems
 
@@ -345,13 +301,7 @@ let module_source_path (module_plan : module_plan) =
 let ensure_unique_module_stems groups =
   let stems : (string, module_owner list) Hashtbl.t = Hashtbl.create 16 in
   let add_module kind target_name module_plan =
-    let owner =
-      {
-        kind;
-        target_name;
-        source_path = module_source_path module_plan;
-      }
-    in
+    let owner = { kind; target_name; source_path = module_source_path module_plan } in
     let previous =
       match Hashtbl.find_opt stems module_plan.stem with
       | Some owners -> owners
@@ -360,8 +310,7 @@ let ensure_unique_module_stems groups =
     Hashtbl.replace stems module_plan.stem (owner :: previous)
   in
   List.iter
-    (fun (kind, target_name, modules) ->
-      List.iter (add_module kind target_name) modules)
+    (fun (kind, target_name, modules) -> List.iter (add_module kind target_name) modules)
     groups;
   let duplicates =
     Hashtbl.fold
@@ -374,8 +323,7 @@ let ensure_unique_module_stems groups =
   | [] -> Ok ()
   | duplicates ->
       let render_owner owner =
-        Printf.sprintf "%s '%s' (%s)" owner.kind owner.target_name
-          owner.source_path
+        Printf.sprintf "%s '%s' (%s)" owner.kind owner.target_name owner.source_path
       in
       let details =
         List.map
@@ -401,12 +349,12 @@ let library_plan ~session ~workspace_root ~profile workspace index library =
       pipeline.actions
   in
   let* _action_results =
-    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root
-      ~out_dir ~target ~pipeline
+    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root ~out_dir
+      ~target ~pipeline
   in
   let* () =
-    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize
-      ~workspace_root ~out_dir library
+    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize ~workspace_root
+      ~out_dir library
   in
   let* sources =
     Builder.library_source_descriptors ~workspace_root ~out_dir
@@ -416,19 +364,15 @@ let library_plan ~session ~workspace_root ~profile workspace index library =
       library
   in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false
-      ~workspace_root ~out_dir ~include_dirs:[out_dir]
-      ~target_env:(pipeline.options.env)
+    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false ~workspace_root
+      ~out_dir ~include_dirs:[ out_dir ] ~target_env:pipeline.options.env
       pipeline.preprocessors sources
   in
   let* ordered =
-    Builder.infer_module_order ~session ~verbose:false ~env:(pipeline.options.env)
-      ~target_kind:"library" ~target_name:library.name package_resolution
-      prepared_sources
+    Builder.infer_module_order ~session ~verbose:false ~env:pipeline.options.env
+      ~target_kind:"library" ~target_name:library.name package_resolution prepared_sources
   in
-  let* ordered_modules =
-    ordered_module_plans ~workspace_root ordered prepared_sources
-  in
+  let* ordered_modules = ordered_module_plans ~workspace_root ordered prepared_sources in
   let inputs =
     source_input_paths ~workspace_root sources
     @ pipeline_input_paths ~workspace_root pipeline
@@ -456,40 +400,36 @@ let runnable_plan ~session ~workspace_root ~profile workspace index ~kind runnab
   let* package_resolution = Toolchain.resolve_packages ~session packages in
   let* pipeline = Builder.resolve_pipeline ~workspace_root workspace ~profile target in
   let* _action_results =
-    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root
-      ~out_dir ~target ~pipeline
+    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root ~out_dir
+      ~target ~pipeline
   in
   let* module_sources =
     Builder.source_descriptors ~workspace_root
       ~generated_root:(Builder.generated_root out_dir)
-      ~planned_generated_outputs:
-        (Builder.planned_generated_output_names pipeline.actions)
+      ~planned_generated_outputs:(Builder.planned_generated_output_names pipeline.actions)
       ~dir:runnable.dir runnable.modules
   in
   let* main_source =
     Builder.source_descriptor ~workspace_root
       ~generated_root:(Builder.generated_root out_dir)
-      ~planned_generated_outputs:
-        (Builder.planned_generated_output_names pipeline.actions)
+      ~planned_generated_outputs:(Builder.planned_generated_output_names pipeline.actions)
       ~dir:runnable.dir runnable.main
   in
   let all_sources = module_sources @ [ main_source ] in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false
-      ~workspace_root ~out_dir ~include_dirs:[out_dir]
-      ~target_env:(pipeline.options.env)
+    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false ~workspace_root
+      ~out_dir ~include_dirs:[ out_dir ] ~target_env:pipeline.options.env
       pipeline.preprocessors all_sources
   in
   let module_prepared_sources =
     List.filter
-      (fun (source : Builder.prepared_source) ->
-        source.source.stem <> runnable.main)
+      (fun (source : Builder.prepared_source) -> source.source.stem <> runnable.main)
       prepared_sources
   in
   let* ordered_modules =
-    Builder.infer_module_order ~session ~verbose:false ~env:(pipeline.options.env)
-      ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name
-      package_resolution module_prepared_sources
+    Builder.infer_module_order ~session ~verbose:false ~env:pipeline.options.env
+      ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name package_resolution
+      module_prepared_sources
   in
   let source_order = ordered_modules @ [ runnable.main ] in
   let* ordered_sources =
@@ -544,10 +484,7 @@ let plan ~workspace_root ?profile ~scope workspace =
   in
   let requested_targets =
     library.name :: executable.name
-    ::
-    (match test with
-    | Some test -> [ test.name ]
-    | None -> [])
+    :: (match test with Some test -> [ test.name ] | None -> [])
   in
   let* _ = Builder.resolve_build_order workspace requested_targets in
   let session = Toolchain.create_session () in
@@ -555,16 +492,16 @@ let plan ~workspace_root ?profile ~scope workspace =
     library_plan ~session ~workspace_root ~profile workspace index library
   in
   let* executable_plan, executable_inputs =
-    runnable_plan ~session ~workspace_root ~profile workspace index
-      ~kind:Executable_kind executable
+    runnable_plan ~session ~workspace_root ~profile workspace index ~kind:Executable_kind
+      executable
   in
   let* test_plan, test_inputs =
     match test with
     | None -> Ok (None, [])
     | Some test ->
         let* plan, inputs =
-          runnable_plan ~session ~workspace_root ~profile workspace index
-            ~kind:Test_kind test
+          runnable_plan ~session ~workspace_root ~profile workspace index ~kind:Test_kind
+            test
         in
         Ok (Some plan, inputs)
   in
@@ -588,15 +525,13 @@ let plan ~workspace_root ?profile ~scope workspace =
           (List.map
              (workspace_relative_path ~workspace_root)
              (common_inputs @ executable_inputs @ test_inputs));
-      common_seed_reuse =
-        common_seed_reuse_allowed ~seed_profile profile;
+      common_seed_reuse = common_seed_reuse_allowed ~seed_profile profile;
       common;
       executable = executable_plan;
       test = test_plan;
     }
 
 let object_path stem = Printf.sprintf "$(OBJ_DIR)/%s.$(OBJ_EXT)" stem
-
 let interface_path stem = Printf.sprintf "$(OBJ_DIR)/%s.cmi" stem
 
 let object_list modules =
@@ -608,30 +543,21 @@ let object_list modules =
          | None -> None)
        modules)
 
-let last = function
-  | [] -> None
-  | items -> Some (List.hd (List.rev items))
+let last = function [] -> None | items -> Some (List.hd (List.rev items))
 
 let rule_header ?order_only target prerequisites =
   let order_only_suffix =
-    match order_only with
-    | Some directory -> " | " ^ directory
-    | None -> ""
+    match order_only with Some directory -> " | " ^ directory | None -> ""
   in
   match prerequisites with
   | [] -> target ^ ":" ^ order_only_suffix
   | prerequisites ->
-      Printf.sprintf "%s: %s%s" target (String.concat " " prerequisites)
-        order_only_suffix
+      Printf.sprintf "%s: %s%s" target (String.concat " " prerequisites) order_only_suffix
 
 let compile_flags_value ~workspace_root target =
   let ppx_args = render_shell_words (Builder.ppx_args ~workspace_root target.ppx_tools) in
   String.concat " "
-    (target.compile_flags
-    @
-    match ppx_args with
-    | "" -> []
-    | args -> [ args ])
+    (target.compile_flags @ match ppx_args with "" -> [] | args -> [ args ])
 
 let compile_command prefix target =
   render_env_prefix target.env
@@ -665,7 +591,7 @@ let module_rules prefix target predecessor module_plan =
           rule_header ~order_only:"$(OBJ_DIR)"
             (interface_path module_plan.stem)
             (mli_path :: "$(BOOTSTRAP_MK)" :: previous_artifact);
-          ("\t" ^ compile_command prefix target ^ " -c -o $@ $<");
+          "\t" ^ compile_command prefix target ^ " -c -o $@ $<";
           "";
         ]
     | None -> []
@@ -676,16 +602,16 @@ let module_rules prefix target predecessor module_plan =
     | Some ml_path ->
         let object_prerequisites =
           [ ml_path; "$(BOOTSTRAP_MK)" ]
-          @
-          (match module_plan.mli_path with
-          | Some _ -> [ interface_path module_plan.stem ]
-          | None -> [])
+          @ (match module_plan.mli_path with
+            | Some _ -> [ interface_path module_plan.stem ]
+            | None -> [])
           @ previous_artifact
         in
         [
-          rule_header ~order_only:"$(OBJ_DIR)" (object_path module_plan.stem)
+          rule_header ~order_only:"$(OBJ_DIR)"
+            (object_path module_plan.stem)
             object_prerequisites;
-          ("\t" ^ compile_command prefix target ^ " -c -o $@ $<");
+          "\t" ^ compile_command prefix target ^ " -c -o $@ $<";
           "";
         ]
   in
@@ -703,8 +629,7 @@ let group_rules prefix target modules predecessor =
 let target_variable_lines ~workspace_root prefix target =
   [
     prefix ^ "_PACKAGE_FLAGS := " ^ package_flags target.packages;
-    prefix ^ "_COMPILE_FLAGS := "
-    ^ compile_flags_value ~workspace_root target;
+    prefix ^ "_COMPILE_FLAGS := " ^ compile_flags_value ~workspace_root target;
     prefix ^ "_LINK_FLAGS := " ^ link_flags target.packages target.link_flags;
   ]
 
@@ -719,8 +644,8 @@ let render_makefile_from_plan ~workspace_root plan =
         let test_objects = object_list test.ordered_modules in
         target_variable_lines ~workspace_root "TEST" test
         @ [
-            "TEST_OBJS := $(COMMON_OBJS)"
-            ^ if test_objects = "" then "" else " " ^ test_objects;
+            ("TEST_OBJS := $(COMMON_OBJS)"
+            ^ if test_objects = "" then "" else " " ^ test_objects);
             "";
           ]
         @ group_rules "TEST" test test.ordered_modules common_tail
@@ -728,17 +653,16 @@ let render_makefile_from_plan ~workspace_root plan =
             rule_header ~order_only:"$(BIN_DIR)"
               (Printf.sprintf "$(BIN_DIR)/%s" test.name)
               [ "$(BOOTSTRAP_MK)"; "$(TEST_OBJS)" ];
-            ("\t" ^ link_command "TEST" test ^ " -o $@ $(TEST_OBJS)");
+            "\t" ^ link_command "TEST" test ^ " -o $@ $(TEST_OBJS)";
           ]
   in
   let lines =
     [
       "# Generated by the wadi bootstrap planner from wadi.toml.";
       "# Edit wadi.toml instead of this file.";
-      ("# Bootstrap scope: " ^ scope_name plan.scope);
-      ("# Bootstrap profile: " ^ plan.profile);
-      ("COMMON_SEED_REUSE := "
-      ^ if plan.common_seed_reuse then "yes" else "no");
+      "# Bootstrap scope: " ^ scope_name plan.scope;
+      "# Bootstrap profile: " ^ plan.profile;
+      ("COMMON_SEED_REUSE := " ^ if plan.common_seed_reuse then "yes" else "no");
       "";
       rule_header "$(BOOTSTRAP_MK)"
         ([ "$(BOOTSTRAP_MANIFEST)"; "$(BOOTSTRAP_GENERATOR)" ] @ plan.inputs);
@@ -748,23 +672,19 @@ let render_makefile_from_plan ~workspace_root plan =
     @ target_variable_lines ~workspace_root "APP" plan.executable
     @ [
         "COMMON_OBJS := " ^ common_objects;
-        "APP_OBJS := $(COMMON_OBJS)"
-        ^ if executable_objects = "" then "" else " " ^ executable_objects;
+        ("APP_OBJS := $(COMMON_OBJS)"
+        ^ if executable_objects = "" then "" else " " ^ executable_objects);
         "";
       ]
     @ group_rules "COMMON" plan.common plan.common.ordered_modules None
-    @ group_rules "APP" plan.executable plan.executable.ordered_modules
-        common_tail
+    @ group_rules "APP" plan.executable plan.executable.ordered_modules common_tail
     @ [
         rule_header ~order_only:"$(BIN_DIR)"
           (Printf.sprintf "$(BIN_DIR)/%s" plan.executable.name)
           [ "$(BOOTSTRAP_MK)"; "$(APP_OBJS)" ];
-        ("\t" ^ link_command "APP" plan.executable ^ " -o $@ $(APP_OBJS)");
+        "\t" ^ link_command "APP" plan.executable ^ " -o $@ $(APP_OBJS)";
       ]
-    @
-    match test_lines with
-    | [] -> []
-    | lines -> "" :: lines
+    @ match test_lines with [] -> [] | lines -> "" :: lines
   in
   String.concat "\n" lines ^ "\n"
 
@@ -790,8 +710,9 @@ let ordered_prepared_sources ordered_stems prepared_sources =
 
 let seed_snapshot_file ~workspace_root ~snapshot_dir stem extension source_path =
   let relative_path = workspace_relative_path ~workspace_root source_path in
-  if relative_path <> source_path
-     && not (String_util.starts_with ~prefix:"_bootstrap/" relative_path)
+  if
+    relative_path <> source_path
+    && not (String_util.starts_with ~prefix:"_bootstrap/" relative_path)
   then Ok relative_path
   else
     let path = Filename.concat snapshot_dir (stem ^ "." ^ extension) in
@@ -808,13 +729,12 @@ let seed_compile_paths ~workspace_root ?seed_root ~(profile : string)
         (List.concat_map
            (fun (source : Builder.prepared_source) ->
              (match source.mli_compile_path with
-             | Some mli_path ->
-                 [ workspace_relative_path ~workspace_root mli_path ]
-             | None -> [])
+               | Some mli_path -> [ workspace_relative_path ~workspace_root mli_path ]
+               | None -> [])
              @
-             (match source.ml_compile_path with
+             match source.ml_compile_path with
              | Some ml_path -> [ workspace_relative_path ~workspace_root ml_path ]
-             | None -> []))
+             | None -> [])
            ordered_sources)
   | Some seed_root ->
       let snapshot_dir = seed_snapshot_dir ~seed_root ~profile library in
@@ -835,8 +755,8 @@ let seed_compile_paths ~workspace_root ?seed_root ~(profile : string)
             match source.ml_compile_path with
             | Some ml_path ->
                 let* snapshot_path =
-                  seed_snapshot_file ~workspace_root ~snapshot_dir
-                    source.source.stem "ml" ml_path
+                  seed_snapshot_file ~workspace_root ~snapshot_dir source.source.stem "ml"
+                    ml_path
                 in
                 Ok [ snapshot_path ]
             | None -> Ok []
@@ -852,23 +772,19 @@ let enriched_seed_metadata_lines ?seed_root ~manifest_path workspace =
   let index = index_targets workspace in
   let* packages = effective_packages index target in
   let profile = Manifest.default_profile workspace in
-  let out_dir =
-    bootstrap_target_out_dir ~workspace_root
-      ~profile
-      target
-  in
+  let out_dir = bootstrap_target_out_dir ~workspace_root ~profile target in
   let* pipeline = Builder.resolve_pipeline ~workspace_root workspace ~profile target in
   let* () =
     Builder.validate_wrapped_library_source_conflicts ~workspace_root library
       pipeline.actions
   in
   let* _action_results =
-    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root
-      ~out_dir ~target ~pipeline
+    Builder.run_actions ~verbose:false ~mode:Builder.Materialize ~workspace_root ~out_dir
+      ~target ~pipeline
   in
   let* () =
-    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize
-      ~workspace_root ~out_dir library
+    Builder.materialize_wrapped_library_source ~mode:Builder.Materialize ~workspace_root
+      ~out_dir library
   in
   let* sources =
     Builder.library_source_descriptors ~workspace_root ~out_dir
@@ -878,20 +794,17 @@ let enriched_seed_metadata_lines ?seed_root ~manifest_path workspace =
       library
   in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false
-      ~workspace_root ~out_dir ~include_dirs:[out_dir]
-      ~target_env:pipeline.options.env pipeline.preprocessors sources
+    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false ~workspace_root
+      ~out_dir ~include_dirs:[ out_dir ] ~target_env:pipeline.options.env
+      pipeline.preprocessors sources
   in
   let session = Toolchain.create_session () in
   let* package_resolution = Toolchain.resolve_packages ~session packages in
   let* ordered_stems =
     Builder.infer_module_order ~session ~verbose:false ~env:pipeline.options.env
-      ~target_kind:"library" ~target_name:library.name package_resolution
-      prepared_sources
+      ~target_kind:"library" ~target_name:library.name package_resolution prepared_sources
   in
-  let* ordered_sources =
-    ordered_prepared_sources ordered_stems prepared_sources
-  in
+  let* ordered_sources = ordered_prepared_sources ordered_stems prepared_sources in
   let* compile_paths =
     seed_compile_paths ~workspace_root ?seed_root ~profile library ordered_sources
   in
@@ -939,26 +852,21 @@ let seed_metadata_lines ?seed_root ~manifest_path workspace =
           ~planned_generated_outputs:[] library
       in
       let* prepared_sources =
-        Builder.prepare_sources ~mode:Builder.Plan_only ~verbose:false
-          ~workspace_root ~out_dir ~include_dirs:[out_dir]
-          ~target_env:[] [] sources
+        Builder.prepare_sources ~mode:Builder.Plan_only ~verbose:false ~workspace_root
+          ~out_dir ~include_dirs:[ out_dir ] ~target_env:[] [] sources
       in
       let session = Toolchain.create_session () in
       let* package_resolution = Toolchain.resolve_packages ~session packages in
       let* ordered_stems =
-        Builder.infer_module_order ~session ~verbose:false ~env:[]
-          ~target_kind:"library" ~target_name:library.name package_resolution
-          prepared_sources
+        Builder.infer_module_order ~session ~verbose:false ~env:[] ~target_kind:"library"
+          ~target_name:library.name package_resolution prepared_sources
       in
-      let* ordered_sources =
-        ordered_prepared_sources ordered_stems prepared_sources
-      in
+      let* ordered_sources = ordered_prepared_sources ordered_stems prepared_sources in
       let compile_paths =
         List.concat_map
           (fun (source : Builder.prepared_source) ->
             (if source.source.mli_exists then [ source.source.mli_relative ] else [])
-            @
-            (if source.source.has_ml then [ source.source.ml_relative ] else []))
+            @ if source.source.has_ml then [ source.source.ml_relative ] else [])
           ordered_sources
       in
       Ok
@@ -966,10 +874,8 @@ let seed_metadata_lines ?seed_root ~manifest_path workspace =
           "# Generated by wadi __bootstrap_makefile --format seed-metadata.";
           "# Edit wadi.toml instead of this file.";
           "# Refresh with: make refresh-bootstrap-seed-metadata";
-          "BOOTSTRAP_LIBRARY_PROFILE := "
-          ^ Manifest.default_profile workspace;
-          "BOOTSTRAP_LIBRARY_COMPILE_SOURCES := "
-          ^ String.concat " " compile_paths;
+          "BOOTSTRAP_LIBRARY_PROFILE := " ^ Manifest.default_profile workspace;
+          "BOOTSTRAP_LIBRARY_COMPILE_SOURCES := " ^ String.concat " " compile_paths;
           "BOOTSTRAP_LIBRARY_MODULE_STEMS := " ^ String.concat " " ordered_stems;
           "BOOTSTRAP_LIBRARY_PACKAGES := " ^ String.concat " " packages;
           "BOOTSTRAP_LIBRARY_ENV_PREFIX :=";
@@ -1002,9 +908,7 @@ let parse_scope value =
   | "app" | "executable" -> Ok Executable_only
   | "full" -> Ok Full
   | value ->
-      Error
-        (Printf.sprintf
-           "unknown scope '%s'; expected app, executable, or full" value)
+      Error (Printf.sprintf "unknown scope '%s'; expected app, executable, or full" value)
 
 let parse_format value =
   match String.lowercase_ascii (String.trim value) with
@@ -1012,17 +916,14 @@ let parse_format value =
   | "seed_metadata" | "seed-metadata" -> Ok Seed_metadata
   | value ->
       Error
-        (Printf.sprintf
-           "unknown format '%s'; expected makefile or seed-metadata" value)
+        (Printf.sprintf "unknown format '%s'; expected makefile or seed-metadata" value)
 
 let parse_command_args args =
   let rec loop options = function
     | [] -> Ok options
-    | "--manifest" :: path :: rest ->
-        loop { options with manifest_path = path } rest
+    | "--manifest" :: path :: rest -> loop { options with manifest_path = path } rest
     | "--manifest" :: [] -> Error "--manifest requires a path"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--scope" :: value :: rest ->
         let* scope = parse_scope value in
@@ -1032,17 +933,15 @@ let parse_command_args args =
         let* format = parse_format value in
         loop { options with format } rest
     | "--format" :: [] -> Error "--format requires makefile or seed-metadata"
-    | "--seed-root" :: path :: rest ->
-        loop { options with seed_root = Some path } rest
+    | "--seed-root" :: path :: rest -> loop { options with seed_root = Some path } rest
     | "--seed-root" :: [] -> Error "--seed-root requires a path"
     | "--help" :: _ ->
         Error
-          "usage: wadi __bootstrap_makefile --manifest PATH [--profile NAME] [--scope app|executable|full] [--format makefile|seed-metadata] [--seed-root DIR]"
+          "usage: wadi __bootstrap_makefile --manifest PATH [--profile NAME] [--scope \
+           app|executable|full] [--format makefile|seed-metadata] [--seed-root DIR]"
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
-    | _ :: _ ->
-        Error
-          "wadi __bootstrap_makefile does not accept positional arguments"
+    | _ :: _ -> Error "wadi __bootstrap_makefile does not accept positional arguments"
   in
   loop
     {
@@ -1061,13 +960,13 @@ let run_hidden_command args =
       2
   | Ok options -> (
       match
-        (match options.format with
+        match options.format with
         | Makefile ->
             render_makefile ?profile:options.profile ~scope:options.scope
               ~manifest_path:options.manifest_path ()
         | Seed_metadata ->
             render_seed_metadata ?seed_root:options.seed_root
-              ~manifest_path:options.manifest_path ())
+              ~manifest_path:options.manifest_path ()
       with
       | Ok text ->
           print_string text;

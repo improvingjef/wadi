@@ -11,13 +11,8 @@ type toplevel_plan = {
 
 let ( let* ) = Result.bind
 
-type toplevel_build_status =
-  | Built
-  | Reused
-
-type plan_status =
-  | Build_needed
-  | Reusable
+type toplevel_build_status = Built | Reused
+type plan_status = Build_needed | Reusable
 
 type launch_plan = {
   toplevel : toplevel_plan;
@@ -28,8 +23,7 @@ type launch_plan = {
   stdin : string option;
 }
 
-let include_args include_dirs =
-  List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
+let include_args include_dirs = List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
 
 let append_line buffer line =
   Buffer.add_string buffer line;
@@ -49,8 +43,7 @@ let libraries (workspace : Manifest.workspace) =
 let non_library_targets (workspace : Manifest.workspace) =
   List.filter
     (function
-      | Manifest.Library _ -> false
-      | Manifest.Executable _ | Manifest.Test _ -> true)
+      | Manifest.Library _ -> false | Manifest.Executable _ | Manifest.Test _ -> true)
     workspace.targets
 
 let named_target workspace name =
@@ -68,7 +61,7 @@ let choose_default_target workspace =
       | targets ->
           Error
             (Printf.sprintf "workspace defines multiple targets; choose one: %s"
-               (String.concat ", " (List.map Manifest.target_name targets))) )
+               (String.concat ", " (List.map Manifest.target_name targets))))
   | libraries ->
       Error
         (Printf.sprintf "workspace defines multiple libraries; choose one: %s"
@@ -99,8 +92,7 @@ let helper_object_files (description : Builder.runnable_description) main =
   let object_extension = Toolchain.object_extension Toolchain.Bytecode in
   description.source_order
   |> List.filter (fun stem -> stem <> main)
-  |> List.map (fun stem ->
-         Filename.concat description.out_dir (stem ^ object_extension))
+  |> List.map (fun stem -> Filename.concat description.out_dir (stem ^ object_extension))
 
 let toplevel_path ~workspace_root ~profile target =
   Layout.repl_binary ~profile workspace_root (Manifest.target_name target)
@@ -108,28 +100,22 @@ let toplevel_path ~workspace_root ~profile target =
 let toplevel_stamp_path ~workspace_root ~profile target =
   Layout.repl_stamp_path ~profile workspace_root (Manifest.target_name target)
 
-let toplevel_fingerprint ?(allow_missing_inputs = false) ~session
-    ~compiler_version target include_dirs package_resolution env link_inputs =
+let toplevel_fingerprint ?(allow_missing_inputs = false) ~session ~compiler_version target
+    include_dirs package_resolution env link_inputs =
   let buffer = Buffer.create 256 in
   append_line buffer ("compiler-version " ^ compiler_version);
   append_line buffer ("tool ocamlmktop " ^ Toolchain.ocamlmktop_cmd ());
   append_line buffer ("target-kind " ^ Manifest.target_kind_name target);
   append_line buffer ("target-name " ^ Manifest.target_name target);
-  List.iter (append_line buffer)
-    (Toolchain.fingerprint_lines ~session package_resolution);
-  List.iter
-    (fun dir -> append_line buffer ("include-dir " ^ dir))
-    include_dirs;
-  List.iter
-    (fun (name, value) -> append_line buffer ("env " ^ name ^ "=" ^ value))
-    env;
+  List.iter (append_line buffer) (Toolchain.fingerprint_lines ~session package_resolution);
+  List.iter (fun dir -> append_line buffer ("include-dir " ^ dir)) include_dirs;
+  List.iter (fun (name, value) -> append_line buffer ("env " ^ name ^ "=" ^ value)) env;
   let* () =
     List.fold_left
       (fun result path ->
         let* () = result in
         if Fs.exists path then (
-          append_line buffer
-            ("input " ^ path ^ " " ^ Digest.to_hex (Digest.file path));
+          append_line buffer ("input " ^ path ^ " " ^ Digest.to_hex (Digest.file path));
           Ok ())
         else if allow_missing_inputs then (
           append_line buffer ("input-missing " ^ path);
@@ -167,10 +153,9 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
              requested_name)
     | Manifest.Library library :: rest ->
         let* description =
-          Builder.describe_library ~mode:Builder.Plan_only ~session
-            ~workspace_root ~verbose:false ~manifest_path ~backend_request
-            ~backend ~compiler_version ~profile workspace library
-            library_outputs
+          Builder.describe_library ~mode:Builder.Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile workspace library library_outputs
         in
         let repl_dep_dirs =
           String_util.dedup_preserve
@@ -191,18 +176,13 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
           };
         if library.name = requested_name then
           let closure =
-            Builder.collect_dependency_closure index (Hashtbl.create 8)
-              [ library.name ]
+            Builder.collect_dependency_closure index (Hashtbl.create 8) [ library.name ]
           in
-          let link_inputs =
-            library_outputs_for_names order closure library_outputs
-          in
+          let link_inputs = library_outputs_for_names order closure library_outputs in
           let* fingerprint =
-            toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets)
-              ~session ~compiler_version
-              (Manifest.Library library) description.include_dirs
-              description.package_resolution description.pipeline.options.env
-              link_inputs
+            toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets) ~session
+              ~compiler_version (Manifest.Library library) description.include_dirs
+              description.package_resolution description.pipeline.options.env link_inputs
           in
           Ok
             {
@@ -212,36 +192,30 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
               env = description.pipeline.options.env;
               link_inputs;
               toplevel_path =
-                toplevel_path ~workspace_root ~profile
-                  (Manifest.Library library);
+                toplevel_path ~workspace_root ~profile (Manifest.Library library);
               stamp_path =
-                toplevel_stamp_path ~workspace_root ~profile
-                  (Manifest.Library library);
+                toplevel_stamp_path ~workspace_root ~profile (Manifest.Library library);
               fingerprint;
             }
         else loop rest
     | Manifest.Executable executable :: rest ->
         let* description =
-          Builder.describe_runnable ~mode:Builder.Plan_only ~session
-            ~workspace_root ~verbose:false ~manifest_path ~backend_request
-            ~backend ~compiler_version ~profile
-            ~kind:Builder.Executable_kind workspace executable order index
+          Builder.describe_runnable ~mode:Builder.Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile ~kind:Builder.Executable_kind workspace executable order index
             library_outputs
         in
         let closure =
-          Builder.collect_dependency_closure index (Hashtbl.create 8)
-            executable.deps
+          Builder.collect_dependency_closure index (Hashtbl.create 8) executable.deps
         in
         let link_inputs =
           library_outputs_for_names order closure library_outputs
           @ helper_object_files description executable.main
         in
         let* fingerprint =
-          toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets)
-            ~session ~compiler_version
-            (Manifest.Executable executable) description.include_dirs
-            description.package_resolution description.pipeline.options.env
-            link_inputs
+          toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets) ~session
+            ~compiler_version (Manifest.Executable executable) description.include_dirs
+            description.package_resolution description.pipeline.options.env link_inputs
         in
         if executable.name = requested_name then
           Ok
@@ -252,8 +226,7 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
               env = description.pipeline.options.env;
               link_inputs;
               toplevel_path =
-                toplevel_path ~workspace_root ~profile
-                  (Manifest.Executable executable);
+                toplevel_path ~workspace_root ~profile (Manifest.Executable executable);
               stamp_path =
                 toplevel_stamp_path ~workspace_root ~profile
                   (Manifest.Executable executable);
@@ -262,10 +235,9 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
         else loop rest
     | Manifest.Test test :: rest ->
         let* description =
-          Builder.describe_runnable ~mode:Builder.Plan_only ~session
-            ~workspace_root ~verbose:false ~manifest_path ~backend_request
-            ~backend ~compiler_version ~profile ~kind:Builder.Test_kind
-            workspace test order index library_outputs
+          Builder.describe_runnable ~mode:Builder.Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile ~kind:Builder.Test_kind workspace test order index library_outputs
         in
         let closure =
           Builder.collect_dependency_closure index (Hashtbl.create 8) test.deps
@@ -275,10 +247,9 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
           @ helper_object_files description test.main
         in
         let* fingerprint =
-          toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets)
-            ~session ~compiler_version (Manifest.Test test)
-            description.include_dirs description.package_resolution
-            description.pipeline.options.env link_inputs
+          toplevel_fingerprint ~allow_missing_inputs:(not materialize_targets) ~session
+            ~compiler_version (Manifest.Test test) description.include_dirs
+            description.package_resolution description.pipeline.options.env link_inputs
         in
         if test.name = requested_name then
           Ok
@@ -288,8 +259,7 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
               package_resolution = description.package_resolution;
               env = description.pipeline.options.env;
               link_inputs;
-              toplevel_path =
-                toplevel_path ~workspace_root ~profile (Manifest.Test test);
+              toplevel_path = toplevel_path ~workspace_root ~profile (Manifest.Test test);
               stamp_path =
                 toplevel_stamp_path ~workspace_root ~profile (Manifest.Test test);
               fingerprint;
@@ -306,12 +276,10 @@ let build_toplevel ~verbose (plan : toplevel_plan) =
   else
     let () = Fs.ensure_dir (Filename.dirname plan.toplevel_path) in
     let* _ =
-      Toolchain.ensure_success_ocamlmktop ~env:plan.env ~verbose
-        plan.package_resolution
+      Toolchain.ensure_success_ocamlmktop ~env:plan.env ~verbose plan.package_resolution
         (include_args plan.include_dirs
         @ Toolchain.link_args plan.package_resolution
-        @ [ "-o"; plan.toplevel_path ]
-        @ plan.link_inputs)
+        @ [ "-o"; plan.toplevel_path ] @ plan.link_inputs)
     in
     Fs.write_file plan.stamp_path plan.fingerprint;
     Ok Built
@@ -324,8 +292,7 @@ let plan_status (plan : toplevel_plan) =
   else Build_needed
 
 let resolve_script_path path =
-  if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
-  else path
+  if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path else path
 
 let read_script path =
   let resolved_path = resolve_script_path path |> Fs.realpath in
@@ -338,8 +305,7 @@ let read_script path =
 let launch_plan ~workspace_root ~verbose ?profile ?target ?script_path ~args
     ~materialize_targets workspace =
   let* toplevel =
-    target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
-      target
+    target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace target
   in
   let* script_path, stdin =
     match script_path with
@@ -362,7 +328,6 @@ let launch_plan ~workspace_root ~verbose ?profile ?target ?script_path ~args
     }
 
 let json_string text = "\"" ^ String_util.json_escape text ^ "\""
-
 let json_array items = "[" ^ String.concat ", " items ^ "]"
 
 let render_binding_json (name, value) =
@@ -375,9 +340,7 @@ let merged_env env =
   Process.merged_environment_bindings env
   |> List.sort (fun (left, _) (right, _) -> String.compare left right)
 
-let plan_status_name = function
-  | Build_needed -> "build-needed"
-  | Reusable -> "reusable"
+let plan_status_name = function Build_needed -> "build-needed" | Reusable -> "reusable"
 
 let render_plan (plan : launch_plan) =
   let toplevel = plan.toplevel in
@@ -387,30 +350,23 @@ let render_plan (plan : launch_plan) =
     match toplevel.env with
     | [] -> [ "Env-overrides: none" ]
     | bindings ->
-        "Env-overrides:" :: List.map (fun (name, value) -> "  " ^ name ^ "=" ^ value) bindings
+        "Env-overrides:"
+        :: List.map (fun (name, value) -> "  " ^ name ^ "=" ^ value) bindings
   in
   let package_lines =
     match package_paths with
     | [] ->
         [
-          "Packages: "
-          ^
-          (match package_names with
-          | [] -> "none"
-          | names -> String.concat ", " names);
+          ("Packages: "
+          ^ match package_names with [] -> "none" | names -> String.concat ", " names);
         ]
     | package_paths ->
         [
-          "Packages: "
-          ^
-          (match package_names with
-          | [] -> "none"
-          | names -> String.concat ", " names);
+          ("Packages: "
+          ^ match package_names with [] -> "none" | names -> String.concat ", " names);
           "Package-paths:";
         ]
-        @ List.map
-            (fun (name, path) -> "  " ^ name ^ " -> " ^ path)
-            package_paths
+        @ List.map (fun (name, path) -> "  " ^ name ^ " -> " ^ path) package_paths
   in
   String.concat "\n"
     ([
@@ -423,19 +379,14 @@ let render_plan (plan : launch_plan) =
        "Toplevel-status: " ^ plan_status_name plan.toplevel_status;
        "Runtime-command: "
        ^ Process.render ~env:toplevel.env toplevel.toplevel_path plan.runtime_args;
-       "Script-stdin: "
-       ^
-       (match plan.script_path with
-       | Some path -> path
-       | None -> "none");
+       ("Script-stdin: "
+       ^ match plan.script_path with Some path -> path | None -> "none");
        "Include-dirs:";
      ]
     @ List.map (fun dir -> "  " ^ dir) toplevel.include_dirs
     @ [ "Link-inputs:" ]
     @ List.map (fun path -> "  " ^ path) toplevel.link_inputs
-    @ package_lines
-    @ env_overrides
-    @ [ "" ])
+    @ package_lines @ env_overrides @ [ "" ])
 
 let render_json_plan (plan : launch_plan) =
   let toplevel = plan.toplevel in
@@ -444,12 +395,8 @@ let render_json_plan (plan : launch_plan) =
       "{";
       "  \"profile\": " ^ json_string plan.profile ^ ",";
       "  \"target\": {";
-      "    \"kind\": "
-      ^ json_string (Manifest.target_kind_name toplevel.target)
-      ^ ",";
-      "    \"name\": "
-      ^ json_string (Manifest.target_name toplevel.target)
-      ^ ",";
+      "    \"kind\": " ^ json_string (Manifest.target_kind_name toplevel.target) ^ ",";
+      "    \"name\": " ^ json_string (Manifest.target_name toplevel.target) ^ ",";
       "    \"display_name\": "
       ^ json_string (Manifest.target_display_name toplevel.target);
       "  },";
@@ -457,28 +404,20 @@ let render_json_plan (plan : launch_plan) =
       "  \"toplevel_status\": "
       ^ json_string (plan_status_name plan.toplevel_status)
       ^ ",";
-      "  \"runtime_args\": "
-      ^ json_array (List.map json_string plan.runtime_args)
-      ^ ",";
+      "  \"runtime_args\": " ^ json_array (List.map json_string plan.runtime_args) ^ ",";
       "  \"runtime_command\": "
       ^ json_string
           (Process.render ~env:toplevel.env toplevel.toplevel_path plan.runtime_args)
       ^ ",";
       "  \"script_path\": "
-      ^
-      (match plan.script_path with
-      | Some path -> json_string path
-      | None -> "null")
+      ^ (match plan.script_path with Some path -> json_string path | None -> "null")
       ^ ",";
       "  \"include_dirs\": "
       ^ json_array (List.map json_string toplevel.include_dirs)
       ^ ",";
-      "  \"link_inputs\": "
-      ^ json_array (List.map json_string toplevel.link_inputs)
-      ^ ",";
+      "  \"link_inputs\": " ^ json_array (List.map json_string toplevel.link_inputs) ^ ",";
       "  \"packages\": "
-      ^ json_array
-          (List.map json_string toplevel.package_resolution.Toolchain.packages)
+      ^ json_array (List.map json_string toplevel.package_resolution.Toolchain.packages)
       ^ ",";
       "  \"package_paths\": "
       ^ json_array
@@ -488,8 +427,7 @@ let render_json_plan (plan : launch_plan) =
       "  \"env_overrides\": "
       ^ json_array (List.map render_binding_json toplevel.env)
       ^ ",";
-      "  \"env\": "
-      ^ json_array (List.map render_binding_json (merged_env toplevel.env));
+      "  \"env\": " ^ json_array (List.map render_binding_json (merged_env toplevel.env));
       "}";
       "";
     ]

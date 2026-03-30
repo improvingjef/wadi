@@ -26,13 +26,9 @@ type benchmark_request = {
 }
 
 let ( let* ) = Result.bind
-
 let default_warmup = 1
-
 let default_iterations = 5
-
-let display_name name package_path =
-  name ^ Manifest.package_suffix package_path
+let display_name name package_path = name ^ Manifest.package_suffix package_path
 
 let executable_targets workspace =
   List.filter_map
@@ -51,17 +47,19 @@ let resolve_executable workspace name =
   | Some (Manifest.Library _) ->
       Error
         (Printf.sprintf
-           "target '%s' is a library; wadi bench only supports executables or [bench.*] declarations"
+           "target '%s' is a library; wadi bench only supports executables or [bench.*] \
+            declarations"
            name)
   | Some (Manifest.Test _) ->
       Error
         (Printf.sprintf
-           "target '%s' is a test; wadi bench only supports executables or [bench.*] declarations"
+           "target '%s' is a test; wadi bench only supports executables or [bench.*] \
+            declarations"
            name)
   | None -> Error (Printf.sprintf "unknown target '%s'" name)
 
-let executable_request ?(warmup = default_warmup)
-    ?(iterations = default_iterations) (target : Manifest.executable) =
+let executable_request ?(warmup = default_warmup) ?(iterations = default_iterations)
+    (target : Manifest.executable) =
   {
     name = target.name;
     package_path = target.package_path;
@@ -73,8 +71,7 @@ let executable_request ?(warmup = default_warmup)
     description = None;
   }
 
-let declared_bench_request workspace ?warmup ?iterations
-    (bench : Manifest.bench_target) =
+let declared_bench_request workspace ?warmup ?iterations (bench : Manifest.bench_target) =
   let* executable = resolve_executable workspace bench.executable in
   Ok
     {
@@ -87,9 +84,7 @@ let declared_bench_request workspace ?warmup ?iterations
         (match warmup with
         | Some warmup -> warmup
         | None -> (
-            match bench.warmup with
-            | Some warmup -> warmup
-            | None -> default_warmup));
+            match bench.warmup with Some warmup -> warmup | None -> default_warmup));
       iterations =
         (match iterations with
         | Some iterations -> iterations
@@ -108,20 +103,18 @@ let resolve_requested_targets workspace ?warmup ?iterations requested_targets =
         let rec loop acc = function
           | [] -> Ok (List.rev acc)
           | bench :: rest ->
-              let* request =
-                declared_bench_request workspace ?warmup ?iterations bench
-              in
+              let* request = declared_bench_request workspace ?warmup ?iterations bench in
               loop (request :: acc) rest
         in
         loop [] (bench :: benches)
     | [] -> (
         match executable_targets workspace with
-        | [] -> Error "workspace does not define any benchmarks or executables to benchmark"
+        | [] ->
+            Error "workspace does not define any benchmarks or executables to benchmark"
         | executables ->
             Ok
               (List.map
-                 (fun executable ->
-                   executable_request ?warmup ?iterations executable)
+                 (fun executable -> executable_request ?warmup ?iterations executable)
                  executables))
   else
     let rec loop acc = function
@@ -129,15 +122,11 @@ let resolve_requested_targets workspace ?warmup ?iterations requested_targets =
       | name :: rest -> (
           match Manifest.find_bench workspace name with
           | Some bench ->
-              let* request =
-                declared_bench_request workspace ?warmup ?iterations bench
-              in
+              let* request = declared_bench_request workspace ?warmup ?iterations bench in
               loop (request :: acc) rest
           | None ->
               let* executable = resolve_executable workspace name in
-              loop
-                (executable_request ?warmup ?iterations executable :: acc)
-                rest)
+              loop (executable_request ?warmup ?iterations executable :: acc) rest)
     in
     loop [] requested_targets
 
@@ -188,8 +177,7 @@ let run_sample ~verbose ~env binary argv =
   if outcome.status = 0 then Ok elapsed
   else
     Error
-      (Printf.sprintf "benchmark command failed: %s\n%s" outcome.command
-         outcome.output)
+      (Printf.sprintf "benchmark command failed: %s\n%s" outcome.command outcome.output)
 
 let rec repeat count f =
   if count <= 0 then Ok []
@@ -213,12 +201,8 @@ let benchmark_target ~verbose (request : benchmark_request) binary =
   Ok (summarize ~request ~binary samples)
 
 let json_string value = "\"" ^ String_util.json_escape value ^ "\""
-
 let json_float value = Printf.sprintf "%.9f" value
-
-let json_string_option = function
-  | Some value -> json_string value
-  | None -> "null"
+let json_string_option = function Some value -> json_string value | None -> "null"
 
 let render_summary (summary : summary) =
   let details =
@@ -289,33 +273,29 @@ let render_json_report summaries =
       "";
     ]
 
-let report ~workspace_root ~verbose ~backend_request ?profile ?warmup
-    ?iterations ~requested_targets workspace =
+let report ~workspace_root ~verbose ~backend_request ?profile ?warmup ?iterations
+    ~requested_targets workspace =
   let* targets =
     resolve_requested_targets workspace ?warmup ?iterations requested_targets
   in
   let* build_result =
     Builder.build ~workspace_root ~verbose
       ~requested_targets:
-        (List.map
-           (fun (target : benchmark_request) -> target.executable.name)
-           targets)
+        (List.map (fun (target : benchmark_request) -> target.executable.name) targets)
       ~backend_request ?profile workspace
   in
   let rec loop (acc : summary list) = function
     | [] -> Ok (List.rev acc)
     | (target : benchmark_request) :: rest -> (
         match
-          find_built_executable target.executable.name
-            build_result.Builder.artifacts
+          find_built_executable target.executable.name build_result.Builder.artifacts
         with
         | Some binary ->
             let* summary = benchmark_target ~verbose target binary in
             loop (summary :: acc) rest
         | None ->
             Error
-              (Printf.sprintf
-                 "internal error: build completed without executable '%s'"
+              (Printf.sprintf "internal error: build completed without executable '%s'"
                  target.executable.name))
   in
   loop [] targets

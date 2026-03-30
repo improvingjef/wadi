@@ -1,11 +1,5 @@
-type sexp =
-  | Atom of string
-  | List of sexp list
-
-type raw_target_kind =
-  | Library
-  | Executable
-  | Test
+type sexp = Atom of string | List of sexp list
+type raw_target_kind = Library | Executable | Test
 
 type raw_target = {
   kind : raw_target_kind;
@@ -41,16 +35,8 @@ type raw_preprocessor = {
   deps : string list;
 }
 
-type raw_ppx_tool = {
-  name : string;
-  argv : string list;
-  deps : string list;
-}
-
-type migration = {
-  manifest : string;
-  warnings : string list;
-}
+type raw_ppx_tool = { name : string; argv : string list; deps : string list }
+type migration = { manifest : string; warnings : string list }
 
 type migration_acc = {
   targets : raw_target list;
@@ -62,7 +48,6 @@ type migration_acc = {
 }
 
 let ( let* ) = Result.bind
-
 let parse_error path message = Error (Printf.sprintf "%s: %s" path message)
 
 let rec skip_space text index =
@@ -81,8 +66,7 @@ and skip_comment text index =
 let parse_string path text index =
   let buffer = Buffer.create 32 in
   let rec loop index =
-    if index >= String.length text then
-      parse_error path "unterminated string literal"
+    if index >= String.length text then parse_error path "unterminated string literal"
     else
       match text.[index] with
       | '"' -> Ok (Buffer.contents buffer, index + 1)
@@ -150,9 +134,7 @@ let parse_many path text =
   in
   loop 0 []
 
-let field_name = function
-  | List (Atom name :: _) -> Some name
-  | _ -> None
+let field_name = function List (Atom name :: _) -> Some name | _ -> None
 
 let field_map fields =
   let table = Hashtbl.create (List.length fields) in
@@ -174,8 +156,7 @@ let field_atoms name fields =
         | List _ :: _ ->
             Error
               (Printf.sprintf
-                 "field '%s' uses a dune form this migrator does not understand"
-                 name)
+                 "field '%s' uses a dune form this migrator does not understand" name)
       in
       loop [] values
   | Some _ -> Error (Printf.sprintf "field '%s' is malformed" name)
@@ -185,8 +166,7 @@ let required_atom_field name fields =
   match values with
   | Some [ value ] -> Ok value
   | Some _ ->
-      Error
-        (Printf.sprintf "field '%s' must contain exactly one atom/string" name)
+      Error (Printf.sprintf "field '%s' must contain exactly one atom/string" name)
   | None -> Error (Printf.sprintf "missing required field '%s'" name)
 
 let optional_atom_field name fields =
@@ -194,17 +174,13 @@ let optional_atom_field name fields =
   match values with
   | Some [ value ] -> Ok (Some value)
   | Some _ ->
-      Error
-        (Printf.sprintf "field '%s' must contain exactly one atom/string" name)
+      Error (Printf.sprintf "field '%s' must contain exactly one atom/string" name)
   | None -> Ok None
 
 let parse_bool_field name = function
   | "true" -> Ok true
   | "false" -> Ok false
-  | value ->
-      Error
-        (Printf.sprintf
-           "field '%s' must be true or false, not %S" name value)
+  | value -> Error (Printf.sprintf "field '%s' must be true or false, not %S" name value)
 
 let optional_bool_field name fields =
   let* value = optional_atom_field name fields in
@@ -228,18 +204,14 @@ let required_single_value_field name fields =
   let* values = field_values name fields in
   match values with
   | Some [ value ] -> Ok value
-  | Some _ ->
-      Error
-        (Printf.sprintf "field '%s' must contain exactly one form" name)
+  | Some _ -> Error (Printf.sprintf "field '%s' must contain exactly one form" name)
   | None -> Error (Printf.sprintf "missing required field '%s'" name)
 
 let optional_single_value_field name fields =
   let* values = field_values name fields in
   match values with
   | Some [ value ] -> Ok (Some value)
-  | Some _ ->
-      Error
-        (Printf.sprintf "field '%s' must contain exactly one form" name)
+  | Some _ -> Error (Printf.sprintf "field '%s' must contain exactly one form" name)
   | None -> Ok None
 
 let atoms_of_values field_name values =
@@ -248,8 +220,7 @@ let atoms_of_values field_name values =
     | Atom value :: rest -> loop (value :: acc) rest
     | List _ :: _ ->
         Error
-          (Printf.sprintf
-             "field '%s' uses a dune form this migrator does not understand"
+          (Printf.sprintf "field '%s' uses a dune form this migrator does not understand"
              field_name)
   in
   loop [] values
@@ -258,35 +229,25 @@ let atoms_of_single_list field_name = function
   | List (Atom name :: values) when name = field_name -> atoms_of_values field_name values
   | List [] ->
       Error
-        (Printf.sprintf
-           "field '%s' uses a dune form this migrator does not understand"
+        (Printf.sprintf "field '%s' uses a dune form this migrator does not understand"
            field_name)
   | List (List _ :: _) ->
       Error
-        (Printf.sprintf
-           "field '%s' uses a dune form this migrator does not understand"
+        (Printf.sprintf "field '%s' uses a dune form this migrator does not understand"
            field_name)
   | List (Atom _ :: _) ->
       Error
-        (Printf.sprintf
-           "field '%s' uses a dune form this migrator does not understand"
+        (Printf.sprintf "field '%s' uses a dune form this migrator does not understand"
            field_name)
   | Atom _ ->
       Error
-        (Printf.sprintf
-           "field '%s' uses a dune form this migrator does not understand"
+        (Printf.sprintf "field '%s' uses a dune form this migrator does not understand"
            field_name)
 
-let warn acc message =
-  { acc with warnings = acc.warnings @ [ message ] }
-
+let warn acc message = { acc with warnings = acc.warnings @ [ message ] }
 let with_targets acc targets = { acc with targets = acc.targets @ targets }
-
 let with_action acc action = { acc with actions = acc.actions @ [ action ] }
-
-let with_preprocessor acc tool =
-  { acc with preprocessors = acc.preprocessors @ [ tool ] }
-
+let with_preprocessor acc tool = { acc with preprocessors = acc.preprocessors @ [ tool ] }
 let with_ppx_tool acc tool = { acc with ppx_tools = acc.ppx_tools @ [ tool ] }
 
 let generated_name acc prefix =
@@ -308,17 +269,14 @@ let ocamlfind_cmd () =
 
 let rebase_dune_relative_path dir value =
   let value = normalize_relative value in
-  if value = "." then dir
-  else if dir = "." then value
-  else Filename.concat dir value
+  if value = "." then dir else if dir = "." then value else Filename.concat dir value
 
 let rebase_command_prog dir prog =
   if Filename.is_relative prog && String.contains prog '/' then
     rebase_dune_relative_path dir prog
   else prog
 
-let rec shell_join args =
-  String.concat " " (List.map String_util.shell_quote args)
+let rec shell_join args = String.concat " " (List.map String_util.shell_quote args)
 
 let collect_results items f =
   let rec loop acc = function
@@ -336,16 +294,8 @@ type parsed_command = {
   stdout : string option;
 }
 
-type inferred_deps = {
-  deps : string list;
-  opaque : bool;
-}
-
-type explicit_dep_refs = {
-  deps : string list;
-  aliases : string list;
-  opaque : bool;
-}
+type inferred_deps = { deps : string list; opaque : bool }
+type explicit_dep_refs = { deps : string list; aliases : string list; opaque : bool }
 
 let parse_run_like ~dir args =
   let* argv = atoms_of_values "run" args in
@@ -364,28 +314,23 @@ let shell_fragment_of_command (command : parsed_command) =
   let base =
     match command.cwd with
     | None -> shell_join command.argv
-    | Some cwd ->
-        "cd " ^ String_util.shell_quote cwd ^ " && " ^ shell_join command.argv
+    | Some cwd -> "cd " ^ String_util.shell_quote cwd ^ " && " ^ shell_join command.argv
   in
   base
   ^
   match command.stdin_path with
   | Some path -> " < " ^ String_util.shell_quote path
-  | None -> ""
-  ^
-  match command.stdout with
-  | Some path -> " > " ^ String_util.shell_quote path
-  | None -> ""
+  | None -> (
+      ""
+      ^
+      match command.stdout with
+      | Some path -> " > " ^ String_util.shell_quote path
+      | None -> "")
 
 let shell_command_of_commands commands =
   {
     argv =
-      [
-        "sh";
-        "-c";
-        String.concat " && "
-          (List.map shell_fragment_of_command commands);
-      ];
+      [ "sh"; "-c"; String.concat " && " (List.map shell_fragment_of_command commands) ];
     cwd = None;
     stdin_path = None;
     stdout = None;
@@ -396,37 +341,26 @@ let with_first_command f = function
   | command :: rest -> Ok (f command :: rest)
 
 let rec parse_command_form ~dir = function
-  | List (Atom "run" :: args) -> Result.map (fun command -> [ command ]) (parse_run_like ~dir args)
+  | List (Atom "run" :: args) ->
+      Result.map (fun command -> [ command ]) (parse_run_like ~dir args)
   | List [ Atom "bash"; Atom script ] ->
       Ok
         [
-          {
-            argv = [ "sh"; "-c"; script ];
-            cwd = None;
-            stdin_path = None;
-            stdout = None;
-          };
+          { argv = [ "sh"; "-c"; script ]; cwd = None; stdin_path = None; stdout = None };
         ]
   | List [ Atom "system"; Atom command ] ->
       Ok
         [
-          {
-            argv = [ "sh"; "-c"; command ];
-            cwd = None;
-            stdin_path = None;
-            stdout = None;
-          };
+          { argv = [ "sh"; "-c"; command ]; cwd = None; stdin_path = None; stdout = None };
         ]
-  | List [ Atom "copy"; Atom src; Atom dst ]
-  | List [ Atom "copy#"; Atom src; Atom dst ] ->
+  | List [ Atom "copy"; Atom src; Atom dst ] | List [ Atom "copy#"; Atom src; Atom dst ]
+    ->
       Ok
         [
           {
             argv =
               [
-                "cp";
-                rebase_dune_relative_path dir src;
-                rebase_dune_relative_path dir dst;
+                "cp"; rebase_dune_relative_path dir src; rebase_dune_relative_path dir dst;
               ];
             cwd = None;
             stdin_path = None;
@@ -451,7 +385,8 @@ let rec parse_command_form ~dir = function
         ]
   | List [ Atom "with-stdin-from"; Atom path; nested ] ->
       let* commands = parse_command_form ~dir nested in
-      with_first_command (fun command ->
+      with_first_command
+        (fun command ->
           { command with stdin_path = Some (rebase_dune_relative_path dir path) })
         commands
   | List [ Atom "chdir"; Atom cwd; nested ] ->
@@ -459,10 +394,7 @@ let rec parse_command_form ~dir = function
       Ok
         (List.map
            (fun command ->
-             {
-               command with
-               cwd = Some (rebase_dune_relative_path dir cwd);
-             })
+             { command with cwd = Some (rebase_dune_relative_path dir cwd) })
            commands)
   | List (Atom "progn" :: forms) ->
       if forms = [] then Error "dune progn action is empty"
@@ -473,41 +405,29 @@ let rec parse_command_form ~dir = function
   | _ -> Error "unsupported dune action form"
 
 let parse_rule_command ~dir ~outputs = function
-  | List [ Atom "with-stdout-to"; Atom output; nested ] ->
+  | List [ Atom "with-stdout-to"; Atom output; nested ] -> (
       let* output =
         if output = "%{target}" || output = "%{targets}" then
           match outputs with
           | [ output ] -> Ok output
-          | _ ->
-              Error
-                "dune with-stdout-to %{target(s)} form requires exactly one output"
+          | _ -> Error "dune with-stdout-to %{target(s)} form requires exactly one output"
         else Ok output
       in
       let* commands = parse_command_form ~dir nested in
-      (match List.rev commands with
+      match List.rev commands with
       | [] -> Error "dune rule action is empty"
       | [ command ] ->
           Ok
             [
               {
                 command with
-                cwd =
-                  (match command.cwd with
-                  | Some _ as cwd -> cwd
-                  | None -> Some dir);
+                cwd = (match command.cwd with Some _ as cwd -> cwd | None -> Some dir);
                 stdout = Some output;
               };
             ]
       | commands_rev ->
           let command = shell_command_of_commands (List.rev commands_rev) in
-          Ok
-            [
-              {
-                command with
-                cwd = Some dir;
-                stdout = Some output;
-              };
-            ])
+          Ok [ { command with cwd = Some dir; stdout = Some output } ])
   | form -> parse_command_form ~dir form
 
 type normalized_action = {
@@ -523,8 +443,8 @@ let normalize_action_commands commands =
     | [] -> Some None
     | (command : parsed_command) :: rest ->
         let expected = command.cwd in
-        if List.for_all (fun (command : parsed_command) -> command.cwd = expected) rest then
-          Some expected
+        if List.for_all (fun (command : parsed_command) -> command.cwd = expected) rest
+        then Some expected
         else None
   in
   match commands with
@@ -568,10 +488,7 @@ let normalize_action_commands commands =
             || List.exists
                  (fun (command : parsed_command) -> command.stdout <> None)
                  middle
-            ||
-            match first.stdout with
-            | Some _ -> true
-            | None -> false
+            || match first.stdout with Some _ -> true | None -> false
           in
           if requires_shell then
             let command : parsed_command = shell_command_of_commands commands in
@@ -607,8 +524,8 @@ let merge_inferred (left : inferred_deps) (right : inferred_deps) : inferred_dep
     opaque = left.opaque || right.opaque;
   }
 
-let merge_explicit_dep_refs (left : explicit_dep_refs)
-    (right : explicit_dep_refs) : explicit_dep_refs =
+let merge_explicit_dep_refs (left : explicit_dep_refs) (right : explicit_dep_refs) :
+    explicit_dep_refs =
   {
     deps = String_util.dedup_preserve (left.deps @ right.deps);
     aliases = String_util.dedup_preserve (left.aliases @ right.aliases);
@@ -616,8 +533,7 @@ let merge_explicit_dep_refs (left : explicit_dep_refs)
   }
 
 let inferred_dep_candidate ~workspace_root ~dir ~outputs value =
-  if value = "" || value = "." || String_util.starts_with ~prefix:"%{" value then
-    None
+  if value = "" || value = "." || String_util.starts_with ~prefix:"%{" value then None
   else
     let rebased = rebase_dune_relative_path dir value in
     let absolute = Filename.concat workspace_root rebased in
@@ -642,11 +558,10 @@ let inferred_run_deps ~workspace_root ~dir ~outputs args : inferred_deps =
       in
       loop [] false rest
 
-let rec infer_action_deps ~workspace_root ~dir ~outputs : sexp -> inferred_deps =
-  function
+let rec infer_action_deps ~workspace_root ~dir ~outputs : sexp -> inferred_deps = function
   | List (Atom "run" :: args) -> inferred_run_deps ~workspace_root ~dir ~outputs args
-  | List [ Atom "copy"; Atom src; Atom _dst ]
-  | List [ Atom "copy#"; Atom src; Atom _dst ] ->
+  | List [ Atom "copy"; Atom src; Atom _dst ] | List [ Atom "copy#"; Atom src; Atom _dst ]
+    ->
       {
         deps =
           (match inferred_dep_candidate ~workspace_root ~dir ~outputs src with
@@ -663,16 +578,14 @@ let rec infer_action_deps ~workspace_root ~dir ~outputs : sexp -> inferred_deps 
       ({ inferred_none with deps } : inferred_deps)
   | List [ Atom "with-stdin-from"; Atom path; nested ] ->
       merge_inferred
-        (({
-            inferred_none with
-            deps =
-              (match
-                 inferred_dep_candidate ~workspace_root ~dir ~outputs path
-               with
-              | Some dep -> [ dep ]
-              | None -> []);
-          }
-           : inferred_deps))
+        ({
+           inferred_none with
+           deps =
+             (match inferred_dep_candidate ~workspace_root ~dir ~outputs path with
+             | Some dep -> [ dep ]
+             | None -> []);
+         }
+          : inferred_deps)
         (infer_action_deps ~workspace_root ~dir ~outputs nested)
   | List [ Atom "bash"; Atom _ ] | List [ Atom "system"; Atom _ ] ->
       { deps = []; opaque = true }
@@ -683,8 +596,7 @@ let rec infer_action_deps ~workspace_root ~dir ~outputs : sexp -> inferred_deps 
   | List (Atom "progn" :: forms) ->
       List.fold_left
         (fun inferred form ->
-          merge_inferred inferred
-            (infer_action_deps ~workspace_root ~dir ~outputs form))
+          merge_inferred inferred (infer_action_deps ~workspace_root ~dir ~outputs form))
         inferred_none forms
   | List [ Atom "with-stdout-to"; Atom output; nested ] ->
       let outputs =
@@ -696,8 +608,7 @@ let rec infer_action_deps ~workspace_root ~dir ~outputs : sexp -> inferred_deps 
   | List forms ->
       List.fold_left
         (fun inferred form ->
-          merge_inferred inferred
-            (infer_action_deps ~workspace_root ~dir ~outputs form))
+          merge_inferred inferred (infer_action_deps ~workspace_root ~dir ~outputs form))
         inferred_none forms
 
 let rec explicit_dep_refs_from_form ~dir : sexp -> explicit_dep_refs = function
@@ -705,19 +616,11 @@ let rec explicit_dep_refs_from_form ~dir : sexp -> explicit_dep_refs = function
       if value = "" || value = "." then explicit_dep_refs_none
       else if String_util.starts_with ~prefix:"%{" value then
         { explicit_dep_refs_none with opaque = true }
-      else
-        {
-          explicit_dep_refs_none with
-          deps = [ rebase_dune_relative_path dir value ];
-        }
-  | List [ Atom "alias"; Atom alias_name ]
-  | List [ Atom "alias_rec"; Atom alias_name ] ->
+      else { explicit_dep_refs_none with deps = [ rebase_dune_relative_path dir value ] }
+  | List [ Atom "alias"; Atom alias_name ] | List [ Atom "alias_rec"; Atom alias_name ] ->
       { explicit_dep_refs_none with aliases = [ alias_name ] }
   | List [ Atom "file"; Atom path ] ->
-      {
-        explicit_dep_refs_none with
-        deps = [ rebase_dune_relative_path dir path ];
-      }
+      { explicit_dep_refs_none with deps = [ rebase_dune_relative_path dir path ] }
   | List [] -> explicit_dep_refs_none
   | List (Atom _ :: _) -> { explicit_dep_refs_none with opaque = true }
   | List forms ->
@@ -738,8 +641,7 @@ let explicit_rule_deps ~dir fields =
           explicit_dep_refs_none values)
 
 let is_source_like_output path =
-  String_util.ends_with ~suffix:".ml" path
-  || String_util.ends_with ~suffix:".mli" path
+  String_util.ends_with ~suffix:".ml" path || String_util.ends_with ~suffix:".mli" path
 
 let checked_in_sources_for_rule_mode outputs = function
   | None -> []
@@ -761,16 +663,10 @@ let resolved_ppx_argv packages =
 
 let target_declared_module_stems (target : raw_target) =
   match target.kind with
-  | Library ->
-      Option.value ~default:[] target.modules
-  | Executable | Test ->
-      (match target.modules with
-      | Some modules -> modules
-      | None -> [])
-      @
-      match target.main with
-      | Some main -> [ main ]
-      | None -> []
+  | Library -> Option.value ~default:[] target.modules
+  | Executable | Test -> (
+      (match target.modules with Some modules -> modules | None -> [])
+      @ match target.main with Some main -> [ main ] | None -> [])
 
 let action_matches_target (target : raw_target) outputs =
   let module_stems = target_declared_module_stems target in
@@ -792,8 +688,7 @@ let attach_action_to_targets action_name dir outputs targets =
           attached := true;
           {
             target with
-            actions =
-              String_util.dedup_preserve (target.actions @ [ action_name ]);
+            actions = String_util.dedup_preserve (target.actions @ [ action_name ]);
           })
         else target)
       targets
@@ -811,12 +706,12 @@ let auto_attach_generated_actions (acc : migration_acc) =
           if attached then warnings
           else
             warnings
-            @
-            [
-              Printf.sprintf
-                "generated action '%s' from dune rule in %s but could not attach it automatically; add it to a matching target's actions list"
-                action.name action.dir;
-            ]
+            @ [
+                Printf.sprintf
+                  "generated action '%s' from dune rule in %s but could not attach it \
+                   automatically; add it to a matching target's actions list"
+                  action.name action.dir;
+              ]
         in
         (targets, warnings))
       (acc.targets, acc.warnings) acc.actions
@@ -835,15 +730,15 @@ let empty_acc =
 
 let source_stems_in_dir dir =
   let path = if dir = "." then "." else dir in
-  if not (Fs.exists path) || not (Fs.is_directory path) then []
+  if (not (Fs.exists path)) || not (Fs.is_directory path) then []
   else
-    Sys.readdir path
-    |> Array.to_list
+    Sys.readdir path |> Array.to_list
     |> List.filter_map (fun entry ->
-           if String_util.ends_with ~suffix:".ml" entry
-              || String_util.ends_with ~suffix:".mli" entry
-           then Some (Filename.remove_extension entry)
-           else None)
+        if
+          String_util.ends_with ~suffix:".ml" entry
+          || String_util.ends_with ~suffix:".mli" entry
+        then Some (Filename.remove_extension entry)
+        else None)
     |> List.sort_uniq String.compare
 
 let has_checked_in_wrapper_source dune_dir name =
@@ -865,11 +760,8 @@ let relative_dir workspace_root dune_path =
         (String.length dune_dir - String.length prefix)
     else dune_dir
 
-let rebased_field_paths dir paths =
-  List.map (rebase_dune_relative_path dir) paths
-
-let merge_module_lists primary extra =
-  String_util.dedup_preserve (primary @ extra)
+let rebased_field_paths dir paths = List.map (rebase_dune_relative_path dir) paths
+let merge_module_lists primary extra = String_util.dedup_preserve (primary @ extra)
 
 let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
   let* acc, preprocess_names, ppx_names =
@@ -885,9 +777,8 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
           | Ok argv -> (with_ppx_tool acc { name; argv; deps = [] }, [ name ])
           | Error message ->
               ( warn acc
-                  (Printf.sprintf
-                     "%s; skipping generated ppx '%s' from %s"
-                     message name dune_path),
+                  (Printf.sprintf "%s; skipping generated ppx '%s' from %s" message name
+                     dune_path),
                 [] )
         in
         Ok (acc, [], ppx)
@@ -897,7 +788,8 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
         let acc =
           warn acc
             (Printf.sprintf
-               "resolved dune staged_pps in %s to a plain wadi ppx tool; review if dune-specific staging mattered"
+               "resolved dune staged_pps in %s to a plain wadi ppx tool; review if \
+                dune-specific staging mattered"
                dune_path)
         in
         let acc, ppx =
@@ -905,9 +797,8 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
           | Ok argv -> (with_ppx_tool acc { name; argv; deps = [] }, [ name ])
           | Error message ->
               ( warn acc
-                  (Printf.sprintf
-                     "%s; skipping generated ppx '%s' from %s"
-                     message name dune_path),
+                  (Printf.sprintf "%s; skipping generated ppx '%s' from %s" message name
+                     dune_path),
                 [] )
         in
         Ok (acc, [], ppx)
@@ -915,19 +806,15 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
         let* commands = parse_command_form ~dir form in
         let command = single_command_for_commands commands in
         let name, acc = generated_name acc "dune_preprocess" in
-        let cwd =
-          match command.cwd with
-          | Some _ as cwd -> cwd
-          | None -> Some dir
-        in
-        let inferred =
-          infer_action_deps ~workspace_root ~dir ~outputs:[] form
-        in
+        let cwd = match command.cwd with Some _ as cwd -> cwd | None -> Some dir in
+        let inferred = infer_action_deps ~workspace_root ~dir ~outputs:[] form in
         let acc =
           if inferred.opaque then
             warn acc
               (Printf.sprintf
-                 "generated preprocess '%s' from dune action in %s; review deps = [...] because the action hides some file inputs behind shell or unsupported forms"
+                 "generated preprocess '%s' from dune action in %s; review deps = [...] \
+                  because the action hides some file inputs behind shell or unsupported \
+                  forms"
                  name dune_path)
           else acc
         in
@@ -962,9 +849,8 @@ let parse_target_tools ~workspace_root ~dune_path ~dir acc fields =
           | Ok argv -> (with_ppx_tool acc { name; argv; deps = [] }, [ name ])
           | Error message ->
               ( warn acc
-                  (Printf.sprintf
-                     "%s; skipping generated ppx '%s' from %s"
-                     message name dune_path),
+                  (Printf.sprintf "%s; skipping generated ppx '%s' from %s" message name
+                     dune_path),
                 [] )
         in
         Ok (acc, ppx)
@@ -980,26 +866,20 @@ let parse_rule ~workspace_root ~dune_path acc fields =
   let* targets = optional_atom_list_field "targets" fields in
   let* mode = optional_single_value_field "mode" fields in
   let* explicit_deps = explicit_rule_deps ~dir fields in
-  let outputs =
-    match target with
-    | Some target -> [ target ]
-    | None -> targets
-  in
+  let outputs = match target with Some target -> [ target ] | None -> targets in
   if outputs = [] then
     Ok
       (warn acc
-         (Printf.sprintf
-            "ignored dune rule without target(s) in %s; migrate it manually"
+         (Printf.sprintf "ignored dune rule without target(s) in %s; migrate it manually"
             dune_path))
   else
     let* action_form = optional_single_value_field "action" fields in
     match action_form with
     | None ->
         Ok
-         (warn acc
+          (warn acc
              (Printf.sprintf
-                "ignored dune rule without an action in %s; migrate it manually"
-                dune_path))
+                "ignored dune rule without an action in %s; migrate it manually" dune_path))
     | Some form -> (
         match parse_rule_command ~dir ~outputs form with
         | Error _ ->
@@ -1017,16 +897,14 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                 ~outputs:(rebased_field_paths dir outputs)
                 form
             in
-            let deps =
-              String_util.dedup_preserve
-                (explicit_deps.deps @ inferred.deps)
-            in
+            let deps = String_util.dedup_preserve (explicit_deps.deps @ inferred.deps) in
             let acc =
               if explicit_deps.aliases = [] then acc
               else
                 warn acc
                   (Printf.sprintf
-                     "generated action '%s' from dune rule in %s references alias deps (%s); wadi migrated only the concrete file deps"
+                     "generated action '%s' from dune rule in %s references alias deps \
+                      (%s); wadi migrated only the concrete file deps"
                      name dune_path
                      (String.concat ", " explicit_deps.aliases))
             in
@@ -1034,7 +912,8 @@ let parse_rule ~workspace_root ~dune_path acc fields =
               if (inferred.opaque || explicit_deps.opaque) && deps = [] then
                 warn acc
                   (Printf.sprintf
-                     "generated action '%s' from dune rule in %s may read auxiliary files; review deps = [...]"
+                     "generated action '%s' from dune rule in %s may read auxiliary \
+                      files; review deps = [...]"
                      name dune_path)
               else acc
             in
@@ -1043,10 +922,7 @@ let parse_rule ~workspace_root ~dune_path acc fields =
                 name;
                 dir;
                 steps = command.steps;
-                cwd =
-                  (match command.cwd with
-                  | Some _ as cwd -> cwd
-                  | None -> Some dir);
+                cwd = (match command.cwd with Some _ as cwd -> cwd | None -> Some dir);
                 deps;
                 outputs;
                 checked_in_sources;
@@ -1074,9 +950,7 @@ let parse_library ~workspace_root ~dune_path acc fields =
     | Some modules -> merge_module_lists modules modules_without_implementation
     | None -> merge_module_lists inferred_modules modules_without_implementation
   in
-  let modules =
-    maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name modules
-  in
+  let modules = maybe_drop_wrapped_wrapper_module ~dune_dir ~wrapped ~name modules in
   let* libraries = optional_atom_list_field "libraries" fields in
   let* acc, preprocess, ppx =
     parse_target_tools ~workspace_root ~dune_path ~dir acc fields
@@ -1117,12 +991,9 @@ let parse_runnable_group kind_label raw_kind ~workspace_root ~dune_path acc fiel
   let* names = optional_atom_list_field names_field fields in
   let* fallback_name = optional_atom_field "name" fields in
   let names =
-    match (names, fallback_name) with
-    | [], Some name -> [ name ]
-    | names, _ -> names
+    match (names, fallback_name) with [], Some name -> [ name ] | names, _ -> names
   in
-  if names = [] then
-    Error (Printf.sprintf "%s stanza is missing a name" kind_label)
+  if names = [] then Error (Printf.sprintf "%s stanza is missing a name" kind_label)
   else
     let* public_names = optional_atom_list_field public_names_field fields in
     let* public_name = optional_atom_field "public_name" fields in
@@ -1138,10 +1009,8 @@ let parse_runnable_group kind_label raw_kind ~workspace_root ~dune_path acc fiel
     let helper_modules =
       let modules =
         match modules with
-        | Some modules ->
-            merge_module_lists modules modules_without_implementation
-        | None ->
-            merge_module_lists inferred_modules modules_without_implementation
+        | Some modules -> merge_module_lists modules modules_without_implementation
+        | None -> merge_module_lists inferred_modules modules_without_implementation
       in
       List.filter (fun module_name -> not (List.mem module_name names)) modules
     in
@@ -1153,19 +1022,19 @@ let parse_runnable_group kind_label raw_kind ~workspace_root ~dune_path acc fiel
       ( acc,
         pair_public_names names public_names
         |> List.map (fun (name, public_name) ->
-               {
-                 kind = raw_kind;
-                 name;
-                 public_name;
-                 wrapped = false;
-                 dir;
-                 main = Some name;
-                 modules = Some helper_modules;
-                 libraries;
-                 actions = [];
-                 preprocess;
-                 ppx;
-               }) )
+            {
+              kind = raw_kind;
+              name;
+              public_name;
+              wrapped = false;
+              dir;
+              main = Some name;
+              modules = Some helper_modules;
+              libraries;
+              actions = [];
+              preprocess;
+              ppx;
+            }) )
 
 let parse_stanza ~workspace_root ~dune_path acc = function
   | List (Atom "library" :: fields) ->
@@ -1175,30 +1044,26 @@ let parse_stanza ~workspace_root ~dune_path acc = function
       Ok (with_targets acc targets)
   | List (Atom "executable" :: fields) ->
       let* acc, targets =
-        parse_runnable_group "executable" Executable ~workspace_root ~dune_path
-          acc (field_map fields) ~names_field:"names"
-          ~public_names_field:"public_names"
+        parse_runnable_group "executable" Executable ~workspace_root ~dune_path acc
+          (field_map fields) ~names_field:"names" ~public_names_field:"public_names"
       in
       Ok (with_targets acc targets)
   | List (Atom "executables" :: fields) ->
       let* acc, targets =
-        parse_runnable_group "executables" Executable ~workspace_root ~dune_path
-          acc (field_map fields) ~names_field:"names"
-          ~public_names_field:"public_names"
+        parse_runnable_group "executables" Executable ~workspace_root ~dune_path acc
+          (field_map fields) ~names_field:"names" ~public_names_field:"public_names"
       in
       Ok (with_targets acc targets)
   | List (Atom "test" :: fields) ->
       let* acc, targets =
-        parse_runnable_group "test" Test ~workspace_root ~dune_path acc
-          (field_map fields) ~names_field:"names"
-          ~public_names_field:"public_names"
+        parse_runnable_group "test" Test ~workspace_root ~dune_path acc (field_map fields)
+          ~names_field:"names" ~public_names_field:"public_names"
       in
       Ok (with_targets acc targets)
   | List (Atom "tests" :: fields) ->
       let* acc, targets =
         parse_runnable_group "tests" Test ~workspace_root ~dune_path acc
-          (field_map fields) ~names_field:"names"
-          ~public_names_field:"public_names"
+          (field_map fields) ~names_field:"names" ~public_names_field:"public_names"
       in
       Ok (with_targets acc targets)
   | List (Atom "rule" :: fields) ->
@@ -1284,12 +1149,8 @@ let finalize_target_modules targets =
     targets
 
 let toml_string value = "\"" ^ String_util.json_escape value ^ "\""
-
-let toml_array values =
-  "[" ^ String.concat ", " (List.map toml_string values) ^ "]"
-
-let toml_array_array values =
-  "[" ^ String.concat ", " (List.map toml_array values) ^ "]"
+let toml_array values = "[" ^ String.concat ", " (List.map toml_string values) ^ "]"
+let toml_array_array values = "[" ^ String.concat ", " (List.map toml_array values) ^ "]"
 
 let render_target alias_index (target : raw_target) =
   let deps, packages =
@@ -1320,13 +1181,9 @@ let render_target alias_index (target : raw_target) =
           (if target.wrapped then "wrapped = true" else "");
           "dir = " ^ toml_string target.dir;
           "modules = "
-          ^
-          toml_array
-            (match target.modules with
-            | Some modules -> modules
-            | None -> []);
+          ^ toml_array (match target.modules with Some modules -> modules | None -> []);
         ]
-    | Executable | Test ->
+    | Executable | Test -> (
         [
           Printf.sprintf "[%s.%s]" section_name target.name;
           (match target.public_name with
@@ -1334,38 +1191,23 @@ let render_target alias_index (target : raw_target) =
           | None -> "");
           "dir = " ^ toml_string target.dir;
           "main = "
-          ^
-          toml_string
-            (match target.main with
-            | Some main -> main
-            | None -> target.name);
+          ^ toml_string (match target.main with Some main -> main | None -> target.name);
         ]
         @
-        (match target.modules with
+        match target.modules with
         | Some [] | None -> []
         | Some modules -> [ "modules = " ^ toml_array modules ])
   in
   List.filter (fun line -> line <> "") body
-  @
-  (match target.actions with
-  | [] -> []
-  | actions -> [ "actions = " ^ toml_array actions ])
-  @
-  (match target.preprocess with
-  | [] -> []
-  | preprocess -> [ "preprocess = " ^ toml_array preprocess ])
-  @
-  (match target.ppx with
-  | [] -> []
-  | ppx -> [ "ppx = " ^ toml_array ppx ])
-  @
-  (match deps with
-  | [] -> []
-  | deps -> [ "deps = " ^ toml_array deps ])
-  @
-  (match packages with
-  | [] -> []
-  | packages -> [ "packages = " ^ toml_array packages ])
+  @ (match target.actions with
+    | [] -> []
+    | actions -> [ "actions = " ^ toml_array actions ])
+  @ (match target.preprocess with
+    | [] -> []
+    | preprocess -> [ "preprocess = " ^ toml_array preprocess ])
+  @ (match target.ppx with [] -> [] | ppx -> [ "ppx = " ^ toml_array ppx ])
+  @ (match deps with [] -> [] | deps -> [ "deps = " ^ toml_array deps ])
+  @ match packages with [] -> [] | packages -> [ "packages = " ^ toml_array packages ]
 
 let render_action (action : raw_action) =
   [
@@ -1375,52 +1217,29 @@ let render_action (action : raw_action) =
     | steps -> "steps = " ^ toml_array_array steps);
     "outputs = " ^ toml_array action.outputs;
   ]
-  @
-  (match action.checked_in_sources with
-  | [] -> []
-  | checked_in_sources ->
-      [ "checked_in_sources = " ^ toml_array checked_in_sources ])
-  @
-  (match action.deps with
-  | [] -> []
-  | deps -> [ "deps = " ^ toml_array deps ])
-  @
-  (match action.stdin_path with
-  | Some path -> [ "stdin_path = " ^ toml_string path ]
-  | None -> [])
-  @
-  (match action.stdout with
-  | Some path -> [ "stdout = " ^ toml_string path ]
-  | None -> [])
-  @
-  match action.cwd with
-  | Some cwd -> [ "cwd = " ^ toml_string cwd ]
-  | None -> []
+  @ (match action.checked_in_sources with
+    | [] -> []
+    | checked_in_sources -> [ "checked_in_sources = " ^ toml_array checked_in_sources ])
+  @ (match action.deps with [] -> [] | deps -> [ "deps = " ^ toml_array deps ])
+  @ (match action.stdin_path with
+    | Some path -> [ "stdin_path = " ^ toml_string path ]
+    | None -> [])
+  @ (match action.stdout with
+    | Some path -> [ "stdout = " ^ toml_string path ]
+    | None -> [])
+  @ match action.cwd with Some cwd -> [ "cwd = " ^ toml_string cwd ] | None -> []
 
 let render_preprocessor (tool : raw_preprocessor) =
-  [
-    Printf.sprintf "[preprocess.%s]" tool.name;
-    "argv = " ^ toml_array tool.argv;
-  ]
-  @
-  (match tool.cwd with
-  | Some cwd -> [ "cwd = " ^ toml_string cwd ]
-  | None -> [])
-  @
-  (match tool.stdin_path with
-  | Some path -> [ "stdin_path = " ^ toml_string path ]
-  | None -> [])
-  @
-  match tool.deps with
-  | [] -> []
-  | deps -> [ "deps = " ^ toml_array deps ]
+  [ Printf.sprintf "[preprocess.%s]" tool.name; "argv = " ^ toml_array tool.argv ]
+  @ (match tool.cwd with Some cwd -> [ "cwd = " ^ toml_string cwd ] | None -> [])
+  @ (match tool.stdin_path with
+    | Some path -> [ "stdin_path = " ^ toml_string path ]
+    | None -> [])
+  @ match tool.deps with [] -> [] | deps -> [ "deps = " ^ toml_array deps ]
 
 let render_ppx_tool (tool : raw_ppx_tool) =
   [ Printf.sprintf "[ppx.%s]" tool.name; "argv = " ^ toml_array tool.argv ]
-  @
-  match tool.deps with
-  | [] -> []
-  | deps -> [ "deps = " ^ toml_array deps ]
+  @ match tool.deps with [] -> [] | deps -> [ "deps = " ^ toml_array deps ]
 
 let generate_manifest ~workspace_root:_ ~workspace_name acc =
   let acc = auto_attach_generated_actions acc in
@@ -1449,19 +1268,12 @@ let generate_manifest ~workspace_root:_ ~workspace_name acc =
       | None -> [ "version = 1"; "" ]
     in
     let body =
-      List.concat_map
-        (fun action -> render_action action @ [ "" ])
-        acc.actions
+      List.concat_map (fun action -> render_action action @ [ "" ]) acc.actions
+      @ List.concat_map (fun tool -> render_preprocessor tool @ [ "" ]) acc.preprocessors
+      @ List.concat_map (fun tool -> render_ppx_tool tool @ [ "" ]) acc.ppx_tools
       @ List.concat_map
-          (fun tool -> render_preprocessor tool @ [ "" ])
-          acc.preprocessors
-      @ List.concat_map
-          (fun tool -> render_ppx_tool tool @ [ "" ])
-          acc.ppx_tools
-      @
-      List.concat_map
-        (fun target -> render_target alias_index target @ [ "" ])
-        acc.targets
+          (fun target -> render_target alias_index target @ [ "" ])
+          acc.targets
     in
     Ok
       {
@@ -1473,8 +1285,7 @@ let run ~workspace_root =
   let workspace_root = Fs.realpath workspace_root in
   let* dune_files = scan_workspace workspace_root "." [] in
   if dune_files = [] then
-    Error
-      (Printf.sprintf "no dune files were found under workspace %s" workspace_root)
+    Error (Printf.sprintf "no dune files were found under workspace %s" workspace_root)
   else
     let* workspace_name = dune_project_name workspace_root in
     let rec collect acc = function

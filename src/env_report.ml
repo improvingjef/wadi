@@ -1,16 +1,5 @@
-type subtool =
-  | Build
-  | Action
-  | Run
-  | Test
-  | Bench
-  | Install
-
-type context = {
-  target : string;
-  label : string;
-  env : (string * string) list;
-}
+type subtool = Build | Action | Run | Test | Bench | Install
+type context = { target : string; label : string; env : (string * string) list }
 
 type report = {
   workspace_name : string option;
@@ -42,15 +31,15 @@ let parse_subtool value =
   | value ->
       Error
         (Printf.sprintf
-           "unknown env subtool '%s'; expected build, action, run, test, bench, or install"
+           "unknown env subtool '%s'; expected build, action, run, test, bench, or \
+            install"
            value)
 
 let resolve_profile workspace = function
   | Some profile when String.trim profile <> "" -> profile
   | Some _ | None -> Manifest.default_profile workspace
 
-let display_name name package_path =
-  name ^ Manifest.package_suffix package_path
+let display_name name package_path = name ^ Manifest.package_suffix package_path
 
 let target_index (workspace : Manifest.workspace) =
   let index = Hashtbl.create (List.length workspace.targets) in
@@ -97,8 +86,7 @@ type bench_request = {
 let installable_targets (workspace : Manifest.workspace) =
   List.filter
     (function
-      | Manifest.Library _ | Manifest.Executable _ -> true
-      | Manifest.Test _ -> false)
+      | Manifest.Library _ | Manifest.Executable _ -> true | Manifest.Test _ -> false)
     workspace.targets
 
 let resolve_run_target workspace requested_target =
@@ -113,13 +101,11 @@ let resolve_run_target workspace requested_target =
       | Some (Manifest.Library _) ->
           Error
             (Printf.sprintf
-               "target '%s' is a library; wadi env run only supports executables"
-               name)
+               "target '%s' is a library; wadi env run only supports executables" name)
       | Some (Manifest.Test _) ->
           Error
             (Printf.sprintf
-               "target '%s' is a test; wadi env run only supports executables"
-               name)
+               "target '%s' is a test; wadi env run only supports executables" name)
       | None -> Error (Printf.sprintf "unknown target '%s'" name))
   | None -> (
       match executable_targets workspace with
@@ -127,8 +113,7 @@ let resolve_run_target workspace requested_target =
       | [ executable ] -> Ok executable
       | executables ->
           Error
-            (Printf.sprintf
-               "workspace defines multiple executables; choose one: %s"
+            (Printf.sprintf "workspace defines multiple executables; choose one: %s"
                (String.concat ", "
                   (List.map
                      (fun (executable : Manifest.executable) -> executable.name)
@@ -150,8 +135,7 @@ let resolve_test_targets workspace requested_targets =
           | Some target ->
               Error
                 (Printf.sprintf
-                   "target '%s' is %s '%s'; wadi env test only supports tests"
-                   name
+                   "target '%s' is %s '%s'; wadi env test only supports tests" name
                    (Manifest.target_kind_name target)
                    (Manifest.target_name target))
           | None -> Error (Printf.sprintf "unknown target '%s'" name))
@@ -161,7 +145,12 @@ let resolve_test_targets workspace requested_targets =
 let resolve_bench_targets workspace requested_targets =
   let requested_targets = String_util.dedup_preserve requested_targets in
   let executable_request (executable : Manifest.executable) =
-    { name = executable.name; package_path = executable.package_path; executable; env = [] }
+    {
+      name = executable.name;
+      package_path = executable.package_path;
+      executable;
+      env = [];
+    }
   in
   let declared_bench_request (bench : Manifest.bench_target) =
     match
@@ -180,7 +169,8 @@ let resolve_bench_targets workspace requested_targets =
     | Some (Manifest.Library _) ->
         Error
           (Printf.sprintf
-             "bench '%s' points at library '%s'; wadi env bench requires executable targets"
+             "bench '%s' points at library '%s'; wadi env bench requires executable \
+              targets"
              bench.name bench.executable)
     | Some (Manifest.Test _) ->
         Error
@@ -204,7 +194,8 @@ let resolve_bench_targets workspace requested_targets =
         loop [] (bench :: benches)
     | [] -> (
         match executable_targets workspace with
-        | [] -> Error "workspace does not define any benchmarks or executables to benchmark"
+        | [] ->
+            Error "workspace does not define any benchmarks or executables to benchmark"
         | executables -> Ok (List.map executable_request executables))
   else
     let index = target_index workspace in
@@ -222,12 +213,14 @@ let resolve_bench_targets workspace requested_targets =
               | Some (Manifest.Library _) ->
                   Error
                     (Printf.sprintf
-                       "target '%s' is a library; wadi env bench only supports executables or [bench.*] declarations"
+                       "target '%s' is a library; wadi env bench only supports \
+                        executables or [bench.*] declarations"
                        name)
               | Some (Manifest.Test _) ->
                   Error
                     (Printf.sprintf
-                       "target '%s' is a test; wadi env bench only supports executables or [bench.*] declarations"
+                       "target '%s' is a test; wadi env bench only supports executables \
+                        or [bench.*] declarations"
                        name)
               | None -> Error (Printf.sprintf "unknown target '%s'" name)))
     in
@@ -237,8 +230,7 @@ let resolve_install_targets workspace requested_targets =
   let requested_targets = String_util.dedup_preserve requested_targets in
   if requested_targets = [] then
     match installable_targets workspace with
-    | [] ->
-        Error "workspace does not define any installable libraries or executables"
+    | [] -> Error "workspace does not define any installable libraries or executables"
     | targets -> Ok targets
   else
     let index = target_index workspace in
@@ -246,13 +238,14 @@ let resolve_install_targets workspace requested_targets =
       | [] -> Ok (List.rev acc)
       | name :: rest -> (
           match Hashtbl.find_opt index name with
-          | Some (Manifest.Library _ as target)
-          | Some (Manifest.Executable _ as target) ->
+          | Some (Manifest.Library _ as target) | Some (Manifest.Executable _ as target)
+            ->
               loop (target :: acc) rest
           | Some (Manifest.Test _) ->
               Error
                 (Printf.sprintf
-                   "target '%s' is a test; wadi env install only supports libraries and executables"
+                   "target '%s' is a test; wadi env install only supports libraries and \
+                    executables"
                    name)
           | None -> Error (Printf.sprintf "unknown target '%s'" name))
     in
@@ -278,8 +271,7 @@ let context ~changed_only ~host_env target label bindings =
   {
     target;
     label;
-    env =
-      if changed_only then changed_env ~host_env bindings else full_env bindings;
+    env = (if changed_only then changed_env ~host_env bindings else full_env bindings);
   }
 
 let target_label target =
@@ -287,8 +279,8 @@ let target_label target =
     (Manifest.target_kind_name target)
     (Manifest.target_display_name target)
 
-let build_contexts ~workspace_root ~profile ~changed_only ~host_env
-    ~include_compiler ~include_actions ~include_preprocessors workspace order =
+let build_contexts ~workspace_root ~profile ~changed_only ~host_env ~include_compiler
+    ~include_actions ~include_preprocessors workspace order =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
     | target :: rest ->
@@ -338,14 +330,10 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
     match subtool with
     | Build ->
         let* targets = resolve_named_targets workspace requested_targets in
-        Ok
-          ( List.map Manifest.target_name targets,
-            [] )
+        Ok (List.map Manifest.target_name targets, [])
     | Action ->
         let* targets = resolve_named_targets workspace requested_targets in
-        Ok
-          ( List.map Manifest.target_name targets,
-            [] )
+        Ok (List.map Manifest.target_name targets, [])
     | Run ->
         if List.length requested_targets > 1 then
           Error "env run accepts at most one executable target"
@@ -359,10 +347,12 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
           let* executable = resolve_run_target workspace requested_target in
           Ok
             ( [ executable.name ],
-              [ context ~changed_only ~host_env
+              [
+                context ~changed_only ~host_env
                   (Printf.sprintf "executable %s"
                      (Manifest.target_display_name (Manifest.Executable executable)))
-                  "runtime" [] ] )
+                  "runtime" [];
+              ] )
     | Test ->
         let* tests = resolve_test_targets workspace requested_targets in
         Ok
@@ -377,14 +367,11 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
     | Bench ->
         let* benches = resolve_bench_targets workspace requested_targets in
         Ok
-          ( List.map
-              (fun (bench : bench_request) -> bench.executable.name)
-              benches,
+          ( List.map (fun (bench : bench_request) -> bench.executable.name) benches,
             List.map
               (fun (bench : bench_request) ->
                 context ~changed_only ~host_env
-                  (Printf.sprintf "bench %s"
-                     (display_name bench.name bench.package_path))
+                  (Printf.sprintf "bench %s" (display_name bench.name bench.package_path))
                   "runtime" bench.env)
               benches )
     | Install ->
@@ -394,14 +381,13 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
   let* order = Builder.resolve_build_order workspace requested in
   let* build_contexts =
     build_contexts ~workspace_root ~profile ~changed_only ~host_env workspace
-      ~include_compiler:(subtool <> Action)
-      ~include_actions:true
-      ~include_preprocessors:(subtool <> Action)
-      order
+      ~include_compiler:(subtool <> Action) ~include_actions:true
+      ~include_preprocessors:(subtool <> Action) order
   in
   let contexts = build_contexts @ runtime_contexts in
   let contexts =
-    if changed_only then List.filter (fun (context : context) -> context.env <> []) contexts
+    if changed_only then
+      List.filter (fun (context : context) -> context.env <> []) contexts
     else contexts
   in
   Ok
@@ -409,62 +395,46 @@ let report ~workspace_root ?profile ?(changed_only = false) workspace subtool
       workspace_name = workspace.Manifest.name;
       subtool;
       profile;
-      requested =
-        if requested_targets = [] then requested else requested_targets;
+      requested = (if requested_targets = [] then requested else requested_targets);
       changed_only;
       contexts;
     }
 
 let render_context (context : context) =
   String.concat "\n"
-    ([
-       "Target: " ^ context.target;
-       "Context: " ^ context.label;
-     ]
-    @ List.map
-        (fun (name, value) -> name ^ "=" ^ value)
-        context.env)
+    ([ "Target: " ^ context.target; "Context: " ^ context.label ]
+    @ List.map (fun (name, value) -> name ^ "=" ^ value) context.env)
 
 let render_report (report : report) =
   String.concat "\n\n"
     ([
        String.concat "\n"
          [
-           "Workspace: "
-           ^
-           (match report.workspace_name with
-           | Some name -> name
-           | None -> "unnamed");
+           ("Workspace: "
+           ^ match report.workspace_name with Some name -> name | None -> "unnamed");
            "Subtool: " ^ subtool_name report.subtool;
            "Profile: " ^ report.profile;
-           "View: "
-           ^ if report.changed_only then "changed-only" else "full";
-           "Requested-targets: "
+           ("View: " ^ if report.changed_only then "changed-only" else "full");
+           ("Requested-targets: "
            ^
-           (match report.requested with
+           match report.requested with
            | [] -> "all"
            | requested -> String.concat ", " requested);
          ];
      ]
     @ List.map render_context report.contexts)
-    ^ "\n"
+  ^ "\n"
 
 let json_string value = "\"" ^ String_util.json_escape value ^ "\""
-
-let json_string_or_null = function
-  | Some value -> json_string value
-  | None -> "null"
-
-let json_string_list values =
-  "[" ^ String.concat ", " (List.map json_string values) ^ "]"
+let json_string_or_null = function Some value -> json_string value | None -> "null"
+let json_string_list values = "[" ^ String.concat ", " (List.map json_string values) ^ "]"
 
 let json_env bindings =
   "{"
-  ^
-  String.concat ", "
-    (List.map
-       (fun (name, value) -> json_string name ^ ": " ^ json_string value)
-       bindings)
+  ^ String.concat ", "
+      (List.map
+         (fun (name, value) -> json_string name ^ ": " ^ json_string value)
+         bindings)
   ^ "}"
 
 let render_context_json (context : context) =
@@ -482,9 +452,7 @@ let render_json_report (report : report) =
     match report.contexts with
     | [] -> "[]"
     | contexts ->
-        "[\n"
-        ^ String.concat ",\n" (List.map render_context_json contexts)
-        ^ "\n  ]"
+        "[\n" ^ String.concat ",\n" (List.map render_context_json contexts) ^ "\n  ]"
   in
   String.concat "\n"
     [
@@ -493,8 +461,7 @@ let render_json_report (report : report) =
       "  \"subtool\": " ^ json_string (subtool_name report.subtool) ^ ",";
       "  \"profile\": " ^ json_string report.profile ^ ",";
       "  \"view\": "
-      ^ json_string
-          (if report.changed_only then "changed-only" else "full")
+      ^ json_string (if report.changed_only then "changed-only" else "full")
       ^ ",";
       "  \"requested_targets\": " ^ json_string_list report.requested ^ ",";
       "  \"contexts\": " ^ contexts;

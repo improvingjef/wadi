@@ -1,19 +1,6 @@
-type check_state =
-  | Pass
-  | Warn
-  | Fail
-
-type check = {
-  name : string;
-  state : check_state;
-  details : string list;
-}
-
-type summary = {
-  passed : int;
-  warned : int;
-  failed : int;
-}
+type check_state = Pass | Warn | Fail
+type check = { name : string; state : check_state; details : string list }
+type summary = { passed : int; warned : int; failed : int }
 
 type report = {
   workspace_name : string option;
@@ -25,10 +12,7 @@ type report = {
   summary : summary;
 }
 
-type lock_policy =
-  | Ignore_lock
-  | Warn_locked
-  | Require_locked
+type lock_policy = Ignore_lock | Warn_locked | Require_locked
 
 let ( let* ) = Result.bind
 
@@ -37,11 +21,7 @@ let resolve_profile workspace = function
   | Some _ | None -> Manifest.default_profile workspace
 
 let check name state details = { name; state; details }
-
-let state_name = function
-  | Pass -> "pass"
-  | Warn -> "warn"
-  | Fail -> "fail"
+let state_name = function Pass -> "pass" | Warn -> "warn" | Fail -> "fail"
 
 let summarize checks =
   List.fold_left
@@ -67,10 +47,7 @@ let manifest_check ~workspace_root ~profile workspace requested_targets =
       "manifest: " ^ Filename.concat workspace_root Manifest.default_filename;
       "profile: " ^ profile;
       ("targets: "
-      ^
-      match target_names with
-      | [] -> "none"
-      | targets -> String.concat ", " targets);
+      ^ match target_names with [] -> "none" | targets -> String.concat ", " targets);
       "requested-targets: " ^ render_requested_targets requested_targets;
     ]
 
@@ -96,31 +73,23 @@ let toolchain_check ~session backend_request =
       Toolchain.render_command_report "ocamldep" report.ocamldep;
       Toolchain.render_command_report "ocamlfind" report.ocamlfind;
       "backend-request: " ^ Toolchain.backend_request_name backend_request;
-      ("selected-backend: "
-      ^ render_result Toolchain.backend_name report.selected_backend);
+      "selected-backend: " ^ render_result Toolchain.backend_name report.selected_backend;
       "compiler-version: " ^ render_result Fun.id report.compiler_version;
       "stdlib: " ^ render_result Fun.id report.stdlib;
       (match report.unix_dir with
       | Ok (Some path) -> "unix-library-dir: " ^ path
       | Ok None -> "unix-library-dir: unavailable"
       | Error message -> "unix-library-dir: error: " ^ String.trim message);
-      ("package-roots: "
-      ^
-      render_result
-        (function
-          | [] -> "none"
-          | roots -> String.concat ", " roots)
-        report.package_roots);
+      "package-roots: "
+      ^ render_result
+          (function [] -> "none" | roots -> String.concat ", " roots)
+          report.package_roots;
     ]
   in
   let state =
-    match
-      (report.selected_backend, report.compiler_version, report.stdlib)
-    with
+    match (report.selected_backend, report.compiler_version, report.stdlib) with
     | Ok _, Ok _, Ok _ -> (
-        match report.package_roots with
-        | Ok _ -> Pass
-        | Error _ -> Warn)
+        match report.package_roots with Ok _ -> Pass | Error _ -> Warn)
     | _ -> Fail
   in
   check "toolchain" state details
@@ -143,20 +112,14 @@ let deps_check ~session workspace requested_targets =
         match report.package_roots with
         | Ok [] -> [ "package-roots: none" ]
         | Ok roots -> [ "package-roots: " ^ String.concat ", " roots ]
-        | Error message ->
-            [ "package-roots: error: " ^ String.trim message ]
+        | Error message -> [ "package-roots: error: " ^ String.trim message ]
       in
-      let state =
-        match report.package_roots with
-        | Ok _ -> Pass
-        | Error _ -> Warn
-      in
+      let state = match report.package_roots with Ok _ -> Pass | Error _ -> Warn in
       check "packages" state (package_roots @ target_details)
 
 let lock_check ~lock_policy ~workspace_root workspace requested_targets =
   match lock_policy with
-  | Ignore_lock ->
-      check "lock" Pass [ "lock validation skipped" ]
+  | Ignore_lock -> check "lock" Pass [ "lock validation skipped" ]
   | Warn_locked | Require_locked -> (
       let lock_path = Locker.default_lock_path workspace_root in
       match Locker.validate_current ~workspace_root workspace requested_targets with
@@ -191,7 +154,9 @@ let generated_release_metadata_paths =
   [ "wadi.opam"; "Formula/wadi.rb"; "dist/release-assets.json" ]
 
 let has_any_generated_paths workspace_root paths =
-  List.exists (fun relative_path -> Fs.exists (Filename.concat workspace_root relative_path)) paths
+  List.exists
+    (fun relative_path -> Fs.exists (Filename.concat workspace_root relative_path))
+    paths
 
 let generator_summary output =
   match List.rev (String_util.split_lines output) with
@@ -208,10 +173,10 @@ let compare_generated_paths ~workspace_root ~generated_root relative_paths =
           if Fs.read_file workspace_path = Fs.read_file generated_path then None
           else Some (relative_path ^ " drifted")
       | false, true -> Some (relative_path ^ " is missing from the workspace")
-      | true, false ->
-          Some (relative_path ^ " was not regenerated by the generator")
+      | true, false -> Some (relative_path ^ " was not regenerated by the generator")
       | false, false ->
-          Some (relative_path ^ " is missing from both the workspace and regenerated output"))
+          Some
+            (relative_path ^ " is missing from both the workspace and regenerated output"))
     relative_paths
 
 let render_drift_details label drifted =
@@ -234,7 +199,7 @@ let generated_assets_check workspace_root =
     Fs.exists packaging_manifests_script
     || has_any_generated_paths workspace_root generated_release_metadata_paths
   in
-  if not release_artifacts_applicable && not release_metadata_applicable then None
+  if (not release_artifacts_applicable) && not release_metadata_applicable then None
   else
     Some
       (with_temp_dir "wadi-doctor-generated-assets" (fun temp_root ->
@@ -268,9 +233,7 @@ let generated_assets_check workspace_root =
                   in
                   if drifted = [] then
                     details := !details @ [ "release-artifacts: current" ]
-                  else
-                    note_warning
-                      (render_drift_details "release-artifacts" drifted));
+                  else note_warning (render_drift_details "release-artifacts" drifted));
            (if release_metadata_applicable then
               if not (Fs.exists packaging_manifests_script) then
                 note_warning
@@ -306,15 +269,14 @@ let generated_assets_check workspace_root =
                   in
                   if drifted = [] then
                     details := !details @ [ "release-metadata: current" ]
-                  else
-                    note_warning (render_drift_details "release-metadata" drifted));
+                  else note_warning (render_drift_details "release-metadata" drifted));
            if !warned then
              check "generated-assets" Warn
                (!details @ [ "Refresh generated assets with `make sync-generated`." ])
            else check "generated-assets" Pass !details))
 
-let report ~workspace_root ?(requested_targets = [])
-    ?(backend_request = Toolchain.Auto) ?profile ~lock_policy workspace =
+let report ~workspace_root ?(requested_targets = []) ?(backend_request = Toolchain.Auto)
+    ?profile ~lock_policy workspace =
   let workspace_root = Fs.realpath workspace_root in
   let profile = resolve_profile workspace profile in
   let session = Toolchain.create_session () in
@@ -347,22 +309,18 @@ let has_failures (report : report) = report.summary.failed > 0
 
 let render_check (check : check) =
   String.concat "\n"
-    ((Printf.sprintf "%s: %s" check.name (state_name check.state))
+    (Printf.sprintf "%s: %s" check.name (state_name check.state)
     :: List.map (fun detail -> "- " ^ detail) check.details)
 
 let render_report (report : report) =
   String.concat "\n"
     ([
        ("Workspace: "
-       ^
-       match report.workspace_name with
-       | Some name -> name
-       | None -> "unnamed");
+       ^ match report.workspace_name with Some name -> name | None -> "unnamed");
        "Workspace-root: " ^ report.workspace_root;
        "Profile: " ^ report.profile;
        "Requested-targets: " ^ render_requested_targets report.requested_targets;
-       "Backend-request: "
-       ^ Toolchain.backend_request_name report.backend_request;
+       "Backend-request: " ^ Toolchain.backend_request_name report.backend_request;
        Printf.sprintf "Summary: pass=%d warn=%d fail=%d" report.summary.passed
          report.summary.warned report.summary.failed;
      ]
@@ -370,13 +328,8 @@ let render_report (report : report) =
     @ [ "" ])
 
 let json_string text = "\"" ^ String_util.json_escape text ^ "\""
-
-let json_array render items =
-  "[" ^ String.concat ", " (List.map render items) ^ "]"
-
-let json_option render = function
-  | Some value -> render value
-  | None -> "null"
+let json_array render items = "[" ^ String.concat ", " (List.map render items) ^ "]"
+let json_option render = function Some value -> render value | None -> "null"
 
 let render_json_check (check : check) =
   String.concat "\n"
@@ -392,23 +345,15 @@ let render_json_report (report : report) =
   let checks =
     match report.checks with
     | [] -> "[]"
-    | checks ->
-        "[\n"
-        ^ String.concat ",\n" (List.map render_json_check checks)
-        ^ "\n  ]"
+    | checks -> "[\n" ^ String.concat ",\n" (List.map render_json_check checks) ^ "\n  ]"
   in
   String.concat "\n"
     [
       "{";
-      "  \"workspace\": "
-      ^
-      json_option json_string report.workspace_name
-      ^ ",";
+      "  \"workspace\": " ^ json_option json_string report.workspace_name ^ ",";
       "  \"workspace_root\": " ^ json_string report.workspace_root ^ ",";
       "  \"profile\": " ^ json_string report.profile ^ ",";
-      "  \"requested_targets\": "
-      ^ json_array json_string report.requested_targets
-      ^ ",";
+      "  \"requested_targets\": " ^ json_array json_string report.requested_targets ^ ",";
       "  \"backend_request\": "
       ^ json_string (Toolchain.backend_request_name report.backend_request)
       ^ ",";

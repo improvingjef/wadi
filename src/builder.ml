@@ -1,24 +1,9 @@
 type built_artifact =
-  | Built_library of {
-      name : string;
-      out_dir : string;
-      archive : string;
-    }
-  | Built_executable of {
-      name : string;
-      out_dir : string;
-      binary : string;
-    }
-  | Built_test of {
-      name : string;
-      out_dir : string;
-      binary : string;
-    }
+  | Built_library of { name : string; out_dir : string; archive : string }
+  | Built_executable of { name : string; out_dir : string; binary : string }
+  | Built_test of { name : string; out_dir : string; binary : string }
 
-type build_result = {
-  build_root : string;
-  artifacts : built_artifact list;
-}
+type build_result = { build_root : string; artifacts : built_artifact list }
 
 type built_library_output = {
   archive : string;
@@ -70,15 +55,8 @@ type action_result = {
   execution : action_execution;
 }
 
-type pipeline_mode =
-  | Materialize
-  | Plan_only
-
-type explain_report = {
-  target_name : string;
-  report : string;
-  json_report : string;
-}
+type pipeline_mode = Materialize | Plan_only
+type explain_report = { target_name : string; report : string; json_report : string }
 
 type library_description = {
   out_dir : string;
@@ -112,17 +90,11 @@ type runnable_description = {
 }
 
 let ( let* ) = Result.bind
-
 let target_name = Manifest.target_name
-
 let dependency_names = Manifest.target_deps
-
 let build_root_for_profile = Layout.build_root_for_profile
-
 let target_out_dir = Layout.target_out_dir
-
 let generated_root out_dir = Filename.concat out_dir "generated"
-
 let preprocessed_root out_dir = Filename.concat out_dir "preprocessed"
 
 let action_stamp_path out_dir name =
@@ -138,8 +110,7 @@ let index_targets workspace =
 let resolve_build_order workspace requested_targets =
   let index = index_targets workspace in
   let requested =
-    if requested_targets = [] then
-      List.map target_name workspace.Manifest.targets
+    if requested_targets = [] then List.map target_name workspace.Manifest.targets
     else String_util.dedup_preserve requested_targets
   in
   let visited = Hashtbl.create (List.length workspace.Manifest.targets) in
@@ -161,16 +132,16 @@ let resolve_build_order workspace requested_targets =
                 match Hashtbl.find_opt index dependency with
                 | None ->
                     Error
-                      (Printf.sprintf "target '%s' depends on unknown target '%s'"
-                         name dependency)
+                      (Printf.sprintf "target '%s' depends on unknown target '%s'" name
+                         dependency)
                 | Some dependency_target -> (
                     match dependency_target with
                     | Manifest.Library _ -> visit (path @ [ name ]) dependency
                     | _ ->
                         Error
                           (Printf.sprintf
-                             "target '%s' depends on %s '%s'; only libraries may \
-                              be dependencies"
+                             "target '%s' depends on %s '%s'; only libraries may be \
+                              dependencies"
                              name
                              (Manifest.target_kind_name dependency_target)
                              dependency)))
@@ -197,28 +168,21 @@ let compute_waves order =
     let ready, rest =
       List.partition
         (fun target ->
-          List.for_all
-            (fun dep -> Hashtbl.mem assigned dep)
-            (dependency_names target))
+          List.for_all (fun dep -> Hashtbl.mem assigned dep) (dependency_names target))
         !remaining
     in
-    (match ready with
+    match ready with
     | [] -> remaining := []
     | _ ->
-        List.iter
-          (fun target -> Hashtbl.add assigned (target_name target) ())
-          ready;
+        List.iter (fun target -> Hashtbl.add assigned (target_name target) ()) ready;
         waves := ready :: !waves;
-        remaining := rest)
+        remaining := rest
   done;
   List.rev !waves
 
 let default_jobs () =
   try
-    let ic =
-      Unix.open_process_in
-        "getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4"
-    in
+    let ic = Unix.open_process_in "getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4" in
     let line = input_line ic in
     let _ = Unix.close_process_in ic in
     max 1 (int_of_string (String.trim line))
@@ -263,8 +227,7 @@ let command_fingerprint_lines ~workspace_root argv =
   | prog :: args ->
       let resolved_prog = resolve_command_prog ~workspace_root prog in
       let argv_lines =
-        ("argv " ^ resolved_prog)
-        :: List.map (fun arg -> "arg " ^ arg) args
+        ("argv " ^ resolved_prog) :: List.map (fun arg -> "arg " ^ arg) args
       in
       let digest_lines =
         if Sys.file_exists resolved_prog && not (Sys.is_directory resolved_prog) then
@@ -276,15 +239,13 @@ let command_fingerprint_lines ~workspace_root argv =
 let ppx_command_string ~workspace_root (tool : Manifest.ppx_tool) =
   let prog, args = command_prog_and_args tool.Manifest.argv in
   let resolved_prog = resolve_command_prog ~workspace_root prog in
-  String.concat " "
-    (List.map String_util.shell_quote (resolved_prog :: args))
+  String.concat " " (List.map String_util.shell_quote (resolved_prog :: args))
 
 let sandbox_name = function
   | Manifest.Workspace -> "workspace"
   | Manifest.Target -> "target"
 
-let effective_sandbox (options : Manifest.target_options)
-    (action : Manifest.action) =
+let effective_sandbox (options : Manifest.target_options) (action : Manifest.action) =
   match action.Manifest.sandbox with
   | Some sandbox -> sandbox
   | None -> (
@@ -293,15 +254,13 @@ let effective_sandbox (options : Manifest.target_options)
       | None -> Manifest.Target)
 
 let is_source_path path =
-  List.exists
-    (fun suffix -> String_util.ends_with ~suffix path)
-    [ ".ml"; ".mli" ]
+  List.exists (fun suffix -> String_util.ends_with ~suffix path) [ ".ml"; ".mli" ]
 
 let action_output_is_checked_in_source (action : Manifest.action) output =
   Manifest.action_output_is_checked_in_source action output
 
 let rec digest_path path =
-  if Sys.is_directory path then
+  if Sys.is_directory path then (
     let entries = Sys.readdir path |> Array.to_list |> List.sort String.compare in
     let buffer = Buffer.create 256 in
     List.iter
@@ -309,7 +268,7 @@ let rec digest_path path =
         append_line buffer ("entry " ^ name);
         append_line buffer (digest_path (Filename.concat path name)))
       entries;
-    "dir:" ^ Digest.to_hex (Digest.string (Buffer.contents buffer))
+    "dir:" ^ Digest.to_hex (Digest.string (Buffer.contents buffer)))
   else "file:" ^ Digest.to_hex (Digest.file path)
 
 let fingerprint_dependency_line prefix relative_path path =
@@ -322,8 +281,8 @@ let dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label deps 
         Error (Printf.sprintf "%s does not exist: %s" error_label relative_path)
       else Ok (fingerprint_dependency_line line_prefix relative_path path))
 
-let tool_dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label
-    tool_name deps =
+let tool_dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label tool_name
+    deps =
   collect_results deps (fun relative_path ->
       let path = Filename.concat workspace_root relative_path in
       if not (Fs.exists path) then
@@ -332,8 +291,7 @@ let tool_dependency_fingerprint_lines ~workspace_root ~line_prefix ~error_label
              relative_path)
       else
         Ok
-          (fingerprint_dependency_line
-             (line_prefix ^ " " ^ tool_name) relative_path path))
+          (fingerprint_dependency_line (line_prefix ^ " " ^ tool_name) relative_path path))
 
 let action_output_paths out_dir (action : Manifest.action) =
   let root = generated_root out_dir in
@@ -351,24 +309,20 @@ let preprocessor_declared_inputs (tool : Manifest.command_tool) =
   dedup_optional_path tool.stdin_path tool.deps
 
 let planned_generated_output_names actions =
-  List.concat_map
-    (fun (action : Manifest.action) -> action.outputs)
-    actions
+  List.concat_map (fun (action : Manifest.action) -> action.outputs) actions
   |> String_util.dedup_preserve
 
 let wrapped_library_stems (library : Manifest.library) =
   if library.wrapped then [ library.name ] else []
 
 let wrapped_library_ml_name (library : Manifest.library) = library.name ^ ".ml"
-
 let wrapped_library_mli_name (library : Manifest.library) = library.name ^ ".mli"
 
 let wrapped_library_workspace_ml_path ~workspace_root (library : Manifest.library) =
   Filename.concat workspace_root
     (Filename.concat library.dir (wrapped_library_ml_name library))
 
-let wrapped_library_workspace_mli_path ~workspace_root
-    (library : Manifest.library) =
+let wrapped_library_workspace_mli_path ~workspace_root (library : Manifest.library) =
   Filename.concat workspace_root
     (Filename.concat library.dir (wrapped_library_mli_name library))
 
@@ -378,8 +332,7 @@ let wrapped_library_has_checked_in_ml ~workspace_root library =
 let wrapped_library_has_checked_in_mli ~workspace_root library =
   Fs.exists (wrapped_library_workspace_mli_path ~workspace_root library)
 
-let wrapped_library_generated_outputs ~workspace_root
-    (library : Manifest.library) =
+let wrapped_library_generated_outputs ~workspace_root (library : Manifest.library) =
   if library.wrapped && not (wrapped_library_has_checked_in_ml ~workspace_root library)
   then [ wrapped_library_ml_name library ]
   else []
@@ -388,10 +341,7 @@ let wrapped_library_module_name stem = String.capitalize_ascii stem
 
 let wrapped_library_source_contents (library : Manifest.library) =
   String.concat "\n"
-    ([
-       Printf.sprintf "(* Generated by wadi for wrapped library %s. *)"
-         library.name;
-     ]
+    ([ Printf.sprintf "(* Generated by wadi for wrapped library %s. *)" library.name ]
     @ List.map
         (fun stem ->
           let module_name = wrapped_library_module_name stem in
@@ -399,14 +349,14 @@ let wrapped_library_source_contents (library : Manifest.library) =
         library.modules
     @ [ "" ])
 
-let validate_wrapped_library_source_conflicts ~workspace_root
-    (library : Manifest.library) (actions : Manifest.action list) =
+let validate_wrapped_library_source_conflicts ~workspace_root (library : Manifest.library)
+    (actions : Manifest.action list) =
   if not library.wrapped then Ok ()
   else if List.mem library.name library.modules then
     Error
       (Printf.sprintf
-         "library '%s' sets wrapped = true, but modules already include the \
-          reserved wrapper stem '%s'"
+         "library '%s' sets wrapped = true, but modules already include the reserved \
+          wrapper stem '%s'"
          library.name library.name)
   else
     let wrapper_ml = wrapped_library_ml_name library in
@@ -418,17 +368,15 @@ let validate_wrapped_library_source_conflicts ~workspace_root
           then
             Some
               ( action,
-                if List.mem wrapper_ml action.outputs then wrapper_ml else wrapper_mli
-              )
+                if List.mem wrapper_ml action.outputs then wrapper_ml else wrapper_mli )
           else find_conflicting_action rest
     in
     match find_conflicting_action actions with
     | Some (action, output) ->
         Error
           (Printf.sprintf
-             "library '%s' sets wrapped = true, but action '%s' also \
-              declares output '%s'; wrapped libraries reserve module stem '%s' \
-              for the wrapper module"
+             "library '%s' sets wrapped = true, but action '%s' also declares output \
+              '%s'; wrapped libraries reserve module stem '%s' for the wrapper module"
              library.name action.name output library.name)
     | None -> Ok ()
 
@@ -450,8 +398,8 @@ let materialize_wrapped_library_source ~mode ~workspace_root ~out_dir
         Fs.write_file path contents;
         Ok ())
 
-let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
-    ~dir stem =
+let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs ~dir stem
+    =
   let mll_path = Filename.concat workspace_root (Filename.concat dir (stem ^ ".mll")) in
   let mll_exists = Fs.exists mll_path in
   let mly_relative = Filename.concat dir (stem ^ ".mly") in
@@ -460,9 +408,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
   let ml_relative = Filename.concat dir (stem ^ ".ml") in
   let workspace_ml_path = Filename.concat workspace_root ml_relative in
   let generated_ml_path = Filename.concat generated_root (stem ^ ".ml") in
-  let generated_ml_declared =
-    List.mem (stem ^ ".ml") planned_generated_outputs
-  in
+  let generated_ml_declared = List.mem (stem ^ ".ml") planned_generated_outputs in
   let ml_path =
     if mly_exists then generated_ml_path
     else if generated_ml_declared then generated_ml_path
@@ -473,9 +419,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
   let mli_relative = Filename.concat dir (stem ^ ".mli") in
   let workspace_mli_path = Filename.concat workspace_root mli_relative in
   let generated_mli_path = Filename.concat generated_root (stem ^ ".mli") in
-  let generated_mli_declared =
-    List.mem (stem ^ ".mli") planned_generated_outputs
-  in
+  let generated_mli_declared = List.mem (stem ^ ".mli") planned_generated_outputs in
   let mli_path =
     if mly_exists then generated_mli_path
     else if generated_mli_declared then generated_mli_path
@@ -484,8 +428,7 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
   let mli_exists = (not mly_exists) && Fs.exists mli_path in
   let has_mli = mli_exists || mly_exists || generated_mli_declared in
   if (not has_ml) && not has_mli then
-    Error
-      (Printf.sprintf "missing source file for module '%s': %s" stem ml_path)
+    Error (Printf.sprintf "missing source file for module '%s': %s" stem ml_path)
   else
     Ok
       {
@@ -504,24 +447,24 @@ let source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
         mly_exists;
       }
 
-let source_descriptors ~workspace_root ~generated_root ~planned_generated_outputs
-    ~dir stems =
+let source_descriptors ~workspace_root ~generated_root ~planned_generated_outputs ~dir
+    stems =
   collect_results stems
-    (source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs
-       ~dir)
+    (source_descriptor ~workspace_root ~generated_root ~planned_generated_outputs ~dir)
 
 let needs_ocamllex (source : source_descriptor) =
   source.mll_exists
-  && (not source.ml_exists
-      || (Unix.stat source.mll_path).Unix.st_mtime
-         > (Unix.stat source.ml_path).Unix.st_mtime)
+  && ((not source.ml_exists)
+     || (Unix.stat source.mll_path).Unix.st_mtime
+        > (Unix.stat source.ml_path).Unix.st_mtime)
 
 let run_ocamllex ~verbose (source : source_descriptor) =
   if needs_ocamllex source then
     let ocamllex = Toolchain.ocamllex_cmd () in
     let* _ =
-      Process.ensure_success ~cwd:(Filename.dirname source.mll_path) ~verbose
-        ocamllex [ source.mll_path ]
+      Process.ensure_success
+        ~cwd:(Filename.dirname source.mll_path)
+        ~verbose ocamllex [ source.mll_path ]
     in
     Ok { source with ml_exists = true }
   else Ok source
@@ -537,20 +480,17 @@ let library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outpu
 
 let prepared_source_files prepared_source =
   (match prepared_source.mli_compile_path with
-  | Some mli_path -> [ mli_path ]
-  | None -> [])
-  @
-  match prepared_source.ml_compile_path with
-  | Some ml_path -> [ ml_path ]
-  | None -> []
+    | Some mli_path -> [ mli_path ]
+    | None -> [])
+  @ match prepared_source.ml_compile_path with Some ml_path -> [ ml_path ] | None -> []
 
 let ordered_source_table sources =
   let table = Hashtbl.create (List.length sources) in
   List.iter (fun source -> Hashtbl.replace table source.source.stem source) sources;
   table
 
-let infer_module_order_from_files ~session ~verbose ~env ~target_kind
-    ~target_name package_resolution requested source_files =
+let infer_module_order_from_files ~session ~verbose ~env ~target_kind ~target_name
+    package_resolution requested source_files =
   let* sorted_paths =
     match
       Toolchain.sort_sources ~session ~env ~verbose package_resolution source_files
@@ -558,15 +498,14 @@ let infer_module_order_from_files ~session ~verbose ~env ~target_kind
     | Ok sorted_paths -> Ok sorted_paths
     | Error message ->
         Error
-          (Printf.sprintf
-             "%s '%s' failed module dependency inference:\n%s" target_kind
+          (Printf.sprintf "%s '%s' failed module dependency inference:\n%s" target_kind
              target_name message)
   in
   let sorted_stems =
     sorted_paths
     |> List.filter_map (fun path ->
-           let stem = Filename.basename path |> Filename.remove_extension in
-           if List.mem stem requested then Some stem else None)
+        let stem = Filename.basename path |> Filename.remove_extension in
+        if List.mem stem requested then Some stem else None)
     |> String_util.dedup_preserve
   in
   if List.length sorted_stems = List.length requested then Ok sorted_stems
@@ -574,19 +513,20 @@ let infer_module_order_from_files ~session ~verbose ~env ~target_kind
     Error
       (Printf.sprintf
          "%s '%s' failed to infer a complete module order for %s from ocamldep"
-         target_kind target_name (String.concat ", " requested))
+         target_kind target_name
+         (String.concat ", " requested))
 
-let infer_module_order ~session ~verbose ~env ~target_kind ~target_name
-    package_resolution sources =
+let infer_module_order ~session ~verbose ~env ~target_kind ~target_name package_resolution
+    sources =
   if sources = [] then Ok []
   else
     let requested = List.map (fun source -> source.source.stem) sources in
     let source_files = List.concat_map prepared_source_files sources in
-    infer_module_order_from_files ~session ~verbose ~env ~target_kind
-      ~target_name package_resolution requested source_files
+    infer_module_order_from_files ~session ~verbose ~env ~target_kind ~target_name
+      package_resolution requested source_files
 
-let dry_run_module_order ~session ~verbose ~env ~target_kind ~target_name
-    ~preprocessors package_resolution sources =
+let dry_run_module_order ~session ~verbose ~env ~target_kind ~target_name ~preprocessors
+    package_resolution sources =
   if sources = [] then Ok []
   else if preprocessors <> [] then
     Ok (List.map (fun source -> source.source.stem) sources)
@@ -596,27 +536,29 @@ let dry_run_module_order ~session ~verbose ~env ~target_kind ~target_name
       List.concat_map
         (fun source ->
           (if source.source.mli_exists then [ source.source.mli_path ] else [])
-          @
-          (if source.source.ml_exists then [ source.source.ml_path ] else []))
+          @ if source.source.ml_exists then [ source.source.ml_path ] else [])
         sources
     in
-    if List.length source_files <> List.length (List.concat_map prepared_source_files sources)
+    if
+      List.length source_files
+      <> List.length (List.concat_map prepared_source_files sources)
     then Ok requested
     else
       match
-        infer_module_order_from_files ~session ~verbose ~env ~target_kind
-          ~target_name package_resolution requested source_files
+        infer_module_order_from_files ~session ~verbose ~env ~target_kind ~target_name
+          package_resolution requested source_files
       with
       | Ok ordered -> Ok ordered
       | Error _ -> Ok requested
 
 let target_is_up_to_date ~stamp_path expected_outputs fingerprint =
-  Fs.exists stamp_path && List.for_all Fs.exists expected_outputs
+  Fs.exists stamp_path
+  && List.for_all Fs.exists expected_outputs
   && Fs.read_file stamp_path = fingerprint
 
-let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
-    ~kind_name ~target_name ~backend ~dir ~main ~ordered_modules ~sources
-    ~package_resolution ~dependency_fingerprints ~extra_lines =
+let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name ~kind_name
+    ~target_name ~backend ~dir ~main ~ordered_modules ~sources ~package_resolution
+    ~dependency_fingerprints ~extra_lines =
   let buffer = Buffer.create 512 in
   append_line buffer ("compiler " ^ compiler_version);
   append_line buffer ("backend " ^ Toolchain.backend_name backend);
@@ -625,12 +567,8 @@ let target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name
   append_line buffer ("kind " ^ kind_name);
   append_line buffer ("target " ^ target_name);
   append_line buffer ("dir " ^ dir);
-  (match main with
-  | None -> ()
-  | Some stem -> append_line buffer ("main " ^ stem));
-  List.iter
-    (fun stem -> append_line buffer ("module " ^ stem))
-    ordered_modules;
+  (match main with None -> () | Some stem -> append_line buffer ("main " ^ stem));
+  List.iter (fun stem -> append_line buffer ("module " ^ stem)) ordered_modules;
   List.iter (append_line buffer)
     (Toolchain.fingerprint_lines ~session package_resolution @ extra_lines);
   List.iter
@@ -672,8 +610,7 @@ let materialize_path ~src ~dst =
 let copy_relative_path ~workspace_root ~sandbox_root ~label relative_path =
   let src = Filename.concat workspace_root relative_path in
   if not (Fs.exists src) then
-    Error
-      (Printf.sprintf "%s path does not exist: %s" label relative_path)
+    Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
   else (
     copy_path ~src ~dst:(Filename.concat sandbox_root relative_path);
     Ok ())
@@ -715,17 +652,14 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
             Hashtbl.add copied relative_path ();
             let src = Filename.concat workspace_root relative_path in
             if not (Fs.exists src) then
-              Error
-                (Printf.sprintf "%s path does not exist: %s" label relative_path)
+              Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
             else (
-              materialize_path ~src
-                ~dst:(Filename.concat sandbox_root relative_path);
+              materialize_path ~src ~dst:(Filename.concat sandbox_root relative_path);
               Ok ()))
         in
         let* () =
           match action.Manifest.cwd with
-          | Some cwd when cwd <> "." && cwd <> target_dir ->
-              copy_once "action cwd" cwd
+          | Some cwd when cwd <> "." && cwd <> target_dir -> copy_once "action cwd" cwd
           | Some _ | None -> Ok ()
         in
         let* () =
@@ -757,8 +691,8 @@ let prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandb
     action.Manifest.outputs;
   Ok ()
 
-let validate_generated_source_collisions ~workspace_root ~target_dir ~target_name
-    actions =
+let validate_generated_source_collisions ~workspace_root ~target_dir ~target_name actions
+    =
   List.fold_left
     (fun result (action : Manifest.action) ->
       let* () = result in
@@ -777,8 +711,8 @@ let validate_generated_source_collisions ~workspace_root ~target_dir ~target_nam
             then
               Error
                 (Printf.sprintf
-                   "target '%s' action '%s' output '%s' collides with checked-in \
-                    source %s"
+                   "target '%s' action '%s' output '%s' collides with checked-in source \
+                    %s"
                    target_name action_name output workspace_output_path)
             else Ok ())
         (Ok ()) action.Manifest.outputs)
@@ -791,9 +725,7 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
   let buffer = Buffer.create 256 in
   append_line buffer ("sandbox " ^ sandbox_name sandbox);
   append_line buffer ("target-dir " ^ target_dir);
-  (match action.cwd with
-  | Some cwd -> append_line buffer ("cwd " ^ cwd)
-  | None -> ());
+  (match action.cwd with Some cwd -> append_line buffer ("cwd " ^ cwd) | None -> ());
   (match action.stdin with
   | Some stdin -> append_line buffer ("stdin " ^ Digest.to_hex (Digest.string stdin))
   | None -> ());
@@ -806,22 +738,18 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
   List.iteri
     (fun index argv ->
       List.iter
-        (fun line ->
-          append_line buffer
-            (Printf.sprintf "step-%d %s" (index + 1) line))
+        (fun line -> append_line buffer (Printf.sprintf "step-%d %s" (index + 1) line))
         (command_fingerprint_lines ~workspace_root argv))
     (action_commands action);
-  List.iter
-    (fun (name, value) -> append_line buffer ("env " ^ name ^ "=" ^ value))
-    env;
-  List.iter (fun output -> append_line buffer ("output " ^ output))
-    action.outputs;
+  List.iter (fun (name, value) -> append_line buffer ("env " ^ name ^ "=" ^ value)) env;
+  List.iter (fun output -> append_line buffer ("output " ^ output)) action.outputs;
   List.iter
     (fun output -> append_line buffer ("checked-in-source " ^ output))
     action.checked_in_sources;
   let* dependency_lines =
     dependency_fingerprint_lines ~workspace_root ~line_prefix:"dep"
-      ~error_label:"action dependency" (action_declared_inputs action)
+      ~error_label:"action dependency"
+      (action_declared_inputs action)
   in
   List.iter (append_line buffer) dependency_lines;
   Ok (Buffer.contents buffer)
@@ -829,14 +757,12 @@ let action_fingerprint ~workspace_root ~target_env ~target_dir options
 let input_string_for_path ~workspace_root ~label relative_path =
   let path = Filename.concat workspace_root relative_path in
   if Fs.exists path && not (Fs.is_directory path) then Ok (Fs.read_file path)
-  else
-    Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
+  else Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
 
 let sandbox_input_string ~sandbox_root ~label relative_path =
   let path = Filename.concat sandbox_root relative_path in
   if Fs.exists path && not (Fs.is_directory path) then Ok (Fs.read_file path)
-  else
-    Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
+  else Error (Printf.sprintf "%s path does not exist: %s" label relative_path)
 
 let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
     (action : Manifest.action) =
@@ -846,14 +772,11 @@ let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
   let generated_dir = generated_root out_dir in
   let output_paths = action_output_paths out_dir action in
   let stamp_path = action_stamp_path out_dir action.name in
-  let missing_outputs =
-    List.filter (fun path -> not (Fs.exists path)) output_paths
-  in
+  let missing_outputs = List.filter (fun path -> not (Fs.exists path)) output_paths in
   let regeneration_reasons =
     (if Fs.exists stamp_path then [] else [ "action stamp missing: " ^ action.name ])
     @ List.map
-        (fun path ->
-          Printf.sprintf "missing generated output: %s (%s)" path action.name)
+        (fun path -> Printf.sprintf "missing generated output: %s (%s)" path action.name)
         missing_outputs
   in
   Fs.ensure_dir (Filename.dirname stamp_path);
@@ -871,8 +794,7 @@ let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
     let env = Manifest.merge_env_bindings target_env action.env in
     with_temp_dir "wadi-action" (fun sandbox_root ->
         let* () =
-          prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root
-            sandbox
+          prepare_action_sandbox ~workspace_root ~target_dir action sandbox_root sandbox
         in
         let default_cwd = Filename.concat sandbox_root target_dir in
         let cwd =
@@ -885,14 +807,13 @@ let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
           match (action.stdin, action.stdin_path) with
           | Some stdin, None -> Ok (Some stdin)
           | None, Some path ->
-              let* stdin = sandbox_input_string ~sandbox_root
-                  ~label:"action stdin_path" path
+              let* stdin =
+                sandbox_input_string ~sandbox_root ~label:"action stdin_path" path
               in
               Ok (Some stdin)
           | None, None -> Ok None
           | Some _, Some _ ->
-              Error
-                "internal error: action manifest resolved both stdin and stdin_path"
+              Error "internal error: action manifest resolved both stdin and stdin_path"
         in
         let* () =
           match action.stdout with
@@ -901,25 +822,16 @@ let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
               Ok ()
           | None -> Ok ()
         in
-        let stdout_path =
-          Option.map (Filename.concat sandbox_target_dir) action.stdout
-        in
+        let stdout_path = Option.map (Filename.concat sandbox_target_dir) action.stdout in
         let rec run_steps step_index = function
           | [] -> Ok ()
           | argv :: rest ->
               let prog, args = command_prog_and_args argv in
               let prog = resolve_command_prog ~workspace_root prog in
-              let stdin =
-                if step_index = 0 then stdin else None
-              in
-              let stdout_path =
-                match rest with
-                | [] -> stdout_path
-                | _ -> None
-              in
+              let stdin = if step_index = 0 then stdin else None in
+              let stdout_path = match rest with [] -> stdout_path | _ -> None in
               let* _ =
-                Process.ensure_success ~cwd ~verbose ~env ?stdin ?stdout_path
-                  prog args
+                Process.ensure_success ~cwd ~verbose ~env ?stdin ?stdout_path prog args
               in
               run_steps (step_index + 1) rest
         in
@@ -933,8 +845,7 @@ let run_action ~verbose ~workspace_root ~out_dir ~target_dir ~target_env options
               let dst = Filename.concat generated_dir output in
               if not (Fs.exists src) then
                 Error
-                  (Printf.sprintf
-                     "action '%s' did not produce declared output %s"
+                  (Printf.sprintf "action '%s' did not produce declared output %s"
                      action.name output)
               else (
                 if Fs.exists dst then Fs.remove_tree dst;
@@ -963,9 +874,7 @@ let plan_action ~workspace_root ~out_dir ~target_dir ~target_env options
   in
   let output_paths = action_output_paths out_dir action in
   let stamp_path = action_stamp_path out_dir action.name in
-  let missing_outputs =
-    List.filter (fun path -> not (Fs.exists path)) output_paths
-  in
+  let missing_outputs = List.filter (fun path -> not (Fs.exists path)) output_paths in
   let execution =
     if target_is_up_to_date ~stamp_path output_paths fingerprint then Action_cached
     else
@@ -1025,8 +934,7 @@ let resolve_pipeline ~workspace_root workspace ~profile target =
             let* () = result in
             if Hashtbl.mem output_seen output then
               Error
-                (Printf.sprintf
-                   "target '%s' declares action output '%s' more than once"
+                (Printf.sprintf "target '%s' declares action output '%s' more than once"
                    (Manifest.target_name target) output)
             else (
               Hashtbl.add output_seen output ();
@@ -1036,8 +944,8 @@ let resolve_pipeline ~workspace_root workspace ~profile target =
   in
   let* () =
     validate_generated_source_collisions ~workspace_root
-      ~target_dir:(Manifest.target_dir target)
-      ~target_name:(Manifest.target_name target) actions
+      ~target_dir:(Manifest.target_dir target) ~target_name:(Manifest.target_name target)
+      actions
   in
   Ok { options; actions; preprocessors; ppx_tools }
 
@@ -1049,24 +957,20 @@ let run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline =
       match mode with
       | Materialize ->
           run_action ~verbose ~workspace_root ~out_dir
-            ~target_dir:(Manifest.target_dir target)
-            ~target_env options action
+            ~target_dir:(Manifest.target_dir target) ~target_env options action
       | Plan_only ->
-          plan_action ~workspace_root ~out_dir
-            ~target_dir:(Manifest.target_dir target)
+          plan_action ~workspace_root ~out_dir ~target_dir:(Manifest.target_dir target)
             ~target_env options action)
 
-let run_preprocessor ~workspace_root ~target_env (tool : Manifest.command_tool)
-    input =
+let run_preprocessor ~workspace_root ~target_env (tool : Manifest.command_tool) input =
   let env = Manifest.merge_env_bindings target_env tool.Manifest.env in
   let prog, args = command_prog_and_args tool.Manifest.argv in
   let prog = resolve_command_prog ~workspace_root prog in
-  let cwd =
-    command_cwd ~workspace_root ~default_dir:workspace_root tool.Manifest.cwd
-  in
+  let cwd = command_cwd ~workspace_root ~default_dir:workspace_root tool.Manifest.cwd in
   let* stdin =
     match tool.stdin_path with
-    | Some path -> input_string_for_path ~workspace_root ~label:"preprocess stdin_path" path
+    | Some path ->
+        input_string_for_path ~workspace_root ~label:"preprocess stdin_path" path
     | None -> Ok input
   in
   let* outcome = Process.ensure_success ~cwd ~env ~stdin prog args in
@@ -1078,15 +982,15 @@ let planned_preprocessed_path out_dir logical_path =
 let preprocess_source_path ~mode ~workspace_root ~out_dir ~target_env
     (preprocessors : Manifest.command_tool list) logical_path source_path =
   if preprocessors = [] then Ok source_path
-  else if mode = Plan_only then
-    Ok (planned_preprocessed_path out_dir logical_path)
+  else if mode = Plan_only then Ok (planned_preprocessed_path out_dir logical_path)
   else
     let* output =
       List.fold_left
         (fun result tool ->
           let* input = result in
           run_preprocessor ~workspace_root ~target_env tool input)
-        (Ok (Fs.read_file source_path)) preprocessors
+        (Ok (Fs.read_file source_path))
+        preprocessors
     in
     let path = planned_preprocessed_path out_dir logical_path in
     Fs.write_file path output;
@@ -1117,9 +1021,7 @@ let menhir_infer_and_generate ~verbose ~out_dir ~include_dirs source =
   let menhir_dir = menhir_root out_dir in
   let gen_root = generated_root out_dir in
   let mock_ml = Filename.concat menhir_dir (source.stem ^ ".ml") in
-  let inferred_mli =
-    Filename.concat menhir_dir (source.stem ^ ".inferred.mli")
-  in
+  let inferred_mli = Filename.concat menhir_dir (source.stem ^ ".inferred.mli") in
   let compiler = Toolchain.ocamlc_cmd () in
   let i_args = List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs in
   let* _ =
@@ -1129,9 +1031,13 @@ let menhir_infer_and_generate ~verbose ~out_dir ~include_dirs source =
   in
   let* _ =
     Process.ensure_success ~verbose menhir
-      [ "--infer-read-reply"; inferred_mli;
-        "--base"; Filename.concat menhir_dir source.stem;
-        source.mly_path ]
+      [
+        "--infer-read-reply";
+        inferred_mli;
+        "--base";
+        Filename.concat menhir_dir source.stem;
+        source.mly_path;
+      ]
   in
   (* Menhir writes <base>.ml and <base>.mli next to the --base prefix;
      copy them to the generated root so the compiler finds them. *)
@@ -1143,21 +1049,21 @@ let menhir_infer_and_generate ~verbose ~out_dir ~include_dirs source =
   if Fs.exists menhir_mli then Fs.copy_file ~src:menhir_mli ~dst:out_mli;
   Ok (out_ml, out_mli)
 
-let prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
-    ~target_env (preprocessors : Manifest.command_tool list) source =
+let prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs ~target_env
+    (preprocessors : Manifest.command_tool list) source =
   (* When a .mly file exists, run menhir Phase 1 to produce a mock .ml.
      The mock serves as the ocamldep input so module ordering works.
      Phases 2-3 run later in compile_module after dependency .cmi files
      are available. *)
   let* menhir_mock_ml =
-    if source.mly_exists then
+    if source.mly_exists then (
       match mode with
       | Materialize ->
           let* mock = menhir_write_query ~verbose ~out_dir source in
           Ok (Some mock)
       | Plan_only ->
           Fs.ensure_dir (generated_root out_dir);
-          Ok None
+          Ok None)
     else Ok None
   in
   let* ml_compile_path =
@@ -1194,19 +1100,16 @@ let prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
   in
   Ok { source; ml_compile_path; mli_compile_path }
 
-let prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
-    ~target_env (preprocessors : Manifest.command_tool list) sources =
+let prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs ~target_env
+    (preprocessors : Manifest.command_tool list) sources =
   collect_results sources
-    (prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
-       ~target_env preprocessors)
+    (prepare_source ~mode ~verbose ~workspace_root ~out_dir ~include_dirs ~target_env
+       preprocessors)
 
 let implementation_output_paths backend out_dir stem =
   match backend with
   | Toolchain.Native ->
-      [
-        Filename.concat out_dir (stem ^ ".cmx");
-        Filename.concat out_dir (stem ^ ".o");
-      ]
+      [ Filename.concat out_dir (stem ^ ".cmx"); Filename.concat out_dir (stem ^ ".o") ]
   | Toolchain.Bytecode -> [ Filename.concat out_dir (stem ^ ".cmo") ]
 
 let expected_prepared_source_outputs ?(stem_prefix = "") backend out_dir
@@ -1231,12 +1134,10 @@ let ordered_prepared_sources source_table ordered_stems =
       | Some source -> source
       | None ->
           failwith
-            (Printf.sprintf
-               "internal error: missing prepared source for '%s'" stem))
+            (Printf.sprintf "internal error: missing prepared source for '%s'" stem))
     ordered_stems
 
-let prunable_output_suffixes =
-  [ ".cmi"; ".cmo"; ".cmx"; ".cmxa"; ".cma"; ".a"; ".o" ]
+let prunable_output_suffixes = [ ".cmi"; ".cmo"; ".cmx"; ".cmxa"; ".cma"; ".a"; ".o" ]
 
 let is_prunable_output path =
   (not (Sys.is_directory path))
@@ -1245,52 +1146,52 @@ let is_prunable_output path =
        prunable_output_suffixes
 
 let prune_stale_build_outputs ~out_dir ~expected_outputs =
-  if Fs.exists out_dir && Fs.is_directory out_dir then
+  if Fs.exists out_dir && Fs.is_directory out_dir then (
     let expected = Hashtbl.create (List.length expected_outputs) in
     List.iter (fun path -> Hashtbl.replace expected path ()) expected_outputs;
     Sys.readdir out_dir
     |> Array.iter (fun name ->
-           let path = Filename.concat out_dir name in
-           if is_prunable_output path && not (Hashtbl.mem expected path) then
-             Fs.remove_tree path)
+        let path = Filename.concat out_dir name in
+        if is_prunable_output path && not (Hashtbl.mem expected path) then
+          Fs.remove_tree path))
 
 let ppx_args ~workspace_root (ppx_tools : Manifest.ppx_tool list) =
   List.concat_map
     (fun tool -> [ "-ppx"; ppx_command_string ~workspace_root tool ])
     ppx_tools
 
-let include_args include_dirs =
-  List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
+let include_args include_dirs = List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
 
-let interface_compile_args ?(stem_prefix = "") ~workspace_root ~out_dir
+let interface_compile_args ?(stem_prefix = "") ~workspace_root ~out_dir ~include_dirs
+    ~compile_flags ~(ppx_tools : Manifest.ppx_tool list) source mli_compile_path =
+  compile_flags
+  @ ppx_args ~workspace_root ppx_tools
+  @ [ "-c" ] @ include_args include_dirs
+  @ [
+      "-o";
+      Filename.concat out_dir (stem_prefix ^ source.source.stem ^ ".cmi");
+      mli_compile_path;
+    ]
+
+let implementation_compile_args ?(stem_prefix = "") ~workspace_root ~backend ~out_dir
     ~include_dirs ~compile_flags ~(ppx_tools : Manifest.ppx_tool list) source
-    mli_compile_path =
-  compile_flags @ ppx_args ~workspace_root ppx_tools
-  @ [ "-c" ]
-  @ include_args include_dirs
-  @ [ "-o"; Filename.concat out_dir (stem_prefix ^ source.source.stem ^ ".cmi"); mli_compile_path ]
+    ml_compile_path =
+  compile_flags
+  @ ppx_args ~workspace_root ppx_tools
+  @ [ "-c" ] @ include_args include_dirs
+  @ [
+      "-o";
+      Filename.concat out_dir
+        (stem_prefix ^ source.source.stem ^ Toolchain.object_extension backend);
+      ml_compile_path;
+    ]
 
-let implementation_compile_args ?(stem_prefix = "") ~workspace_root ~backend
-    ~out_dir ~include_dirs ~compile_flags
-    ~(ppx_tools : Manifest.ppx_tool list) source ml_compile_path =
-  compile_flags @ ppx_args ~workspace_root ppx_tools
-  @ [ "-c" ]
-  @ include_args include_dirs
-  @
-  [
-    "-o";
-    Filename.concat out_dir (stem_prefix ^ source.source.stem ^ Toolchain.object_extension backend);
-    ml_compile_path;
-  ]
-
-let render_preprocessor_command ~workspace_root ~target_env
-    (tool : Manifest.command_tool) =
+let render_preprocessor_command ~workspace_root ~target_env (tool : Manifest.command_tool)
+    =
   let env = Manifest.merge_env_bindings target_env tool.Manifest.env in
   let prog, args = command_prog_and_args tool.Manifest.argv in
   let prog = resolve_command_prog ~workspace_root prog in
-  let cwd =
-    command_cwd ~workspace_root ~default_dir:workspace_root tool.Manifest.cwd
-  in
+  let cwd = command_cwd ~workspace_root ~default_dir:workspace_root tool.Manifest.cwd in
   Process.render ~cwd ~env prog args
   ^
   match tool.stdin_path with
@@ -1302,33 +1203,33 @@ let render_module_order_command ~session ~env ~package_resolution source_files =
   | [] -> Ok "module-order not needed"
   | _ ->
       let* invocation =
-        Toolchain.ocamldep_invocation ~session package_resolution
-          ("-sort" :: source_files)
+        Toolchain.ocamldep_invocation ~session package_resolution ("-sort" :: source_files)
       in
       Ok (Toolchain.render_invocation ~env invocation)
 
-let dry_run_module_order_command ~session ~env ~package_resolution
-    ~preprocessors source_files =
+let dry_run_module_order_command ~session ~env ~package_resolution ~preprocessors
+    source_files =
   if source_files = [] then Ok "module-order not needed"
-  else if preprocessors <> [] || List.exists (fun path -> not (Fs.exists path)) source_files then
+  else if
+    preprocessors <> [] || List.exists (fun path -> not (Fs.exists path)) source_files
+  then
     Ok
-      "module-order fallback: dry-run kept source transforms side-effect-free, \
-       so declared module order is shown"
+      "module-order fallback: dry-run kept source transforms side-effect-free, so \
+       declared module order is shown"
   else render_module_order_command ~session ~env ~package_resolution source_files
 
-let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root
-    ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
-    ~(ppx_tools : Manifest.ppx_tool list) ~env source_table ordered_stems =
+let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root ~backend ~out_dir
+    ~include_dirs ~package_resolution ~compile_flags ~(ppx_tools : Manifest.ppx_tool list)
+    ~env source_table ordered_stems =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
-    | stem :: rest ->
+    | stem :: rest -> (
         let source =
           match Hashtbl.find_opt source_table stem with
           | Some source -> source
           | None ->
               failwith
-                (Printf.sprintf
-                   "internal error: missing prepared source for '%s'" stem)
+                (Printf.sprintf "internal error: missing prepared source for '%s'" stem)
         in
         let* commands =
           match source.mli_compile_path with
@@ -1336,8 +1237,7 @@ let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root
               let* invocation =
                 Toolchain.compiler_invocation ~session backend package_resolution
                   (interface_compile_args ~stem_prefix ~workspace_root ~out_dir
-                     ~include_dirs ~compile_flags ~ppx_tools source
-                     mli_compile_path)
+                     ~include_dirs ~compile_flags ~ppx_tools source mli_compile_path)
               in
               Ok
                 [
@@ -1346,13 +1246,12 @@ let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root
                 ]
           | None -> Ok []
         in
-        (match source.ml_compile_path with
+        match source.ml_compile_path with
         | Some ml_compile_path ->
             let* invocation =
               Toolchain.compiler_invocation ~session backend package_resolution
-                (implementation_compile_args ~stem_prefix ~workspace_root
-                   ~backend ~out_dir ~include_dirs ~compile_flags ~ppx_tools
-                   source ml_compile_path)
+                (implementation_compile_args ~stem_prefix ~workspace_root ~backend
+                   ~out_dir ~include_dirs ~compile_flags ~ppx_tools source ml_compile_path)
             in
             loop
               (Printf.sprintf "compile %s.ml: %s" source.source.stem
@@ -1363,18 +1262,17 @@ let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root
   in
   loop [] ordered_stems
 
-let compile_module ?(stem_prefix = "") ~session ~workspace_root ~verbose
-    ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
-    ~(ppx_tools : Manifest.ppx_tool list) ~env source =
+let compile_module ?(stem_prefix = "") ~session ~workspace_root ~verbose ~backend ~out_dir
+    ~include_dirs ~package_resolution ~compile_flags ~(ppx_tools : Manifest.ppx_tool list)
+    ~env source =
   (* For .mly modules, run menhir Phases 2-3 now that dependency .cmi files
      are compiled and available through include_dirs. *)
   let* source =
     if source.source.mly_exists then
-      let* (gen_ml, gen_mli) =
+      let* gen_ml, gen_mli =
         menhir_infer_and_generate ~verbose ~out_dir ~include_dirs source.source
       in
-      Ok { source with ml_compile_path = Some gen_ml;
-                        mli_compile_path = Some gen_mli }
+      Ok { source with ml_compile_path = Some gen_ml; mli_compile_path = Some gen_mli }
     else Ok source
   in
   let* () =
@@ -1383,8 +1281,8 @@ let compile_module ?(stem_prefix = "") ~session ~workspace_root ~verbose
         let* _ =
           Toolchain.ensure_success_compiler ~session ~env ~verbose backend
             package_resolution
-            (interface_compile_args ~stem_prefix ~workspace_root ~out_dir
-               ~include_dirs ~compile_flags ~ppx_tools source mli_compile_path)
+            (interface_compile_args ~stem_prefix ~workspace_root ~out_dir ~include_dirs
+               ~compile_flags ~ppx_tools source mli_compile_path)
         in
         Ok ()
     | None -> Ok ()
@@ -1395,17 +1293,16 @@ let compile_module ?(stem_prefix = "") ~session ~workspace_root ~verbose
       let* _ =
         Toolchain.ensure_success_compiler ~session ~env ~verbose backend
           package_resolution
-          (implementation_compile_args ~stem_prefix ~workspace_root ~backend
-             ~out_dir ~include_dirs ~compile_flags ~ppx_tools source
-             ml_compile_path)
+          (implementation_compile_args ~stem_prefix ~workspace_root ~backend ~out_dir
+             ~include_dirs ~compile_flags ~ppx_tools source ml_compile_path)
       in
       Ok
         (Some
            (Filename.concat out_dir
               (stem_prefix ^ source.source.stem ^ Toolchain.object_extension backend)))
 
-let compile_ordered_sources ?(stem_prefix = "") ~session ~workspace_root
-    ~verbose ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
+let compile_ordered_sources ?(stem_prefix = "") ~session ~workspace_root ~verbose ~backend
+    ~out_dir ~include_dirs ~package_resolution ~compile_flags
     ~(ppx_tools : Manifest.ppx_tool list) ~env source_table ordered_stems =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
@@ -1415,18 +1312,14 @@ let compile_ordered_sources ?(stem_prefix = "") ~session ~workspace_root
           | Some source -> source
           | None ->
               failwith
-                (Printf.sprintf
-                   "internal error: missing prepared source for '%s'" stem)
+                (Printf.sprintf "internal error: missing prepared source for '%s'" stem)
         in
         let* object_file =
-          compile_module ~stem_prefix ~session ~workspace_root ~verbose ~backend
-            ~out_dir ~include_dirs ~package_resolution ~compile_flags
-            ~ppx_tools ~env source
+          compile_module ~stem_prefix ~session ~workspace_root ~verbose ~backend ~out_dir
+            ~include_dirs ~package_resolution ~compile_flags ~ppx_tools ~env source
         in
         let acc =
-          match object_file with
-          | Some object_file -> object_file :: acc
-          | None -> acc
+          match object_file with Some object_file -> object_file :: acc | None -> acc
         in
         loop acc rest
   in
@@ -1456,11 +1349,10 @@ let generated_source_reason_overrides ~target_dir (actions : Manifest.action lis
           let ml_reasons = [ "source changed: " ^ logical_path ] in
           if Filename.check_suffix output ".mli" then
             ml_reasons
-            @
-            [
-              "interface changed: " ^ logical_path;
-              "interface availability changed: " ^ logical_path;
-            ]
+            @ [
+                "interface changed: " ^ logical_path;
+                "interface availability changed: " ^ logical_path;
+              ]
           else ml_reasons)
         action.outputs)
     actions
@@ -1471,7 +1363,7 @@ let include_action_execution_reasons ?(generated_source_reasons = []) status
   let action_reasons =
     action_results
     |> List.concat_map (fun (action_result : action_result) ->
-           action_execution_reasons action_result.execution)
+        action_execution_reasons action_result.execution)
     |> String_util.dedup_preserve
   in
   match action_reasons with
@@ -1485,19 +1377,14 @@ let include_action_execution_reasons ?(generated_source_reasons = []) status
       in
       if
         status.Explain.build_status = Explain.Reused
-        || (status.Explain.build_status = Explain.Rebuilt
-           && remaining_reasons = [])
+        || (status.Explain.build_status = Explain.Rebuilt && remaining_reasons = [])
       then
-        ({
-           Explain.build_status = Explain.Regenerated;
-           Explain.reasons = reasons;
-         }
+        ({ Explain.build_status = Explain.Regenerated; Explain.reasons }
           : Explain.target_status)
       else
         ({
            Explain.build_status = status.Explain.build_status;
-           Explain.reasons =
-             String_util.dedup_preserve (remaining_reasons @ reasons);
+           Explain.reasons = String_util.dedup_preserve (remaining_reasons @ reasons);
          }
           : Explain.target_status)
 
@@ -1505,35 +1392,29 @@ let target_extra_lines ~workspace_root ~profile pipeline action_results =
   let option_lines =
     [
       "profile " ^ profile;
-      "sandbox "
+      ("sandbox "
       ^
-      (match pipeline.options.sandbox with
+      match pipeline.options.sandbox with
       | Some sandbox -> sandbox_name sandbox
       | None -> "target");
     ]
     @ List.map (fun flag -> "compile-flag " ^ flag) pipeline.options.compile_flags
     @ List.map (fun flag -> "link-flag " ^ flag) pipeline.options.link_flags
-    @ List.map
-        (fun (name, value) -> "env " ^ name ^ "=" ^ value)
-        pipeline.options.env
+    @ List.map (fun (name, value) -> "env " ^ name ^ "=" ^ value) pipeline.options.env
   in
   let* preprocessor_lines =
-    collect_line_groups pipeline.preprocessors
-      (fun (tool : Manifest.command_tool) ->
+    collect_line_groups pipeline.preprocessors (fun (tool : Manifest.command_tool) ->
         let* dependency_lines =
-          tool_dependency_fingerprint_lines ~workspace_root
-            ~line_prefix:"preprocess-dep" ~error_label:"preprocessor" tool.name
+          tool_dependency_fingerprint_lines ~workspace_root ~line_prefix:"preprocess-dep"
+            ~error_label:"preprocessor" tool.name
             (preprocessor_declared_inputs tool)
         in
         Ok
           (("preprocess " ^ tool.name)
-          :: (match tool.cwd with
-             | Some cwd -> [ "preprocess-cwd " ^ cwd ]
-             | None -> [])
-          @
-          (match tool.stdin_path with
-          | Some path -> [ "preprocess-stdin-path " ^ tool.name ^ " " ^ path ]
-          | None -> [])
+           :: (match tool.cwd with Some cwd -> [ "preprocess-cwd " ^ cwd ] | None -> [])
+          @ (match tool.stdin_path with
+            | Some path -> [ "preprocess-stdin-path " ^ tool.name ^ " " ^ path ]
+            | None -> [])
           @ List.map
               (fun (name, value) ->
                 "preprocess-env " ^ tool.name ^ " " ^ name ^ "=" ^ value)
@@ -1542,22 +1423,19 @@ let target_extra_lines ~workspace_root ~profile pipeline action_results =
           @ dependency_lines))
   in
   let* ppx_lines =
-    collect_line_groups pipeline.ppx_tools
-      (fun (tool : Manifest.ppx_tool) ->
+    collect_line_groups pipeline.ppx_tools (fun (tool : Manifest.ppx_tool) ->
         let* dependency_lines =
-          tool_dependency_fingerprint_lines ~workspace_root
-            ~line_prefix:"ppx-dep" ~error_label:"ppx" tool.name tool.deps
+          tool_dependency_fingerprint_lines ~workspace_root ~line_prefix:"ppx-dep"
+            ~error_label:"ppx" tool.name tool.deps
         in
         Ok
-          (("ppx " ^ tool.name)
-          :: command_fingerprint_lines ~workspace_root tool.argv
+          ((("ppx " ^ tool.name) :: command_fingerprint_lines ~workspace_root tool.argv)
           @ dependency_lines))
   in
   let action_lines =
     List.map
       (fun action_result ->
-        "action "
-        ^ action_result.name
+        "action " ^ action_result.name
         ^ Manifest.package_suffix action_result.package_path
         ^ " "
         ^ Digest.to_hex (Digest.string action_result.fingerprint))
@@ -1572,8 +1450,7 @@ let backend_selection_note ~session request backend =
         (Toolchain.backend_name backend)
   | Toolchain.Auto -> (
       match backend with
-      | Toolchain.Native ->
-          "auto selected native because ocamlopt is available"
+      | Toolchain.Native -> "auto selected native because ocamlopt is available"
       | Toolchain.Bytecode ->
           if
             Toolchain.command_is_available ~session
@@ -1582,51 +1459,43 @@ let backend_selection_note ~session request backend =
           else "auto selected bytecode because ocamlopt is unavailable")
 
 let joined_names names =
-  match names with
-  | [] -> "none"
-  | names -> String.concat ", " names
+  match names with [] -> "none" | names -> String.concat ", " names
 
 let render_action_resolution_lines (action : Manifest.action) =
   let name = Manifest.action_display_name action in
   [
     "action " ^ name ^ " outputs: " ^ joined_names action.outputs;
-    "action " ^ name ^ " checked-in-sources: "
-    ^ joined_names action.checked_in_sources;
+    "action " ^ name ^ " checked-in-sources: " ^ joined_names action.checked_in_sources;
     "action " ^ name ^ " deps: " ^ joined_names (action_declared_inputs action);
   ]
   @ List.mapi
       (fun index argv ->
         "action " ^ name ^ " step "
         ^ string_of_int (index + 1)
-        ^ ": " ^ String.concat " " (List.map String_util.shell_quote argv))
+        ^ ": "
+        ^ String.concat " " (List.map String_util.shell_quote argv))
       (action_commands action)
+  @ (match action.cwd with
+    | Some cwd -> [ "action " ^ name ^ " cwd: " ^ cwd ]
+    | None -> [])
+  @ (match action.stdin_path with
+    | Some path -> [ "action " ^ name ^ " stdin_path: " ^ path ]
+    | None -> [])
   @
-  (match action.cwd with
-  | Some cwd -> [ "action " ^ name ^ " cwd: " ^ cwd ]
-  | None -> [])
-  @
-  (match action.stdin_path with
-  | Some path -> [ "action " ^ name ^ " stdin_path: " ^ path ]
-  | None -> [])
-  @
-  (match action.stdout with
+  match action.stdout with
   | Some path -> [ "action " ^ name ^ " stdout: " ^ path ]
-  | None -> [])
+  | None -> []
 
 let render_preprocessor_resolution_lines (tool : Manifest.command_tool) =
   let name = Manifest.command_tool_display_name tool in
-  [
-    "preprocess " ^ name ^ " deps: "
-    ^ joined_names (preprocessor_declared_inputs tool);
-  ]
+  [ "preprocess " ^ name ^ " deps: " ^ joined_names (preprocessor_declared_inputs tool) ]
+  @ (match tool.cwd with
+    | Some cwd -> [ "preprocess " ^ name ^ " cwd: " ^ cwd ]
+    | None -> [])
   @
-  (match tool.cwd with
-  | Some cwd -> [ "preprocess " ^ name ^ " cwd: " ^ cwd ]
-  | None -> [])
-  @
-  (match tool.stdin_path with
+  match tool.stdin_path with
   | Some path -> [ "preprocess " ^ name ^ " stdin_path: " ^ path ]
-  | None -> [])
+  | None -> []
 
 let render_ppx_resolution_lines (tool : Manifest.ppx_tool) =
   [ "ppx " ^ Manifest.ppx_tool_display_name tool ^ " deps: " ^ joined_names tool.deps ]
@@ -1642,8 +1511,7 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     match Toolchain.stdlib_dir ~session () with
     | Ok stdlib_dir -> (
         match
-          Toolchain.resolve_library_dir ~exists:Sys.file_exists ~stdlib_dir
-            "unix"
+          Toolchain.resolve_library_dir ~exists:Sys.file_exists ~stdlib_dir "unix"
         with
         | Some path -> "unix-library-dir: " ^ path
         | None -> "unix-library-dir: unavailable")
@@ -1664,32 +1532,20 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     "backend-selection: " ^ backend_selection_note ~session backend_request backend;
     "compiler-version: " ^ compiler_version;
     Toolchain.render_command_report "compiler"
-      (Toolchain.configured_command_report ~session
-         (Toolchain.compiler_cmd backend));
+      (Toolchain.configured_command_report ~session (Toolchain.compiler_cmd backend));
     Toolchain.render_command_report "ocamldep"
       (Toolchain.configured_command_report ~session (Toolchain.ocamldep_cmd ()));
     stdlib_line;
     unix_line;
-    "actions: "
-    ^ joined_names
-        (List.map
-           Manifest.action_display_name
-           pipeline.actions);
+    "actions: " ^ joined_names (List.map Manifest.action_display_name pipeline.actions);
     "preprocessors: "
-    ^ joined_names
-        (List.map
-           Manifest.command_tool_display_name
-           pipeline.preprocessors);
+    ^ joined_names (List.map Manifest.command_tool_display_name pipeline.preprocessors);
   ]
   @ List.concat_map render_action_resolution_lines pipeline.actions
   @ List.concat_map render_preprocessor_resolution_lines pipeline.preprocessors
   @ [
-    "ppx: "
-    ^ joined_names
-        (List.map
-           Manifest.ppx_tool_display_name
-           pipeline.ppx_tools);
-  ]
+      "ppx: " ^ joined_names (List.map Manifest.ppx_tool_display_name pipeline.ppx_tools);
+    ]
   @ List.concat_map render_ppx_resolution_lines pipeline.ppx_tools
   @
   if package_resolution.Toolchain.packages = [] then []
@@ -1700,12 +1556,11 @@ let target_resolution_lines ~session ~backend_request ~backend ~compiler_version
     ]
     @ package_lines
 
-let target_command_lines ~workspace_root pipeline action_results
-    ~module_order_command ~compile_commands ~link_command =
+let target_command_lines ~workspace_root pipeline action_results ~module_order_command
+    ~compile_commands ~link_command =
   List.map
     (fun (action_result : action_result) ->
-      "action "
-      ^ action_result.name
+      "action " ^ action_result.name
       ^ Manifest.package_suffix action_result.package_path
       ^ ": "
       ^
@@ -1717,11 +1572,10 @@ let target_command_lines ~workspace_root pipeline action_results
   @ List.map
       (fun (tool : Manifest.command_tool) ->
         "preprocess " ^ tool.name ^ ": "
-        ^ render_preprocessor_command ~workspace_root
-            ~target_env:(pipeline.options.env) tool)
+        ^ render_preprocessor_command ~workspace_root ~target_env:pipeline.options.env
+            tool)
       pipeline.preprocessors
-  @ ("module-order: " ^ module_order_command)
-    :: compile_commands
+  @ (("module-order: " ^ module_order_command) :: compile_commands)
   @ [ "link: " ^ link_command ]
 
 let render_link_command ~session ~env ~backend ~package_resolution args =
@@ -1736,18 +1590,16 @@ let write_target_report out_dir report json_report =
 
 let static_archive_path archive = Filename.remove_extension archive ^ ".a"
 
-let require_implementation_source ~target_kind ~target_name
-    (source : source_descriptor) =
+let require_implementation_source ~target_kind ~target_name (source : source_descriptor) =
   if source.has_ml then Ok ()
   else
     Error
-      (Printf.sprintf
-         "%s '%s' requires an implementation for main module '%s': %s"
+      (Printf.sprintf "%s '%s' requires an implementation for main module '%s': %s"
          target_kind target_name source.stem source.ml_path)
 
 let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
-    ~backend_request ~backend ~compiler_version ~profile workspace library
-    library_outputs =
+    ~backend_request ~backend ~compiler_version ~profile workspace library library_outputs
+    =
   let target = Manifest.Library library in
   let out_dir = target_out_dir ~profile workspace_root target in
   let dependency_outputs =
@@ -1757,8 +1609,7 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
         | Some output -> output
         | None ->
             failwith
-              (Printf.sprintf "internal error: missing built dependency '%s'"
-                 dependency))
+              (Printf.sprintf "internal error: missing built dependency '%s'" dependency))
       library.Manifest.deps
   in
   let effective_packages =
@@ -1768,20 +1619,15 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
           (fun (output : built_library_output) -> output.packages)
           dependency_outputs)
   in
-  let* package_resolution =
-    Toolchain.resolve_packages ~session effective_packages
-  in
+  let* package_resolution = Toolchain.resolve_packages ~session effective_packages in
   let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
   let* () =
-    validate_wrapped_library_source_conflicts ~workspace_root library
-      pipeline.actions
+    validate_wrapped_library_source_conflicts ~workspace_root library pipeline.actions
   in
   let* action_results =
     run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
-  let* () =
-    materialize_wrapped_library_source ~mode ~workspace_root ~out_dir library
-  in
+  let* () = materialize_wrapped_library_source ~mode ~workspace_root ~out_dir library in
   let wrapper_generated_outputs =
     wrapped_library_generated_outputs ~workspace_root library
   in
@@ -1797,8 +1643,7 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let include_dirs = out_dir :: dependency_include_dirs in
   let* sources =
-    library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outputs
-      library
+    library_source_descriptors ~workspace_root ~out_dir ~planned_generated_outputs library
   in
   let* sources =
     match mode with
@@ -1807,20 +1652,19 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let* prepared_sources =
     let target_env = pipeline.options.env in
-    prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
-      ~target_env pipeline.preprocessors sources
+    prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs ~target_env
+      pipeline.preprocessors sources
   in
   let* ordered_modules =
     match mode with
     | Materialize ->
-        infer_module_order ~session ~verbose ~env:(pipeline.options.env)
+        infer_module_order ~session ~verbose ~env:pipeline.options.env
           ~target_kind:"library" ~target_name:library.name package_resolution
           prepared_sources
     | Plan_only ->
-        dry_run_module_order ~session ~verbose ~env:(pipeline.options.env)
+        dry_run_module_order ~session ~verbose ~env:pipeline.options.env
           ~target_kind:"library" ~target_name:library.name
-          ~preprocessors:pipeline.preprocessors package_resolution
-          prepared_sources
+          ~preprocessors:pipeline.preprocessors package_resolution prepared_sources
   in
   let* extra_lines =
     target_extra_lines ~workspace_root ~profile pipeline action_results
@@ -1829,10 +1673,9 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
     generated_source_reason_overrides ~target_dir:library.dir pipeline.actions
   in
   let fingerprint =
-    target_fingerprint ~session ~manifest_path ~compiler_version
-      ~profile_name:profile
-      ~kind_name:"library" ~target_name:library.name ~backend ~dir:library.dir
-      ~main:None ~ordered_modules ~sources ~package_resolution
+    target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name:profile
+      ~kind_name:"library" ~target_name:library.name ~backend ~dir:library.dir ~main:None
+      ~ordered_modules ~sources ~package_resolution
       ~dependency_fingerprints:
         (List.map
            (fun dependency ->
@@ -1841,86 +1684,72 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
                | Some output -> output
                | None ->
                    failwith
-                     (Printf.sprintf
-                        "internal error: missing built dependency '%s'" dependency)
+                     (Printf.sprintf "internal error: missing built dependency '%s'"
+                        dependency)
              in
              (dependency, output.fingerprint))
            library.deps)
       ~extra_lines
   in
   let archive =
-    Layout.library_archive_for_backend ~profile workspace_root backend
-      library.name
+    Layout.library_archive_for_backend ~profile workspace_root backend library.name
   in
   let module_order_sources = List.concat_map prepared_source_files prepared_sources in
   let* module_order_command =
     match mode with
     | Materialize ->
-        render_module_order_command ~session ~env:(pipeline.options.env)
-          ~package_resolution module_order_sources
-    | Plan_only ->
-        dry_run_module_order_command ~session ~env:(pipeline.options.env)
-          ~package_resolution ~preprocessors:pipeline.preprocessors
+        render_module_order_command ~session ~env:pipeline.options.env ~package_resolution
           module_order_sources
+    | Plan_only ->
+        dry_run_module_order_command ~session ~env:pipeline.options.env
+          ~package_resolution ~preprocessors:pipeline.preprocessors module_order_sources
   in
   let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
-    render_compile_commands ~session ~workspace_root ~backend ~out_dir
-      ~include_dirs ~package_resolution
-      ~compile_flags:(pipeline.options.compile_flags)
-      ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
-      ordered_modules
+    render_compile_commands ~session ~workspace_root ~backend ~out_dir ~include_dirs
+      ~package_resolution ~compile_flags:pipeline.options.compile_flags
+      ~ppx_tools:pipeline.ppx_tools ~env:pipeline.options.env source_table ordered_modules
   in
   let ordered_prepared = ordered_prepared_sources source_table ordered_modules in
   let object_files =
-    List.filter_map
-      (prepared_source_object_path backend out_dir)
-      ordered_prepared
+    List.filter_map (prepared_source_object_path backend out_dir) ordered_prepared
   in
   let expected_outputs =
-    List.concat_map
-      (expected_prepared_source_outputs backend out_dir)
-      ordered_prepared
+    List.concat_map (expected_prepared_source_outputs backend out_dir) ordered_prepared
     @ [ archive ]
     @
-    (match (backend, object_files) with
+    match (backend, object_files) with
     | Toolchain.Native, _ :: _ -> [ static_archive_path archive ]
-    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> [])
+    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> []
   in
   let* link_command =
-    render_link_command ~session ~env:(pipeline.options.env) ~backend
-      ~package_resolution
+    render_link_command ~session ~env:pipeline.options.env ~backend ~package_resolution
       (pipeline.options.link_flags @ [ "-a"; "-o"; archive ] @ object_files)
   in
   let status =
-    Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
-      ~expected_outputs ~fingerprint
+    Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir) ~expected_outputs
+      ~fingerprint
   in
   let status =
-    include_action_execution_reasons ~generated_source_reasons status
-      action_results
+    include_action_execution_reasons ~generated_source_reasons status action_results
   in
   let resolution_lines =
-    target_resolution_lines ~session ~backend_request ~backend
-      ~compiler_version ~package_resolution pipeline
+    target_resolution_lines ~session ~backend_request ~backend ~compiler_version
+      ~package_resolution pipeline
   in
   let command_lines =
-    target_command_lines ~workspace_root pipeline action_results
-      ~module_order_command ~compile_commands ~link_command
+    target_command_lines ~workspace_root pipeline action_results ~module_order_command
+      ~compile_commands ~link_command
   in
   let report =
     Explain.render_report ~kind_name:"library" ~target_name:library.name
-      ~package_path:library.package_path
-      ~profile ~status ~out_dir ~artifact:archive
-      ~resolution_lines ~include_dirs ~module_order:ordered_modules
-      ~command_lines
+      ~package_path:library.package_path ~profile ~status ~out_dir ~artifact:archive
+      ~resolution_lines ~include_dirs ~module_order:ordered_modules ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:"library" ~target_name:library.name
-      ~package_path:library.package_path
-      ~profile ~status ~out_dir ~artifact:archive
-      ~resolution_lines ~include_dirs ~module_order:ordered_modules
-      ~command_lines
+      ~package_path:library.package_path ~profile ~status ~out_dir ~artifact:archive
+      ~resolution_lines ~include_dirs ~module_order:ordered_modules ~command_lines
   in
   Ok
     {
@@ -1938,13 +1767,12 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
       pipeline;
     }
 
-let build_library ~session ~workspace_root ~verbose ~manifest_path
-    ~backend_request ~backend ~compiler_version ~profile workspace library
-    library_outputs =
+let build_library ~session ~workspace_root ~verbose ~manifest_path ~backend_request
+    ~backend ~compiler_version ~profile workspace library library_outputs =
   let* description =
-    describe_library ~mode:Materialize ~session ~workspace_root ~verbose
-      ~manifest_path ~backend_request ~backend ~compiler_version ~profile
-      workspace library library_outputs
+    describe_library ~mode:Materialize ~session ~workspace_root ~verbose ~manifest_path
+      ~backend_request ~backend ~compiler_version ~profile workspace library
+      library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
   let display_name = library.name ^ Manifest.package_suffix library.package_path in
@@ -1962,9 +1790,9 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
       ordered_prepared
     @ [ description.archive ]
     @
-    (match (backend, object_files) with
+    match (backend, object_files) with
     | Toolchain.Native, _ :: _ -> [ static_archive_path description.archive ]
-    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> [])
+    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> []
   in
   let transitive_dep_dirs =
     String_util.dedup_preserve
@@ -1977,8 +1805,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
   in
   prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
-    write_target_report description.out_dir description.report
-      description.json_report;
+    write_target_report description.out_dir description.report description.json_report;
     Hashtbl.replace library_outputs library.name
       {
         archive = description.archive;
@@ -1996,29 +1823,30 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
          display_name description.archive);
     Ok
       (Built_library
-         { name = library.name; out_dir = description.out_dir; archive = description.archive }))
-  else (
+         {
+           name = library.name;
+           out_dir = description.out_dir;
+           archive = description.archive;
+         }))
+  else
     let () = Fs.ensure_dir description.out_dir in
     let* object_files =
       compile_ordered_sources ~session ~workspace_root ~verbose ~backend
         ~out_dir:description.out_dir ~include_dirs:description.include_dirs
         ~package_resolution:description.package_resolution
-        ~compile_flags:(description.pipeline.options.compile_flags)
-        ~ppx_tools:description.pipeline.ppx_tools
-        ~env:(description.pipeline.options.env) source_table
-        description.ordered_modules
+        ~compile_flags:description.pipeline.options.compile_flags
+        ~ppx_tools:description.pipeline.ppx_tools ~env:description.pipeline.options.env
+        source_table description.ordered_modules
     in
     let* _ =
-      Toolchain.ensure_success_compiler ~session
-        ~env:(description.pipeline.options.env)
+      Toolchain.ensure_success_compiler ~session ~env:description.pipeline.options.env
         ~verbose backend description.package_resolution
         (description.pipeline.options.link_flags
         @ [ "-a"; "-o"; description.archive ]
         @ object_files)
     in
     Fs.write_file (Layout.stamp_path description.out_dir) description.fingerprint;
-    write_target_report description.out_dir description.report
-      description.json_report;
+    write_target_report description.out_dir description.report description.json_report;
     Hashtbl.replace library_outputs library.name
       {
         archive = description.archive;
@@ -2031,19 +1859,19 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
       (Printf.sprintf "Built library %s -> %s" display_name description.archive);
     Ok
       (Built_library
-         { name = library.name; out_dir = description.out_dir; archive = description.archive }))
+         {
+           name = library.name;
+           out_dir = description.out_dir;
+           archive = description.archive;
+         })
 
-type runnable_kind =
-  | Executable_kind
-  | Test_kind
+type runnable_kind = Executable_kind | Test_kind
 
-let runnable_kind_name = function
-  | Executable_kind -> "executable"
-  | Test_kind -> "test"
+let runnable_kind_name = function Executable_kind -> "executable" | Test_kind -> "test"
 
 let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
-    ~backend_request ~backend ~compiler_version ~profile ~kind workspace
-    runnable order index library_outputs =
+    ~backend_request ~backend ~compiler_version ~profile ~kind workspace runnable order
+    index library_outputs =
   let target =
     match kind with
     | Executable_kind -> Manifest.Executable runnable
@@ -2057,8 +1885,7 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
         | Some output -> output
         | None ->
             failwith
-              (Printf.sprintf "internal error: missing built dependency '%s'"
-                 dependency))
+              (Printf.sprintf "internal error: missing built dependency '%s'" dependency))
       runnable.Manifest.deps
   in
   let wrapped_library_names =
@@ -2070,8 +1897,8 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let all_exe_stems = runnable.Manifest.main :: runnable.Manifest.modules in
   let stem_prefix =
-    if List.exists (fun stem -> List.mem stem wrapped_library_names) all_exe_stems
-    then "wadi__exe__"
+    if List.exists (fun stem -> List.mem stem wrapped_library_names) all_exe_stems then
+      "wadi__exe__"
     else ""
   in
   let effective_packages =
@@ -2081,16 +1908,12 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
           (fun (output : built_library_output) -> output.packages)
           dependency_outputs)
   in
-  let* package_resolution =
-    Toolchain.resolve_packages ~session effective_packages
-  in
+  let* package_resolution = Toolchain.resolve_packages ~session effective_packages in
   let* pipeline = resolve_pipeline ~workspace_root workspace ~profile target in
   let* action_results =
     run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
-  let planned_generated_outputs =
-    planned_generated_output_names pipeline.actions
-  in
+  let planned_generated_outputs = planned_generated_output_names pipeline.actions in
   let dependency_include_dirs =
     String_util.dedup_preserve
       (List.concat_map
@@ -2121,25 +1944,22 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let* prepared_sources =
     let target_env = pipeline.options.env in
-    prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs
-      ~target_env pipeline.preprocessors all_sources
+    prepare_sources ~mode ~verbose ~workspace_root ~out_dir ~include_dirs ~target_env
+      pipeline.preprocessors all_sources
   in
   let module_prepared_sources =
-    List.filter
-      (fun prepared -> prepared.source.stem <> runnable.main)
-      prepared_sources
+    List.filter (fun prepared -> prepared.source.stem <> runnable.main) prepared_sources
   in
   let* ordered_modules =
     match mode with
     | Materialize ->
-        infer_module_order ~session ~verbose ~env:(pipeline.options.env)
+        infer_module_order ~session ~verbose ~env:pipeline.options.env
           ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name
           package_resolution module_prepared_sources
     | Plan_only ->
-        dry_run_module_order ~session ~verbose ~env:(pipeline.options.env)
+        dry_run_module_order ~session ~verbose ~env:pipeline.options.env
           ~target_kind:(runnable_kind_name kind) ~target_name:runnable.name
-          ~preprocessors:pipeline.preprocessors package_resolution
-          module_prepared_sources
+          ~preprocessors:pipeline.preprocessors package_resolution module_prepared_sources
   in
   let sources = module_sources @ [ main_source ] in
   let source_order = ordered_modules @ [ runnable.main ] in
@@ -2150,10 +1970,10 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     generated_source_reason_overrides ~target_dir:runnable.dir pipeline.actions
   in
   let fingerprint =
-    target_fingerprint ~session ~manifest_path ~compiler_version
-      ~profile_name:profile ~kind_name:(runnable_kind_name kind)
-      ~target_name:runnable.name ~backend ~dir:runnable.dir
-      ~main:(Some runnable.main) ~ordered_modules ~sources ~package_resolution
+    target_fingerprint ~session ~manifest_path ~compiler_version ~profile_name:profile
+      ~kind_name:(runnable_kind_name kind) ~target_name:runnable.name ~backend
+      ~dir:runnable.dir ~main:(Some runnable.main) ~ordered_modules ~sources
+      ~package_resolution
       ~dependency_fingerprints:
         (List.map
            (fun dependency ->
@@ -2162,16 +1982,14 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
                | Some output -> output
                | None ->
                    failwith
-                     (Printf.sprintf
-                        "internal error: missing built dependency '%s'" dependency)
+                     (Printf.sprintf "internal error: missing built dependency '%s'"
+                        dependency)
              in
              (dependency, output.fingerprint))
            runnable.deps)
       ~extra_lines
   in
-  let closure =
-    collect_dependency_closure index (Hashtbl.create 8) runnable.deps
-  in
+  let closure = collect_dependency_closure index (Hashtbl.create 8) runnable.deps in
   let archive_files =
     List.filter_map
       (function
@@ -2192,20 +2010,17 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   let* module_order_command =
     match mode with
     | Materialize ->
-        render_module_order_command ~session ~env:(pipeline.options.env)
-          ~package_resolution module_order_sources
-    | Plan_only ->
-        dry_run_module_order_command ~session ~env:(pipeline.options.env)
-          ~package_resolution ~preprocessors:pipeline.preprocessors
+        render_module_order_command ~session ~env:pipeline.options.env ~package_resolution
           module_order_sources
+    | Plan_only ->
+        dry_run_module_order_command ~session ~env:pipeline.options.env
+          ~package_resolution ~preprocessors:pipeline.preprocessors module_order_sources
   in
   let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
-    render_compile_commands ~stem_prefix ~session ~workspace_root
-      ~backend ~out_dir ~include_dirs ~package_resolution
-      ~compile_flags:(pipeline.options.compile_flags)
-      ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
-      source_order
+    render_compile_commands ~stem_prefix ~session ~workspace_root ~backend ~out_dir
+      ~include_dirs ~package_resolution ~compile_flags:pipeline.options.compile_flags
+      ~ppx_tools:pipeline.ppx_tools ~env:pipeline.options.env source_table source_order
   in
   let ordered_prepared = ordered_prepared_sources source_table source_order in
   let object_files =
@@ -2220,41 +2035,35 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     @ [ binary ]
   in
   let* link_command =
-    render_link_command ~session ~env:(pipeline.options.env) ~backend
-      ~package_resolution
+    render_link_command ~session ~env:pipeline.options.env ~backend ~package_resolution
       (pipeline.options.link_flags
       @ Toolchain.link_args package_resolution
-      @ [ "-o"; binary ]
-      @ archive_files @ object_files)
+      @ [ "-o"; binary ] @ archive_files @ object_files)
   in
   let status =
-    Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir)
-      ~expected_outputs ~fingerprint
+    Explain.evaluate_target ~stamp_path:(Layout.stamp_path out_dir) ~expected_outputs
+      ~fingerprint
   in
   let status =
-    include_action_execution_reasons ~generated_source_reasons status
-      action_results
+    include_action_execution_reasons ~generated_source_reasons status action_results
   in
   let resolution_lines =
-    target_resolution_lines ~session ~backend_request ~backend
-      ~compiler_version ~package_resolution pipeline
+    target_resolution_lines ~session ~backend_request ~backend ~compiler_version
+      ~package_resolution pipeline
   in
   let command_lines =
-    target_command_lines ~workspace_root pipeline action_results
-      ~module_order_command ~compile_commands ~link_command
+    target_command_lines ~workspace_root pipeline action_results ~module_order_command
+      ~compile_commands ~link_command
   in
   let report =
-    Explain.render_report ~kind_name:(runnable_kind_name kind)
-      ~target_name:runnable.name ~package_path:runnable.package_path ~profile
-      ~status ~out_dir ~artifact:binary ~resolution_lines ~include_dirs
-      ~module_order:source_order
-      ~command_lines
+    Explain.render_report ~kind_name:(runnable_kind_name kind) ~target_name:runnable.name
+      ~package_path:runnable.package_path ~profile ~status ~out_dir ~artifact:binary
+      ~resolution_lines ~include_dirs ~module_order:source_order ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:(runnable_kind_name kind)
-      ~target_name:runnable.name ~package_path:runnable.package_path ~profile
-      ~status ~out_dir ~artifact:binary ~resolution_lines ~include_dirs
-      ~module_order:source_order
+      ~target_name:runnable.name ~package_path:runnable.package_path ~profile ~status
+      ~out_dir ~artifact:binary ~resolution_lines ~include_dirs ~module_order:source_order
       ~command_lines
   in
   Ok
@@ -2274,38 +2083,32 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
       stem_prefix;
     }
 
-let build_runnable ~session ~workspace_root ~verbose ~manifest_path
-    ~backend_request ~backend ~compiler_version ~profile ~kind workspace
-    runnable order index library_outputs =
+let build_runnable ~session ~workspace_root ~verbose ~manifest_path ~backend_request
+    ~backend ~compiler_version ~profile ~kind workspace runnable order index
+    library_outputs =
   let* description =
-    describe_runnable ~mode:Materialize ~session ~workspace_root ~verbose
-      ~manifest_path ~backend_request ~backend ~compiler_version ~profile
-      ~kind workspace runnable order index library_outputs
+    describe_runnable ~mode:Materialize ~session ~workspace_root ~verbose ~manifest_path
+      ~backend_request ~backend ~compiler_version ~profile ~kind workspace runnable order
+      index library_outputs
   in
   let source_table = ordered_source_table description.prepared_sources in
-  let display_name =
-    runnable.name ^ Manifest.package_suffix runnable.package_path
-  in
-  let ordered_prepared =
-    ordered_prepared_sources source_table description.source_order
-  in
+  let display_name = runnable.name ^ Manifest.package_suffix runnable.package_path in
+  let ordered_prepared = ordered_prepared_sources source_table description.source_order in
   let expected_outputs =
     List.concat_map
-      (expected_prepared_source_outputs ~stem_prefix:description.stem_prefix
-         backend description.out_dir)
+      (expected_prepared_source_outputs ~stem_prefix:description.stem_prefix backend
+         description.out_dir)
       ordered_prepared
     @ [ description.binary ]
   in
   prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
-    write_target_report description.out_dir description.report
-      description.json_report;
+    write_target_report description.out_dir description.report description.json_report;
     print_endline
       (Printf.sprintf
          (match description.status.Explain.build_status with
          | Explain.Reused -> "Up to date %s %s -> %s"
-         | Explain.Regenerated ->
-             "Regenerated action outputs for %s %s -> %s"
+         | Explain.Regenerated -> "Regenerated action outputs for %s %s -> %s"
          | Explain.Rebuilt -> "Built %s %s -> %s")
          (runnable_kind_name kind) display_name description.binary);
     Ok
@@ -2324,33 +2127,29 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
               out_dir = description.out_dir;
               binary = description.binary;
             }))
-  else (
+  else
     let () = Fs.ensure_dir description.out_dir in
     let* object_files =
       compile_ordered_sources ~stem_prefix:description.stem_prefix ~session
         ~workspace_root ~verbose ~backend ~out_dir:description.out_dir
         ~include_dirs:description.include_dirs
         ~package_resolution:description.package_resolution
-        ~compile_flags:(description.pipeline.options.compile_flags)
-        ~ppx_tools:description.pipeline.ppx_tools
-        ~env:(description.pipeline.options.env) source_table
-        description.source_order
+        ~compile_flags:description.pipeline.options.compile_flags
+        ~ppx_tools:description.pipeline.ppx_tools ~env:description.pipeline.options.env
+        source_table description.source_order
     in
     let* _ =
-      Toolchain.ensure_success_compiler ~session
-        ~env:(description.pipeline.options.env)
+      Toolchain.ensure_success_compiler ~session ~env:description.pipeline.options.env
         ~verbose backend description.package_resolution
         (description.pipeline.options.link_flags
         @ Toolchain.link_args description.package_resolution
-        @ [ "-o"; description.binary ]
-        @ description.archive_files @ object_files)
+        @ [ "-o"; description.binary ] @ description.archive_files @ object_files)
     in
     Fs.write_file (Layout.stamp_path description.out_dir) description.fingerprint;
-    write_target_report description.out_dir description.report
-      description.json_report;
+    write_target_report description.out_dir description.report description.json_report;
     print_endline
-      (Printf.sprintf "Built %s %s -> %s" (runnable_kind_name kind)
-         display_name description.binary);
+      (Printf.sprintf "Built %s %s -> %s" (runnable_kind_name kind) display_name
+         description.binary);
     Ok
       (match kind with
       | Executable_kind ->
@@ -2366,7 +2165,7 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
               name = runnable.name;
               out_dir = description.out_dir;
               binary = description.binary;
-            }))
+            })
 
 type build_failure = {
   target_name : string;
@@ -2378,19 +2177,12 @@ let target_deps_failed failed_set deps =
   List.find_opt (fun dep -> List.mem dep failed_set) deps
 
 let format_build_failures failures =
-  let direct =
-    List.filter (fun f -> f.skipped_by = None) failures
-  in
-  let skipped =
-    List.filter (fun f -> f.skipped_by <> None) failures
-  in
+  let direct = List.filter (fun f -> f.skipped_by = None) failures in
+  let skipped = List.filter (fun f -> f.skipped_by <> None) failures in
   let buf = Buffer.create 256 in
-  Buffer.add_string buf
-    (Printf.sprintf "%d target(s) failed" (List.length failures));
+  Buffer.add_string buf (Printf.sprintf "%d target(s) failed" (List.length failures));
   List.iter
-    (fun f ->
-      Buffer.add_string buf
-        (Printf.sprintf "\n  %s: %s" f.target_name f.message))
+    (fun f -> Buffer.add_string buf (Printf.sprintf "\n  %s: %s" f.target_name f.message))
     direct;
   if skipped <> [] then (
     Buffer.add_string buf
@@ -2405,8 +2197,7 @@ let format_build_failures failures =
   Buffer.contents buf
 
 let build ~workspace_root ~verbose ?(keep_going = false) ?(jobs = 1)
-    ?(requested_targets = []) ?(backend_request = Toolchain.Auto) ?profile
-    workspace =
+    ?(requested_targets = []) ?(backend_request = Toolchain.Auto) ?profile workspace =
   let _jobs = jobs in
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
@@ -2433,23 +2224,22 @@ let build ~workspace_root ~verbose ?(keep_going = false) ?(jobs = 1)
       | Manifest.Library library :: rest ->
           let* artifact =
             build_library ~session ~workspace_root ~verbose ~manifest_path
-              ~backend_request ~backend ~compiler_version ~profile workspace
-              library library_outputs
+              ~backend_request ~backend ~compiler_version ~profile workspace library
+              library_outputs
           in
           loop (artifact :: artifacts) rest
       | Manifest.Executable executable :: rest ->
           let* artifact =
             build_runnable ~session ~workspace_root ~verbose ~manifest_path
-              ~backend_request ~backend ~compiler_version ~profile
-              ~kind:Executable_kind workspace executable order index
-              library_outputs
+              ~backend_request ~backend ~compiler_version ~profile ~kind:Executable_kind
+              workspace executable order index library_outputs
           in
           loop (artifact :: artifacts) rest
       | Manifest.Test test :: rest ->
           let* artifact =
             build_runnable ~session ~workspace_root ~verbose ~manifest_path
-              ~backend_request ~backend ~compiler_version ~profile
-              ~kind:Test_kind workspace test order index library_outputs
+              ~backend_request ~backend ~compiler_version ~profile ~kind:Test_kind
+              workspace test order index library_outputs
           in
           loop (artifact :: artifacts) rest
     in
@@ -2464,52 +2254,40 @@ let build ~workspace_root ~verbose ?(keep_going = false) ?(jobs = 1)
                 artifacts = List.rev artifacts;
               }
           else Error (format_build_failures (List.rev failures))
-      | target :: rest ->
+      | target :: rest -> (
           let name = Manifest.target_name target in
           let deps = dependency_names target in
-          (match target_deps_failed failed_names deps with
+          match target_deps_failed failed_names deps with
           | Some dep_name ->
               let failure =
-                {
-                  target_name = name;
-                  message = "skipped";
-                  skipped_by = Some dep_name;
-                }
+                { target_name = name; message = "skipped"; skipped_by = Some dep_name }
               in
               prerr_endline
-                (Printf.sprintf "Skipping %s (dependency %s failed)" name
-                   dep_name);
+                (Printf.sprintf "Skipping %s (dependency %s failed)" name dep_name);
               loop artifacts (failure :: failures) (name :: failed_names) rest
-          | None ->
+          | None -> (
               let result =
                 match target with
                 | Manifest.Library library ->
-                    build_library ~session ~workspace_root ~verbose
-                      ~manifest_path ~backend_request ~backend
-                      ~compiler_version ~profile workspace library
-                      library_outputs
+                    build_library ~session ~workspace_root ~verbose ~manifest_path
+                      ~backend_request ~backend ~compiler_version ~profile workspace
+                      library library_outputs
                 | Manifest.Executable executable ->
-                    build_runnable ~session ~workspace_root ~verbose
-                      ~manifest_path ~backend_request ~backend
-                      ~compiler_version ~profile ~kind:Executable_kind
-                      workspace executable order index library_outputs
+                    build_runnable ~session ~workspace_root ~verbose ~manifest_path
+                      ~backend_request ~backend ~compiler_version ~profile
+                      ~kind:Executable_kind workspace executable order index
+                      library_outputs
                 | Manifest.Test test ->
-                    build_runnable ~session ~workspace_root ~verbose
-                      ~manifest_path ~backend_request ~backend
-                      ~compiler_version ~profile ~kind:Test_kind workspace
-                      test order index library_outputs
+                    build_runnable ~session ~workspace_root ~verbose ~manifest_path
+                      ~backend_request ~backend ~compiler_version ~profile ~kind:Test_kind
+                      workspace test order index library_outputs
               in
-              (match result with
-              | Ok artifact ->
-                  loop (artifact :: artifacts) failures failed_names rest
+              match result with
+              | Ok artifact -> loop (artifact :: artifacts) failures failed_names rest
               | Error message ->
-                  let failure =
-                    { target_name = name; message; skipped_by = None }
-                  in
-                  prerr_endline
-                    (Printf.sprintf "Failed to build %s: %s" name message);
-                  loop artifacts (failure :: failures) (name :: failed_names)
-                    rest))
+                  let failure = { target_name = name; message; skipped_by = None } in
+                  prerr_endline (Printf.sprintf "Failed to build %s: %s" name message);
+                  loop artifacts (failure :: failures) (name :: failed_names) rest))
     in
     loop [] [] [] order
 
@@ -2529,14 +2307,13 @@ let explain_current ~workspace_root ?(requested_targets = [])
       let index = index_targets workspace in
       String_util.dedup_preserve requested_targets
       |> List.map (fun name ->
-             match Hashtbl.find_opt index name with
-             | Some target -> target
-             | None ->
-                 failwith
-                   (Printf.sprintf
-                      "internal error: explain target '%s' disappeared during \
-                       resolution"
-                      name))
+          match Hashtbl.find_opt index name with
+          | Some target -> target
+          | None ->
+              failwith
+                (Printf.sprintf
+                   "internal error: explain target '%s' disappeared during resolution"
+                   name))
   in
   let requested_names = List.map Manifest.target_name display_targets in
   let* backend = Toolchain.resolve_backend ~session backend_request in
@@ -2549,9 +2326,9 @@ let explain_current ~workspace_root ?(requested_targets = [])
     | [] -> Ok ()
     | Manifest.Library library :: rest ->
         let* description =
-          describe_library ~mode:Plan_only ~session ~workspace_root
-            ~verbose:false ~manifest_path ~backend_request ~backend
-            ~compiler_version ~profile workspace library library_outputs
+          describe_library ~mode:Plan_only ~session ~workspace_root ~verbose:false
+            ~manifest_path ~backend_request ~backend ~compiler_version ~profile workspace
+            library library_outputs
         in
         let plan_dep_include_dirs =
           String_util.dedup_preserve
@@ -2579,10 +2356,9 @@ let explain_current ~workspace_root ?(requested_targets = [])
         loop rest
     | Manifest.Executable executable :: rest ->
         let* description =
-          describe_runnable ~mode:Plan_only ~session ~workspace_root
-            ~verbose:false ~manifest_path ~backend_request ~backend
-            ~compiler_version ~profile ~kind:Executable_kind workspace
-            executable order index library_outputs
+          describe_runnable ~mode:Plan_only ~session ~workspace_root ~verbose:false
+            ~manifest_path ~backend_request ~backend ~compiler_version ~profile
+            ~kind:Executable_kind workspace executable order index library_outputs
         in
         Hashtbl.replace reports executable.name
           {
@@ -2593,10 +2369,9 @@ let explain_current ~workspace_root ?(requested_targets = [])
         loop rest
     | Manifest.Test test :: rest ->
         let* description =
-          describe_runnable ~mode:Plan_only ~session ~workspace_root
-            ~verbose:false ~manifest_path ~backend_request ~backend
-            ~compiler_version ~profile ~kind:Test_kind workspace test order
-            index library_outputs
+          describe_runnable ~mode:Plan_only ~session ~workspace_root ~verbose:false
+            ~manifest_path ~backend_request ~backend ~compiler_version ~profile
+            ~kind:Test_kind workspace test order index library_outputs
         in
         Hashtbl.replace reports test.name
           {
@@ -2614,8 +2389,7 @@ let explain_current ~workspace_root ?(requested_targets = [])
         | Some report -> collect (report :: acc) rest
         | None ->
             Error
-              (Printf.sprintf
-                 "internal error: missing current explain report for %s '%s'"
+              (Printf.sprintf "internal error: missing current explain report for %s '%s'"
                  (Manifest.target_kind_name target)
                  (Manifest.target_name target)))
   in

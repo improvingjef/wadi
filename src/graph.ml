@@ -23,16 +23,12 @@ let resolve_profile workspace profile =
   | Some _ | None -> Manifest.default_profile workspace
 
 let render_names label names =
-  label ^ ": "
-  ^
-  match names with
-  | [] -> "none"
-  | names -> String.concat ", " names
+  label ^ ": " ^ match names with [] -> "none" | names -> String.concat ", " names
 
 let package_names resolution = resolution.Toolchain.packages
 
-let plan ~workspace_root ?(requested_targets = [])
-    ?(backend_request = Toolchain.Auto) ?profile workspace =
+let plan ~workspace_root ?(requested_targets = []) ?(backend_request = Toolchain.Auto)
+    ?profile workspace =
   let workspace_root = Fs.realpath workspace_root in
   let manifest_path = Filename.concat workspace_root Manifest.default_filename in
   let session = Toolchain.create_session () in
@@ -53,10 +49,9 @@ let plan ~workspace_root ?(requested_targets = [])
           }
     | Manifest.Library library :: rest ->
         let* description =
-          Builder.describe_library ~mode:Builder.Plan_only ~session
-            ~workspace_root ~verbose:false ~manifest_path ~backend_request
-            ~backend ~compiler_version ~profile workspace library
-            library_outputs
+          Builder.describe_library ~mode:Builder.Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile workspace library library_outputs
         in
         let graph_dep_dirs =
           String_util.dedup_preserve
@@ -80,25 +75,21 @@ let plan ~workspace_root ?(requested_targets = [])
              target = Manifest.Library library;
              direct_workspace_deps = library.deps;
              effective_packages = package_names description.package_resolution;
-             actions =
-               List.map Manifest.action_display_name
-                 description.pipeline.actions;
+             actions = List.map Manifest.action_display_name description.pipeline.actions;
              preprocessors =
                List.map Manifest.command_tool_display_name
                  description.pipeline.preprocessors;
              ppx_tools =
-               List.map Manifest.ppx_tool_display_name
-                 description.pipeline.ppx_tools;
+               List.map Manifest.ppx_tool_display_name description.pipeline.ppx_tools;
              module_order = description.ordered_modules;
            }
           :: acc)
           rest
     | Manifest.Executable executable :: rest ->
         let* description =
-          Builder.describe_runnable ~mode:Builder.Plan_only ~session
-            ~workspace_root ~verbose:false ~manifest_path ~backend_request
-            ~backend ~compiler_version ~profile
-            ~kind:Builder.Executable_kind workspace executable order index
+          Builder.describe_runnable ~mode:Builder.Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile ~kind:Builder.Executable_kind workspace executable order index
             library_outputs
         in
         loop
@@ -106,40 +97,33 @@ let plan ~workspace_root ?(requested_targets = [])
              target = Manifest.Executable executable;
              direct_workspace_deps = executable.deps;
              effective_packages = package_names description.package_resolution;
-             actions =
-               List.map Manifest.action_display_name
-                 description.pipeline.actions;
+             actions = List.map Manifest.action_display_name description.pipeline.actions;
              preprocessors =
                List.map Manifest.command_tool_display_name
                  description.pipeline.preprocessors;
              ppx_tools =
-               List.map Manifest.ppx_tool_display_name
-                 description.pipeline.ppx_tools;
+               List.map Manifest.ppx_tool_display_name description.pipeline.ppx_tools;
              module_order = description.source_order;
            }
           :: acc)
           rest
     | Manifest.Test test :: rest ->
         let* description =
-          Builder.describe_runnable ~mode:Builder.Plan_only ~session
-            ~workspace_root ~verbose:false ~manifest_path ~backend_request
-            ~backend ~compiler_version ~profile ~kind:Builder.Test_kind
-            workspace test order index library_outputs
+          Builder.describe_runnable ~mode:Builder.Plan_only ~session ~workspace_root
+            ~verbose:false ~manifest_path ~backend_request ~backend ~compiler_version
+            ~profile ~kind:Builder.Test_kind workspace test order index library_outputs
         in
         loop
           ({
              target = Manifest.Test test;
              direct_workspace_deps = test.deps;
              effective_packages = package_names description.package_resolution;
-             actions =
-               List.map Manifest.action_display_name
-                 description.pipeline.actions;
+             actions = List.map Manifest.action_display_name description.pipeline.actions;
              preprocessors =
                List.map Manifest.command_tool_display_name
                  description.pipeline.preprocessors;
              ppx_tools =
-               List.map Manifest.ppx_tool_display_name
-                 description.pipeline.ppx_tools;
+               List.map Manifest.ppx_tool_display_name description.pipeline.ppx_tools;
              module_order = description.source_order;
            }
           :: acc)
@@ -165,10 +149,7 @@ let render_report (report : report) =
   let header =
     [
       ("Workspace: "
-      ^
-      match report.workspace_name with
-      | Some name -> name
-      | None -> "unnamed");
+      ^ match report.workspace_name with Some name -> name | None -> "unnamed");
       "Profile: " ^ report.profile;
       ("Requested-targets: "
       ^

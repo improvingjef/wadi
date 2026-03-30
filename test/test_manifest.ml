@@ -13,7 +13,7 @@ let env_value name bindings =
 let cases =
   [
     ( "parses a minimal workspace",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -31,7 +31,8 @@ main = "main"
 deps = ["core"]
 |})
         in
-        assert_int_equal 2 (List.length workspace.Manifest.targets)
+        assert_int_equal 2
+          (List.length workspace.Manifest.targets)
           "expected one library and one executable";
         match workspace.Manifest.targets with
         | [ Manifest.Library library; Manifest.Executable executable ] ->
@@ -39,13 +40,12 @@ deps = ["core"]
               "library name should come from the section path";
             assert_string_equal "app" executable.name
               "executable name should come from the section path"
-        | _ -> fail "unexpected target layout in parsed workspace")) ;
+        | _ -> fail "unexpected target layout in parsed workspace" );
     ( "rejects duplicate keys",
-      (fun () ->
+      fun () ->
         let error =
           expect_error
-            (load_manifest
-               {|
+            (load_manifest {|
 [library.core]
 dir = "lib"
 dir = "src"
@@ -53,9 +53,9 @@ modules = ["core"]
 |})
         in
         assert_string_contains ~needle:"duplicate key 'dir'" error
-          "duplicate keys should be rejected")) ;
+          "duplicate keys should be rejected" );
     ( "detects dependency cycles",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -73,9 +73,9 @@ deps = ["alpha"]
         in
         let error = expect_error (Builder.resolve_build_order workspace []) in
         assert_string_contains ~needle:"dependency cycle detected" error
-          "cycles should be reported")) ;
+          "cycles should be reported" );
     ( "rejects executable dependencies",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -92,9 +92,9 @@ deps = ["tool"]
         in
         let error = expect_error (Builder.resolve_build_order workspace []) in
         assert_string_contains ~needle:"depends on executable" error
-          "libraries should not be allowed to depend on executables")) ;
+          "libraries should not be allowed to depend on executables" );
     ( "rejects test dependencies",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -111,9 +111,9 @@ main = "main"
         in
         let error = expect_error (Builder.resolve_build_order workspace []) in
         assert_string_contains ~needle:"depends on test 'beta'" error
-          "tests should not be allowed to depend on other tests")) ;
+          "tests should not be allowed to depend on other tests" );
     ( "parses test targets",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -129,7 +129,8 @@ modules = ["helpers"]
 deps = ["core"]
 |})
         in
-        assert_int_equal 2 (List.length workspace.Manifest.targets)
+        assert_int_equal 2
+          (List.length workspace.Manifest.targets)
           "expected one library and one test";
         match workspace.Manifest.targets with
         | [ Manifest.Library library; Manifest.Test test ] ->
@@ -137,9 +138,9 @@ deps = ["core"]
               "library name should come from the section path";
             assert_string_equal "unit" test.name
               "test name should come from the section path"
-        | _ -> fail "unexpected target layout in parsed workspace")) ;
+        | _ -> fail "unexpected target layout in parsed workspace" );
     ( "parses dedicated bench declarations",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -165,7 +166,8 @@ description = "quick smoke benchmark"
               "bench declarations should reference executable targets by name";
             assert_string_equal "--quick" (List.hd bench.argv)
               "bench declarations should preserve argv";
-            assert_string_equal "quick" (env_value "BENCH_MODE" bench.env)
+            assert_string_equal "quick"
+              (env_value "BENCH_MODE" bench.env)
               "bench declarations should parse env bindings";
             assert_true (bench.warmup = Some 0)
               "bench declarations should preserve warmup overrides";
@@ -176,9 +178,9 @@ description = "quick smoke benchmark"
               | Some description -> description
               | None -> fail "expected bench description")
               "bench declarations should parse optional descriptions"
-        | _ -> fail "expected a single parsed bench declaration")) ;
+        | _ -> fail "expected a single parsed bench declaration" );
     ( "parses external package declarations",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -199,14 +201,13 @@ deps = ["patterns"]
         | [ Manifest.Library library; Manifest.Executable executable ] ->
             assert_string_equal "str" (List.nth library.packages 0)
               "library packages should preserve manifest order";
-            assert_string_equal "compiler-libs.common"
-              (List.nth library.packages 1)
+            assert_string_equal "compiler-libs.common" (List.nth library.packages 1)
               "package names with dots should be accepted";
             assert_string_equal "unix" (List.hd executable.packages)
               "executables should parse direct package requirements"
-        | _ -> fail "unexpected target layout in parsed workspace")) ;
+        | _ -> fail "unexpected target layout in parsed workspace" );
     ( "parses wrapped library declarations",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -221,9 +222,9 @@ modules = ["greeting"]
         | [ Manifest.Library library ] ->
             assert_true library.wrapped
               "library wrapped mode should parse from boolean manifest fields"
-        | _ -> fail "expected a single wrapped library target")) ;
+        | _ -> fail "expected a single wrapped library target" );
     ( "parses root watch configuration",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -244,13 +245,12 @@ ignore = ["vendor/**", "docs/**"]
           "watch ignores should preserve manifest order";
         assert_string_equal "docs/**"
           (List.nth workspace.Manifest.watch.ignore_globs 1)
-          "watch ignores should keep multiple globs")) ;
+          "watch ignores should keep multiple globs" );
     ( "allows wrapped libraries to declare no child modules",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
-            (load_manifest
-               {|
+            (load_manifest {|
 [library.core]
 wrapped = true
 dir = "lib"
@@ -260,10 +260,11 @@ modules = []
         match workspace.Manifest.targets with
         | [ Manifest.Library library ] ->
             assert_true (library.modules = [])
-              "wrapped libraries should be allowed to rely on an explicit wrapper without child modules"
-        | _ -> fail "expected a single wrapped library target")) ;
+              "wrapped libraries should be allowed to rely on an explicit wrapper \
+               without child modules"
+        | _ -> fail "expected a single wrapped library target" );
     ( "parses defaults, tools, and profile target overrides",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -310,34 +311,42 @@ main = "main"
         in
         assert_string_equal "release" workspace.Manifest.defaults.default_profile
           "defaults should define the implicit profile name";
-        assert_int_equal 1 (List.length workspace.Manifest.actions)
+        assert_int_equal 1
+          (List.length workspace.Manifest.actions)
           "actions should be collected separately from targets";
-        assert_int_equal 1 (List.length workspace.Manifest.preprocessors)
+        assert_int_equal 1
+          (List.length workspace.Manifest.preprocessors)
           "preprocessors should be parsed into their own registry";
-        assert_int_equal 1 (List.length workspace.Manifest.ppx_tools)
+        assert_int_equal 1
+          (List.length workspace.Manifest.ppx_tools)
           "ppx tools should be parsed into their own registry";
         let preprocessor = List.hd workspace.Manifest.preprocessors in
         let ppx_tool = List.hd workspace.Manifest.ppx_tools in
-        assert_string_equal "scripts/template.txt" (List.hd preprocessor.Manifest.deps)
+        assert_string_equal "scripts/template.txt"
+          (List.hd preprocessor.Manifest.deps)
           "preprocessors should keep declared auxiliary inputs";
-        assert_string_equal "ppx/config.txt" (List.hd ppx_tool.Manifest.deps)
+        assert_string_equal "ppx/config.txt"
+          (List.hd ppx_tool.Manifest.deps)
           "ppx tools should keep declared auxiliary inputs";
         let target =
           match workspace.Manifest.targets with
-          | [ Manifest.Executable executable ] ->
-              Manifest.Executable executable
+          | [ Manifest.Executable executable ] -> Manifest.Executable executable
           | _ -> fail "expected a single executable target"
         in
         let options =
           expect_ok (Manifest.resolve_target_options workspace "release" target)
         in
-        assert_string_equal "generate" (List.hd options.Manifest.actions)
+        assert_string_equal "generate"
+          (List.hd options.Manifest.actions)
           "default actions should flow into resolved target options";
-        assert_string_equal "expand" (List.hd options.Manifest.preprocess)
+        assert_string_equal "expand"
+          (List.hd options.Manifest.preprocess)
           "default preprocessors should flow into resolved target options";
-        assert_string_equal "rewrite" (List.hd options.Manifest.ppx)
+        assert_string_equal "rewrite"
+          (List.hd options.Manifest.ppx)
           "default ppx tools should flow into resolved target options";
-        assert_string_equal "-principal" (List.nth options.Manifest.compile_flags 0)
+        assert_string_equal "-principal"
+          (List.nth options.Manifest.compile_flags 0)
           "default compile flags should be preserved";
         assert_string_equal "-strict-sequence"
           (List.nth options.Manifest.compile_flags 1)
@@ -345,19 +354,22 @@ main = "main"
         assert_string_equal "-rectypes"
           (List.nth options.Manifest.compile_flags 2)
           "profile target overrides should append after profile flags";
-        assert_string_equal "-custom" (List.hd options.Manifest.link_flags)
+        assert_string_equal "-custom"
+          (List.hd options.Manifest.link_flags)
           "profile target link overrides should be applied";
-        assert_string_equal "demo" (env_value "MODE" options.Manifest.env)
+        assert_string_equal "demo"
+          (env_value "MODE" options.Manifest.env)
           "target env overrides should win over profile and default env";
-        assert_string_equal "release" (env_value "PROFILE" options.Manifest.env)
+        assert_string_equal "release"
+          (env_value "PROFILE" options.Manifest.env)
           "profile env should be retained when not overridden";
         match options.Manifest.sandbox with
         | Some Manifest.Target -> ()
         | Some Manifest.Workspace ->
             fail "target override sandbox should replace the default sandbox"
-        | None -> fail "resolved options should keep the target sandbox override")) ;
+        | None -> fail "resolved options should keep the target sandbox override" );
     ( "parses first-class multi-step actions",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -377,7 +389,8 @@ modules = ["version"]
         in
         match workspace.Manifest.actions with
         | [ action ] ->
-            assert_int_equal 2 (List.length action.Manifest.steps)
+            assert_int_equal 2
+              (List.length action.Manifest.steps)
               "multi-step actions should preserve every declared command";
             assert_string_equal "./scripts/render.sh"
               (List.hd (List.hd action.Manifest.steps))
@@ -385,9 +398,9 @@ modules = ["version"]
             assert_string_equal "./scripts/finalize.sh"
               (List.hd (List.nth action.Manifest.steps 1))
               "the second action step should keep its argv"
-        | _ -> fail "expected a single parsed action")) ;
+        | _ -> fail "expected a single parsed action" );
     ( "parses checked-in generated source outputs for actions",
-      (fun () ->
+      fun () ->
         let workspace =
           expect_ok
             (load_manifest
@@ -408,9 +421,9 @@ actions = ["generate"]
             assert_string_equal "version.ml"
               (List.hd action.Manifest.checked_in_sources)
               "actions should preserve explicitly declared checked-in generated sources"
-        | _ -> fail "expected a single parsed action")) ;
+        | _ -> fail "expected a single parsed action" );
     ( "rejects checked-in generated source entries that are not declared outputs",
-      (fun () ->
+      fun () ->
         let error =
           expect_error
             (load_manifest
@@ -427,11 +440,13 @@ actions = ["generate"]
 |})
         in
         assert_string_contains
-          ~needle:"checked_in_sources entry 'other.ml' must name one of the declared action outputs"
-          error
-          "checked-in generated sources should be constrained to declared outputs")) ;
+          ~needle:
+            "checked_in_sources entry 'other.ml' must name one of the declared action \
+             outputs"
+          error "checked-in generated sources should be constrained to declared outputs"
+    );
     ( "parses multi-package workspace members",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-members" (fun workspace_root ->
             write_manifest workspace_root
               {|
@@ -464,20 +479,17 @@ deps = ["core"]
             assert_string_equal "release" workspace.Manifest.defaults.default_profile
               "root defaults should remain the workspace-wide defaults";
             match workspace.Manifest.targets with
-            | [
-             Manifest.Library shared;
-             Manifest.Library core;
-             Manifest.Executable demo;
-            ] ->
+            | [ Manifest.Library shared; Manifest.Library core; Manifest.Executable demo ]
+              ->
                 assert_string_equal "shared" shared.dir
                   "root targets should keep root-relative directories";
                 assert_string_equal "packages/core/lib" core.dir
                   "member libraries should be rebased under the member path";
                 assert_string_equal "packages/app/app" demo.dir
                   "member executables should be rebased under the member path"
-            | _ -> fail "expected merged root and member targets")) );
+            | _ -> fail "expected merged root and member targets") );
     ( "parses package-local member tools with rebased paths",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-member-tools" (fun workspace_root ->
             write_manifest workspace_root
               {|
@@ -523,8 +535,8 @@ ppx = ["rewrite"]
                 workspace.Manifest.targets
             in
             (match member_target with
-            | Some (Manifest.Library library) -> (
-                match library.package_path with
+            | Some (Manifest.Library library) ->
+                (match library.package_path with
                 | Some package_path ->
                     assert_string_equal "packages/core" package_path
                       "member targets should record their package path"
@@ -534,7 +546,9 @@ ppx = ["rewrite"]
             | Some _ -> fail "expected the member target to be a library"
             | None -> fail "expected to find the rebased member library");
             let action =
-              match Manifest.find_action workspace ~package_path:"packages/core" "generate" with
+              match
+                Manifest.find_action workspace ~package_path:"packages/core" "generate"
+              with
               | Some action -> action
               | None -> fail "expected to resolve the member-local action"
             in
@@ -547,14 +561,17 @@ ppx = ["rewrite"]
               | None -> fail "expected to resolve the member-local preprocessor"
             in
             let ppx_tool =
-              match Manifest.find_ppx_tool workspace ~package_path:"packages/core" "rewrite" with
+              match
+                Manifest.find_ppx_tool workspace ~package_path:"packages/core" "rewrite"
+              with
               | Some tool -> tool
               | None -> fail "expected to resolve the member-local ppx tool"
             in
             assert_string_equal "packages/core/scripts/generate.sh"
               (List.hd (List.hd action.Manifest.steps))
               "member action programs should be rebased under the member path";
-            assert_string_equal "packages/core" (Option.get action.Manifest.cwd)
+            assert_string_equal "packages/core"
+              (Option.get action.Manifest.cwd)
               "member action cwd '.' should rebase to the member root";
             assert_string_equal "packages/core/templates/version.txt"
               (List.hd action.Manifest.deps)
@@ -573,9 +590,9 @@ ppx = ["rewrite"]
               "member ppx tools should rebase their program paths";
             assert_string_equal "packages/core/ppx/config.txt"
               (List.hd ppx_tool.Manifest.deps)
-              "member ppx tools should rebase their deps")) );
+              "member ppx tools should rebase their deps") );
     ( "rejects workspace-wide sections in member manifests",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-member-defaults" (fun workspace_root ->
             write_manifest workspace_root
               {|
@@ -592,15 +609,12 @@ profile = "release"
 dir = "lib"
 modules = ["core"]
 |};
-            let error =
-              expect_error (Manifest.load (manifest_path workspace_root))
-            in
+            let error = expect_error (Manifest.load (manifest_path workspace_root)) in
             assert_string_contains
-              ~needle:"member manifests may not define defaults sections"
-              error
-              "member manifests should keep workspace defaults in the root manifest")) );
+              ~needle:"member manifests may not define defaults sections" error
+              "member manifests should keep workspace defaults in the root manifest") );
     ( "rejects watch sections in member manifests",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-member-watch" (fun workspace_root ->
             write_manifest workspace_root
               {|
@@ -617,23 +631,16 @@ include = ["lib/**"]
 dir = "lib"
 modules = ["core"]
 |};
-            let error =
-              expect_error (Manifest.load (manifest_path workspace_root))
-            in
+            let error = expect_error (Manifest.load (manifest_path workspace_root)) in
             assert_string_contains
-              ~needle:"member manifests may not define watch sections"
-              error
-              "member manifests should keep watch policy in the root manifest")) );
+              ~needle:"member manifests may not define watch sections" error
+              "member manifests should keep watch policy in the root manifest") );
     ( "rejects invalid environment bindings",
-      (fun () ->
-        let error =
-          expect_error
-            (load_manifest
-               {|
+      fun () ->
+        let error = expect_error (load_manifest {|
 [defaults]
 env = ["BROKEN_ENV"]
-|})
-        in
+|}) in
         assert_string_contains ~needle:"NAME=value" error
-          "environment bindings should require NAME=value syntax")) ;
+          "environment bindings should require NAME=value syntax" );
   ]

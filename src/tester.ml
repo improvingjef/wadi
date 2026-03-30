@@ -1,17 +1,8 @@
-type failure = {
-  name : string;
-  package_path : string option;
-  status : int;
-}
+type failure = { name : string; package_path : string option; status : int }
 
 let ( let* ) = Result.bind
-
-let kind_article = function
-  | "executable" -> "an"
-  | _ -> "a"
-
-let display_name name package_path =
-  name ^ Manifest.package_suffix package_path
+let kind_article = function "executable" -> "an" | _ -> "a"
+let display_name name package_path = name ^ Manifest.package_suffix package_path
 
 let test_targets workspace =
   List.filter_map
@@ -40,8 +31,7 @@ let resolve_requested_targets workspace requested_targets =
           | Some target ->
               let kind = Manifest.target_kind_name target in
               Error
-                (Printf.sprintf
-                   "target '%s' is %s %s; wadi test only supports tests" name
+                (Printf.sprintf "target '%s' is %s %s; wadi test only supports tests" name
                    (kind_article kind) kind))
     in
     loop [] requested_targets
@@ -49,21 +39,16 @@ let resolve_requested_targets workspace requested_targets =
 let find_built_test name artifacts =
   List.find_map
     (function
-      | Builder.Built_test test when test.name = name -> Some test.binary
-      | _ -> None)
+      | Builder.Built_test test when test.name = name -> Some test.binary | _ -> None)
     artifacts
 
-let emit_output output =
-  if output <> "" then print_string output
+let emit_output output = if output <> "" then print_string output
 
 let report_failures failures total =
   let failed_names =
-    List.map
-      (fun failure -> display_name failure.name failure.package_path)
-      failures
+    List.map (fun failure -> display_name failure.name failure.package_path) failures
   in
-  prerr_endline
-    (Printf.sprintf "%d/%d tests failed" (List.length failures) total);
+  prerr_endline (Printf.sprintf "%d/%d tests failed" (List.length failures) total);
   prerr_endline ("Failed tests: " ^ String.concat ", " failed_names)
 
 let cpu_count () =
@@ -74,8 +59,7 @@ let cpu_count () =
   with _ -> (
     try
       let outcome = Process.run_capture "nproc" [] in
-      if outcome.status = 0 then int_of_string (String.trim outcome.output)
-      else 4
+      if outcome.status = 0 then int_of_string (String.trim outcome.output) else 4
     with _ -> 4)
 
 let default_jobs () = max 1 (cpu_count ())
@@ -91,8 +75,8 @@ type test_slot = {
 let launch_test ~verbose binary test_name name package_path =
   let read_fd, write_fd = Unix.pipe () in
   let pid =
-    Process.spawn ~stdout_fd:write_fd ~stderr_fd:write_fd
-      ~extra_closes:[ read_fd ] binary []
+    Process.spawn ~stdout_fd:write_fd ~stderr_fd:write_fd ~extra_closes:[ read_fd ] binary
+      []
   in
   if verbose then prerr_endline binary;
   Process.close_noerr write_fd;
@@ -107,13 +91,12 @@ type test_result = {
   r_no_binary : bool;
 }
 
-let run ~workspace_root ~verbose ~backend_request ?profile ?(jobs = 0)
-    ~requested_targets workspace =
+let run ~workspace_root ~verbose ~backend_request ?profile ?(jobs = 0) ~requested_targets
+    workspace =
   let* tests = resolve_requested_targets workspace requested_targets in
   let* build_result =
     Builder.build ~workspace_root ~verbose
-      ~requested_targets:
-        (List.map (fun (test : Manifest.test_target) -> test.name) tests)
+      ~requested_targets:(List.map (fun (test : Manifest.test_target) -> test.name) tests)
       ~backend_request ?profile workspace
   in
   let jobs = if jobs <= 0 then default_jobs () else jobs in
@@ -157,8 +140,7 @@ let run ~workspace_root ~verbose ~backend_request ?profile ?(jobs = 0)
   done;
   while !active <> [] do
     let rec wait () =
-      try Unix.waitpid [] (-1)
-      with Unix.Unix_error (Unix.EINTR, _, _) -> wait ()
+      try Unix.waitpid [] (-1) with Unix.Unix_error (Unix.EINTR, _, _) -> wait ()
     in
     let finished_pid, unix_status = wait () in
     match List.find_opt (fun (_, s) -> s.pid = finished_pid) !active with
@@ -196,11 +178,7 @@ let run ~workspace_root ~verbose ~backend_request ?profile ?(jobs = 0)
               prerr_endline
                 (Printf.sprintf "not ok - %s (exit %d)" r.r_test_name r.r_status);
             failures :=
-              {
-                name = r.r_name;
-                package_path = r.r_package_path;
-                status = r.r_status;
-              }
+              { name = r.r_name; package_path = r.r_package_path; status = r.r_status }
               :: !failures
           end)
     results;

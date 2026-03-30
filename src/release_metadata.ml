@@ -17,14 +17,9 @@ type t = {
 }
 
 let metadata_relative_path = Filename.concat "release" "metadata.sh"
-
-let metadata_path ?(root_dir = ".") () =
-  Filename.concat root_dir metadata_relative_path
-
+let metadata_path ?(root_dir = ".") () = Filename.concat root_dir metadata_relative_path
 let ( let* ) = Result.bind
-
-let error path line message =
-  Error (Printf.sprintf "%s:%d: %s" path line message)
+let error path line message = Error (Printf.sprintf "%s:%d: %s" path line message)
 
 let strip_trailing_whitespace text =
   let rec loop index =
@@ -47,12 +42,9 @@ let parse_quoted path line quote text =
         Buffer.add_char buffer ch;
         loop (index + 1) false)
       else if ch = quote then
-        let trailing =
-          String.sub text (index + 1) (length - index - 1) |> String.trim
-        in
+        let trailing = String.sub text (index + 1) (length - index - 1) |> String.trim in
         if trailing <> "" then
-          error path line
-            "unexpected trailing content after quoted shell value"
+          error path line "unexpected trailing content after quoted shell value"
         else Ok (Buffer.contents buffer)
       else if quote = '"' && ch = '\\' then loop (index + 1) true
       else (
@@ -78,22 +70,22 @@ let load path =
     let* () =
       let rec loop line_number = function
         | [] -> Ok ()
-        | raw_line :: rest ->
+        | raw_line :: rest -> (
             let line = String.trim raw_line in
             let next = loop (line_number + 1) rest in
             if
-              line = "" || String_util.starts_with ~prefix:"#!" line
+              line = ""
+              || String_util.starts_with ~prefix:"#!" line
               || String_util.starts_with ~prefix:"#" line
             then next
             else
               match String_util.split_once ~on:'=' line with
               | Some (name, value)
-                when String_util.starts_with ~prefix:"WADI_"
-                       (String.trim name) ->
+                when String_util.starts_with ~prefix:"WADI_" (String.trim name) ->
                   let* parsed = parse_value path line_number value in
                   Hashtbl.replace table (String.trim name) parsed;
                   next
-              | _ -> next
+              | _ -> next)
       in
       loop 1 lines
     in
@@ -103,9 +95,7 @@ let load path =
       | None -> Error (Printf.sprintf "%s: missing required metadata %s" path name)
     in
     let optional ?(default = "") name =
-      match Hashtbl.find_opt table name with
-      | Some value -> value
-      | None -> default
+      match Hashtbl.find_opt table name with Some value -> value | None -> default
     in
     let* package_name = required "WADI_PACKAGE_NAME" in
     let* formula_class = required "WADI_FORMULA_CLASS" in
@@ -141,31 +131,22 @@ let load path =
       }
 
 let load_for_root ?(root_dir = ".") () = load (metadata_path ~root_dir ())
-
-let release_tag metadata =
-  metadata.release_tag_prefix ^ metadata.release_version
-
-let source_dir_name metadata =
-  metadata.package_name ^ "-" ^ metadata.release_version
-
+let release_tag metadata = metadata.release_tag_prefix ^ metadata.release_version
+let source_dir_name metadata = metadata.package_name ^ "-" ^ metadata.release_version
 let source_archive_name metadata = source_dir_name metadata ^ "-source.tar.gz"
-
 let asset_index_name (_metadata : t) = "release-assets.json"
 
 let binary_dir_name metadata ~os_name ~arch_name =
-  Printf.sprintf "%s-%s-%s-%s" metadata.package_name metadata.release_version
-    arch_name os_name
+  Printf.sprintf "%s-%s-%s-%s" metadata.package_name metadata.release_version arch_name
+    os_name
 
 let binary_archive_name metadata ~os_name ~arch_name =
   binary_dir_name metadata ~os_name ~arch_name ^ ".tar.gz"
 
 let download_base_url metadata =
-  Printf.sprintf "%s/releases/download/%s" metadata.repository_url
-    (release_tag metadata)
+  Printf.sprintf "%s/releases/download/%s" metadata.repository_url (release_tag metadata)
 
-let asset_url metadata asset_name =
-  download_base_url metadata ^ "/" ^ asset_name
-
+let asset_url metadata asset_name = download_base_url metadata ^ "/" ^ asset_name
 let source_archive_url metadata = asset_url metadata (source_archive_name metadata)
 
 let homebrew_tap_owner metadata =
@@ -178,8 +159,7 @@ let homebrew_tap_name metadata =
   | Some (_, name) -> name
   | None -> metadata.homebrew_tap
 
-let homebrew_tap_repository_name metadata =
-  "homebrew-" ^ homebrew_tap_name metadata
+let homebrew_tap_repository_name metadata = "homebrew-" ^ homebrew_tap_name metadata
 
 let homebrew_tap_repository metadata =
   homebrew_tap_owner metadata ^ "/" ^ homebrew_tap_repository_name metadata

@@ -11,8 +11,7 @@ let resolve_profile workspace = function
   | Some profile when String.trim profile <> "" -> profile
   | Some _ | None -> Manifest.default_profile workspace
 
-let actionful_targets ~workspace_root ~verbose ~profile requested_targets
-    workspace =
+let actionful_targets ~workspace_root ~verbose ~profile requested_targets workspace =
   let workspace_root = Fs.realpath workspace_root in
   let profile = resolve_profile workspace profile in
   let* order = Builder.resolve_build_order workspace requested_targets in
@@ -26,8 +25,8 @@ let actionful_targets ~workspace_root ~verbose ~profile requested_targets
         else
           let out_dir = Layout.target_out_dir ~profile workspace_root target in
           let* action_results =
-            Builder.run_actions ~verbose ~mode:Builder.Materialize
-              ~workspace_root ~out_dir ~target ~pipeline
+            Builder.run_actions ~verbose ~mode:Builder.Materialize ~workspace_root
+              ~out_dir ~target ~pipeline
           in
           loop ({ target; out_dir; pipeline; action_results } :: acc) rest
   in

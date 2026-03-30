@@ -9,20 +9,10 @@ type report = {
 
 type source =
   | Local_dir of string
-  | Git_repo of {
-      url : string;
-      ref_name : string option;
-      checksum : string;
-    }
-  | Url_archive of {
-      url : string;
-      checksum : string;
-    }
+  | Git_repo of { url : string; ref_name : string option; checksum : string }
+  | Url_archive of { url : string; checksum : string }
 
-type archive_checksum = {
-  algorithm : string;
-  value : string;
-}
+type archive_checksum = { algorithm : string; value : string }
 
 type prepared_source = {
   source_dir : string;
@@ -54,8 +44,7 @@ let normalize_path_for_prefix path =
 let path_is_within ~parent child =
   let parent = normalize_path_for_prefix parent in
   let child = normalize_path_for_prefix child in
-  child = parent
-  || String_util.starts_with ~prefix:(parent ^ "/") child
+  child = parent || String_util.starts_with ~prefix:(parent ^ "/") child
 
 let with_temp_dir prefix f =
   let path = Filename.temp_file prefix ".tmp" in
@@ -73,8 +62,7 @@ let is_hex_string value =
   in
   value <> "" && loop 0
 
-let normalize_hex value =
-  String.lowercase_ascii (String.trim value)
+let normalize_hex value = String.lowercase_ascii (String.trim value)
 
 let parse_archive_checksum value =
   let trimmed = String.trim value in
@@ -89,15 +77,12 @@ let parse_archive_checksum value =
   else if not (is_hex_string value) then
     Error
       (Printf.sprintf
-         "checksum must be hexadecimal (optionally prefixed with sha256: or \
-          sha512:): %s"
+         "checksum must be hexadecimal (optionally prefixed with sha256: or sha512:): %s"
          trimmed)
-  else if algorithm = "sha256" || algorithm = "sha512" then
-    Ok { algorithm; value }
+  else if algorithm = "sha256" || algorithm = "sha512" then Ok { algorithm; value }
   else
     Error
-      (Printf.sprintf
-         "unsupported checksum algorithm '%s'; expected sha256 or sha512"
+      (Printf.sprintf "unsupported checksum algorithm '%s'; expected sha256 or sha512"
          algorithm)
 
 let parse_git_checksum value =
@@ -106,24 +91,21 @@ let parse_git_checksum value =
     match String_util.split_once ~on:':' trimmed with
     | Some (raw_algorithm, raw_value) ->
         let algorithm = String.lowercase_ascii (String.trim raw_algorithm) in
-        if algorithm = "sha1" || algorithm = "sha256" || algorithm = "git" then
-          raw_value
+        if algorithm = "sha1" || algorithm = "sha256" || algorithm = "git" then raw_value
         else trimmed
     | None -> trimmed
   in
   let value = normalize_hex raw_value in
   if value = "" then Error "checksum cannot be empty"
   else if not (is_hex_string value) then
-    Error
-      (Printf.sprintf
-         "git checksum pins must be hexadecimal commit ids: %s" trimmed)
+    Error (Printf.sprintf "git checksum pins must be hexadecimal commit ids: %s" trimmed)
   else Ok value
 
 let current_git_revision checkout_dir =
   let* outcome =
     Process.ensure_success ~cwd:checkout_dir "git" [ "rev-parse"; "HEAD" ]
     |> Result.map_error (fun message ->
-           "failed to resolve the vendored git revision\n" ^ message)
+        "failed to resolve the vendored git revision\n" ^ message)
   in
   Ok (normalize_hex outcome.output)
 
@@ -142,34 +124,28 @@ let checksum_program algorithm =
           match Toolchain.resolve_executable_path "sha256sum" with
           | Some prog -> Ok (prog, [])
           | None ->
-              Error
-                "unable to verify sha256 checksums; install `shasum` or \
-                 `sha256sum`" )
+              Error "unable to verify sha256 checksums; install `shasum` or `sha256sum`")
       | "sha512" -> (
           match Toolchain.resolve_executable_path "sha512sum" with
           | Some prog -> Ok (prog, [])
           | None ->
-              Error
-                "unable to verify sha512 checksums; install `shasum` or \
-                 `sha512sum`" )
+              Error "unable to verify sha512 checksums; install `shasum` or `sha512sum`")
       | algorithm ->
-          Error
-            (Printf.sprintf "unsupported checksum algorithm '%s'" algorithm))
+          Error (Printf.sprintf "unsupported checksum algorithm '%s'" algorithm))
 
 let file_checksum path checksum =
   let* prog, prefix_args = checksum_program checksum.algorithm in
   let* outcome =
-    Process.ensure_success ~env:[ ("LC_ALL", "C"); ("LANG", "C") ] prog
-      (prefix_args @ [ path ])
+    Process.ensure_success
+      ~env:[ ("LC_ALL", "C"); ("LANG", "C") ]
+      prog (prefix_args @ [ path ])
     |> Result.map_error (fun message ->
-           Printf.sprintf "failed to compute %s for %s\n%s" checksum.algorithm
-             path message)
+        Printf.sprintf "failed to compute %s for %s\n%s" checksum.algorithm path message)
   in
   match String_util.split_whitespace outcome.output with
   | digest :: _ -> Ok (normalize_hex digest)
   | [] ->
-      Error
-        (Printf.sprintf "failed to parse %s output for %s" checksum.algorithm path)
+      Error (Printf.sprintf "failed to parse %s output for %s" checksum.algorithm path)
 
 let detect_extracted_root directory =
   let entries =
@@ -197,7 +173,8 @@ let strip_suffix_if_present ~suffix value =
 
 let suggested_name_from_url url =
   let trimmed =
-    String.trim url |> strip_suffix_if_present ~suffix:"/"
+    String.trim url
+    |> strip_suffix_if_present ~suffix:"/"
     |> strip_suffix_if_present ~suffix:".git"
     |> strip_suffix_if_present ~suffix:".tar.gz"
     |> strip_suffix_if_present ~suffix:".tgz"
@@ -213,7 +190,7 @@ let prepare_git_source url ref_name checksum f =
       let* _ =
         Process.ensure_success "git" [ "clone"; "--quiet"; url; checkout_dir ]
         |> Result.map_error (fun message ->
-               "failed to clone the vendored git source\n" ^ message)
+            "failed to clone the vendored git source\n" ^ message)
       in
       let* () =
         match ref_name with
@@ -222,9 +199,8 @@ let prepare_git_source url ref_name checksum f =
             Process.ensure_success ~cwd:checkout_dir "git"
               [ "checkout"; "--quiet"; ref_name ]
             |> Result.map_error (fun message ->
-                   Printf.sprintf
-                     "failed to checkout vendored git ref %s\n%s"
-                     ref_name message)
+                Printf.sprintf "failed to checkout vendored git ref %s\n%s" ref_name
+                  message)
             |> Result.map (fun _ -> ())
       in
       let* expected_revision = parse_git_checksum checksum in
@@ -232,8 +208,8 @@ let prepare_git_source url ref_name checksum f =
       if actual_revision <> expected_revision then
         Error
           (Printf.sprintf
-             "git source checksum mismatch for %s: expected commit %s, got %s"
-             url expected_revision actual_revision)
+             "git source checksum mismatch for %s: expected commit %s, got %s" url
+             expected_revision actual_revision)
       else
         f
           {
@@ -248,42 +224,36 @@ let prepare_url_source url checksum f =
       let extract_dir = Filename.concat temp_dir "extract" in
       Fs.ensure_dir extract_dir;
       let* _ =
-        Process.ensure_success "curl"
-          [ "-fsSL"; "--location"; "-o"; archive_path; url ]
+        Process.ensure_success "curl" [ "-fsSL"; "--location"; "-o"; archive_path; url ]
         |> Result.map_error (fun message ->
-               "failed to download the vendored source archive\n" ^ message)
+            "failed to download the vendored source archive\n" ^ message)
       in
       let* checksum = parse_archive_checksum checksum in
       let* actual_checksum = file_checksum archive_path checksum in
       if actual_checksum <> checksum.value then
         Error
-          (Printf.sprintf
-             "archive checksum mismatch for %s: expected %s:%s, got %s:%s"
-             url checksum.algorithm checksum.value checksum.algorithm
-             actual_checksum)
+          (Printf.sprintf "archive checksum mismatch for %s: expected %s:%s, got %s:%s"
+             url checksum.algorithm checksum.value checksum.algorithm actual_checksum)
       else
         let* _ =
-          Process.ensure_success "tar"
-            [ "-xf"; archive_path; "-C"; extract_dir ]
+          Process.ensure_success "tar" [ "-xf"; archive_path; "-C"; extract_dir ]
           |> Result.map_error (fun message ->
-                 "failed to extract the vendored source archive\n" ^ message)
+              "failed to extract the vendored source archive\n" ^ message)
         in
         let source_dir = detect_extracted_root extract_dir in
         f
           {
             source_dir;
-            source_label =
-              Printf.sprintf "%s#%s:%s" url checksum.algorithm checksum.value;
+            source_label = Printf.sprintf "%s#%s:%s" url checksum.algorithm checksum.value;
             suggested_name =
-              if source_dir <> extract_dir then Filename.basename source_dir
-              else suggested_name_from_url url;
+              (if source_dir <> extract_dir then Filename.basename source_dir
+               else suggested_name_from_url url);
           })
 
 let with_prepared_source source f =
   match source with
   | Local_dir source_dir -> prepare_local_source source_dir f
-  | Git_repo { url; ref_name; checksum } ->
-      prepare_git_source url ref_name checksum f
+  | Git_repo { url; ref_name; checksum } -> prepare_git_source url ref_name checksum f
   | Url_archive { url; checksum } -> prepare_url_source url checksum f
 
 let copy_tree_filtered ~src ~dst =
@@ -291,11 +261,11 @@ let copy_tree_filtered ~src ~dst =
     Fs.ensure_dir dst;
     Sys.readdir src
     |> Array.iter (fun entry ->
-           if not (List.mem entry excluded_entries) then
-             let src_path = Filename.concat src entry in
-             let dst_path = Filename.concat dst entry in
-             if Sys.is_directory src_path then copy src_path dst_path
-             else Fs.copy_file ~src:src_path ~dst:dst_path)
+        if not (List.mem entry excluded_entries) then
+          let src_path = Filename.concat src entry in
+          let dst_path = Filename.concat dst entry in
+          if Sys.is_directory src_path then copy src_path dst_path
+          else Fs.copy_file ~src:src_path ~dst:dst_path)
   in
   copy src dst
 
@@ -304,27 +274,24 @@ let validate_member_manifest manifest_path =
   if loaded.workspace.name <> None then
     Error
       (Printf.sprintf
-         "%s defines a top-level workspace name; vendored members must stay \
-          package-local"
+         "%s defines a top-level workspace name; vendored members must stay package-local"
          manifest_path)
   else if loaded.workspace.defaults <> Manifest.default_defaults then
     Error
       (Printf.sprintf
-         "%s defines [defaults]; vendored members must keep workspace-wide \
-          defaults in the root manifest"
+         "%s defines [defaults]; vendored members must keep workspace-wide defaults in \
+          the root manifest"
          manifest_path)
   else if loaded.workspace.profiles <> [] then
     Error
       (Printf.sprintf
-         "%s defines [profile.*]; vendored members must keep profiles in the \
-          root manifest"
+         "%s defines [profile.*]; vendored members must keep profiles in the root \
+          manifest"
          manifest_path)
   else Ok ()
 
 let members_line members =
-  "members = ["
-  ^ String.concat ", " (List.map (Printf.sprintf "%S") members)
-  ^ "]"
+  "members = [" ^ String.concat ", " (List.map (Printf.sprintf "%S") members) ^ "]"
 
 let list_insert index value items =
   let rec loop acc i = function
@@ -351,16 +318,13 @@ let rewrite_members manifest_path members =
         let trimmed = String.trim (String_util.strip_comment line) in
         if String_util.starts_with ~prefix:"[" trimmed then
           scan (index + 1)
-            (match first_section with
-            | Some _ -> first_section
-            | None -> Some index)
+            (match first_section with Some _ -> first_section | None -> Some index)
             members_index rest
         else
           let members_index =
             match (members_index, String_util.split_once ~on:'=' trimmed) with
-            | Some _ as members_index, _ -> members_index
-            | None, Some (raw_key, _) when String.trim raw_key = "members" ->
-                Some index
+            | (Some _ as members_index), _ -> members_index
+            | None, Some (raw_key, _) when String.trim raw_key = "members" -> Some index
             | None, _ -> None
           in
           scan (index + 1) first_section members_index rest
@@ -381,8 +345,7 @@ let rewrite_members manifest_path members =
       Sys.rename temp_path manifest_path;
       Ok ()
   | Error message ->
-      (try Unix.unlink temp_path with
-      | Unix.Unix_error _ -> ());
+      (try Unix.unlink temp_path with Unix.Unix_error _ -> ());
       Error message
 
 let vendor ~workspace_root source ?name ~force () =
@@ -410,9 +373,7 @@ let vendor ~workspace_root source ?name ~force () =
               let* root_loaded = Manifest.load_local manifest_path in
               let* () = validate_member_manifest source_manifest_path in
               let vendor_name =
-                match name with
-                | Some name -> name
-                | None -> prepared.suggested_name
+                match name with Some name -> name | None -> prepared.suggested_name
               in
               let* vendor_name = validate_name "vendor name" vendor_name in
               let member_path = Filename.concat "vendor" vendor_name in
@@ -422,8 +383,8 @@ let vendor ~workspace_root source ?name ~force () =
               if path_is_within ~parent:source_dir destination_dir then
                 Error
                   (Printf.sprintf
-                     "refusing to vendor %s into %s because the destination lives \
-                      inside the source tree"
+                     "refusing to vendor %s into %s because the destination lives inside \
+                      the source tree"
                      source_dir destination_dir)
               else if path_is_within ~parent:destination_dir source_dir then
                 Error
@@ -432,9 +393,7 @@ let vendor ~workspace_root source ?name ~force () =
                       under the destination path"
                      source_dir destination_dir)
               else
-                let already_registered =
-                  List.mem member_path root_loaded.members
-                in
+                let already_registered = List.mem member_path root_loaded.members in
                 if already_registered && not force then
                   Error
                     (Printf.sprintf
@@ -447,7 +406,7 @@ let vendor ~workspace_root source ?name ~force () =
                        "vendor destination already exists: %s; rerun with --force to \
                         replace it"
                        destination_dir)
-                else (
+                else
                   let replaced = Fs.exists destination_dir in
                   if replaced then Fs.remove_tree destination_dir;
                   copy_tree_filtered ~src:source_dir ~dst:destination_dir;
@@ -464,7 +423,7 @@ let vendor ~workspace_root source ?name ~force () =
                       manifest_path;
                       replaced;
                       registered = not already_registered;
-                    }))
+                    })
 
 let render_report report =
   let action = if report.replaced then "Updated" else "Vendored" in
@@ -478,8 +437,7 @@ let render_report report =
   in
   String.concat "\n"
     [
-      Printf.sprintf "%s %s -> %s" action report.source_label
-        report.destination_dir;
+      Printf.sprintf "%s %s -> %s" action report.source_label report.destination_dir;
       member_line;
     ]
   ^ "\n"

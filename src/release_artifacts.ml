@@ -9,12 +9,12 @@ let package_paths ~output_dir ~package_name =
   let package_dir = Filename.concat output_dir "package" in
   let share_dir = Filename.concat package_dir "share" in
   let doc_path =
-    Filename.concat share_dir (Filename.concat "doc" (Filename.concat package_name "cli.md"))
+    Filename.concat share_dir
+      (Filename.concat "doc" (Filename.concat package_name "cli.md"))
   in
   let bash_path =
     Filename.concat share_dir
-      (Filename.concat "bash-completion"
-         (Filename.concat "completions" package_name))
+      (Filename.concat "bash-completion" (Filename.concat "completions" package_name))
   in
   let zsh_path =
     Filename.concat share_dir

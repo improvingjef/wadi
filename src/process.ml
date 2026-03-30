@@ -7,11 +7,7 @@ type outcome = {
   output : string;
 }
 
-type exit_status = {
-  command : string;
-  status : int;
-  unix_status : Unix.process_status;
-}
+type exit_status = { command : string; status : int; unix_status : Unix.process_status }
 
 let render ?cwd ?(env = []) prog args =
   let env_prefix =
@@ -20,14 +16,12 @@ let render ?cwd ?(env = []) prog args =
     | env ->
         String.concat " "
           (List.map
-             (fun (name, value) ->
-               String_util.shell_quote (name ^ "=" ^ value))
+             (fun (name, value) -> String_util.shell_quote (name ^ "=" ^ value))
              env)
         ^ " "
   in
   let base =
-    env_prefix
-    ^ String.concat " " (List.map String_util.shell_quote (prog :: args))
+    env_prefix ^ String.concat " " (List.map String_util.shell_quote (prog :: args))
   in
   match cwd with
   | None -> base
@@ -35,8 +29,7 @@ let render ?cwd ?(env = []) prog args =
 
 let status_to_code = function
   | Unix.WEXITED code -> code
-  | Unix.WSIGNALED signal
-  | Unix.WSTOPPED signal -> 128 + signal
+  | Unix.WSIGNALED signal | Unix.WSTOPPED signal -> 128 + signal
 
 let status_to_text = function
   | Unix.WEXITED code -> Printf.sprintf "exit %d" code
@@ -47,21 +40,16 @@ let is_success = function
   | Unix.WEXITED 0 -> true
   | Unix.WEXITED _ | Unix.WSIGNALED _ | Unix.WSTOPPED _ -> false
 
-let close_noerr fd =
-  try Unix.close fd with
-  | Unix.Unix_error _ -> ()
+let close_noerr fd = try Unix.close fd with Unix.Unix_error _ -> ()
 
 let write_stderr message =
   let bytes = Bytes.of_string message in
   let rec loop offset =
     if offset < Bytes.length bytes then
       try
-        let written =
-          Unix.write Unix.stderr bytes offset (Bytes.length bytes - offset)
-        in
+        let written = Unix.write Unix.stderr bytes offset (Bytes.length bytes - offset) in
         loop (offset + written)
-      with
-      | Unix.Unix_error (Unix.EINTR, _, _) -> loop offset
+      with Unix.Unix_error (Unix.EINTR, _, _) -> loop offset
   in
   loop 0
 
@@ -82,8 +70,7 @@ let rec waitpid pid =
   try
     let _, status = Unix.waitpid [] pid in
     status
-  with
-  | Unix.Unix_error (Unix.EINTR, _, _) -> waitpid pid
+  with Unix.Unix_error (Unix.EINTR, _, _) -> waitpid pid
 
 let read_all fd =
   let buffer = Bytes.create 65536 in
@@ -98,8 +85,7 @@ let read_all fd =
           | bytes_read ->
               Buffer.add_subbytes contents buffer 0 bytes_read;
               loop ()
-        with
-        | Unix.Unix_error (Unix.EINTR, _, _) -> loop ()
+        with Unix.Unix_error (Unix.EINTR, _, _) -> loop ()
       in
       loop ())
 
@@ -109,19 +95,17 @@ let setup_child_fd target = function
   | Some fd -> Unix.dup2 fd target
 
 let close_child_fds fds =
-  fds
-  |> List.sort_uniq compare
+  fds |> List.sort_uniq compare
   |> List.iter (fun fd ->
-         if fd <> Unix.stdin && fd <> Unix.stdout && fd <> Unix.stderr then
-           close_noerr fd)
+      if fd <> Unix.stdin && fd <> Unix.stdout && fd <> Unix.stderr then close_noerr fd)
 
 let environment_table () =
   let table = Hashtbl.create 64 in
   Unix.environment ()
   |> Array.iter (fun binding ->
-         match String_util.split_once ~on:'=' binding with
-         | Some (name, value) -> Hashtbl.replace table name value
-         | None -> ());
+      match String_util.split_once ~on:'=' binding with
+      | Some (name, value) -> Hashtbl.replace table name value
+      | None -> ());
   table
 
 let merged_environment env =
@@ -130,43 +114,37 @@ let merged_environment env =
   let names =
     Array.to_list current
     |> List.filter_map (fun binding ->
-           match String_util.split_once ~on:'=' binding with
-           | Some (name, _) -> Some name
-           | None -> None)
+        match String_util.split_once ~on:'=' binding with
+        | Some (name, _) -> Some name
+        | None -> None)
   in
-  let ordered_names =
-    String_util.dedup_preserve (names @ List.map fst env)
-  in
+  let ordered_names = String_util.dedup_preserve (names @ List.map fst env) in
   List.iter (fun (name, value) -> Hashtbl.replace table name value) env;
   ordered_names
   |> List.filter_map (fun name ->
-         match Hashtbl.find_opt table name with
-         | Some value -> Some (name ^ "=" ^ value)
-         | None -> None)
+      match Hashtbl.find_opt table name with
+      | Some value -> Some (name ^ "=" ^ value)
+      | None -> None)
   |> Array.of_list
 
 let merged_environment_bindings env =
-  merged_environment env
-  |> Array.to_list
+  merged_environment env |> Array.to_list
   |> List.filter_map (fun binding ->
-         match String_util.split_once ~on:'=' binding with
-         | Some (name, value) -> Some (name, value)
-         | None -> None)
+      match String_util.split_once ~on:'=' binding with
+      | Some (name, value) -> Some (name, value)
+      | None -> None)
 
-let spawn ?cwd ?(env = []) ?stdin_fd ?stdout_fd ?stderr_fd ?(extra_closes = [])
-    prog args =
+let spawn ?cwd ?(env = []) ?stdin_fd ?stdout_fd ?stderr_fd ?(extra_closes = []) prog args
+    =
   match Unix.fork () with
   | 0 -> (
       try
-        (match cwd with
-        | None -> ()
-        | Some dir -> Unix.chdir dir);
+        (match cwd with None -> () | Some dir -> Unix.chdir dir);
         setup_child_fd Unix.stdin stdin_fd;
         setup_child_fd Unix.stdout stdout_fd;
         setup_child_fd Unix.stderr stderr_fd;
         close_child_fds
-          (extra_closes
-          @ List.filter_map Fun.id [ stdin_fd; stdout_fd; stderr_fd ]);
+          (extra_closes @ List.filter_map Fun.id [ stdin_fd; stdout_fd; stderr_fd ]);
         if env = [] then Unix.execvp prog (Array.of_list (prog :: args))
         else Unix.execvpe prog (Array.of_list (prog :: args)) (merged_environment env)
       with
@@ -205,28 +183,23 @@ let run_capture ?cwd ?(verbose = false) ?(env = []) ?stdin ?stdout_path prog arg
     | None -> (write_fd, [], fun () -> ())
     | Some path ->
         let output_fd =
-          Unix.openfile path
-            [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ]
-            0o644
+          Unix.openfile path [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o644
         in
         (output_fd, [ output_fd ], fun () -> close_noerr output_fd)
   in
   let pid =
-    spawn ?cwd ~env ?stdin_fd:stdin_read_fd ~stdout_fd
-      ~stderr_fd:write_fd
-      ~extra_closes:
-        (read_fd :: extra_closes @ List.filter_map Fun.id [ stdin_write_fd ])
+    spawn ?cwd ~env ?stdin_fd:stdin_read_fd ~stdout_fd ~stderr_fd:write_fd
+      ~extra_closes:((read_fd :: extra_closes) @ List.filter_map Fun.id [ stdin_write_fd ])
       prog args
   in
   close_noerr write_fd;
   close_parent_stdout ();
-  (match stdin_read_fd with
-  | Some fd -> close_noerr fd
-  | None -> ());
-  (match stdin_write_fd, stdin with
+  (match stdin_read_fd with Some fd -> close_noerr fd | None -> ());
+  (match (stdin_write_fd, stdin) with
   | Some write_fd, Some text ->
-      Fun.protect ~finally:(fun () -> close_noerr write_fd) (fun () ->
-          write_all write_fd text)
+      Fun.protect
+        ~finally:(fun () -> close_noerr write_fd)
+        (fun () -> write_all write_fd text)
   | Some write_fd, None -> close_noerr write_fd
   | None, _ -> ());
   let output = read_all read_fd in
@@ -245,15 +218,15 @@ let run_status ?cwd ?(verbose = false) ?(env = []) ?stdin prog args =
   in
   let pid =
     spawn ?cwd ~env ?stdin_fd:stdin_read_fd
-      ~extra_closes:(List.filter_map Fun.id [ stdin_write_fd ]) prog args
+      ~extra_closes:(List.filter_map Fun.id [ stdin_write_fd ])
+      prog args
   in
-  (match stdin_read_fd with
-  | Some fd -> close_noerr fd
-  | None -> ());
-  (match stdin_write_fd, stdin with
+  (match stdin_read_fd with Some fd -> close_noerr fd | None -> ());
+  (match (stdin_write_fd, stdin) with
   | Some write_fd, Some text ->
-      Fun.protect ~finally:(fun () -> close_noerr write_fd) (fun () ->
-          write_all write_fd text)
+      Fun.protect
+        ~finally:(fun () -> close_noerr write_fd)
+        (fun () -> write_all write_fd text)
   | Some write_fd, None -> close_noerr write_fd
   | None, _ -> ());
   let unix_status = waitpid pid in

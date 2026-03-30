@@ -6,7 +6,7 @@ let write_source workspace relative_path contents =
 let cases =
   [
     ( "reports transitive external packages for selected targets",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-deps-transitive" (fun workspace ->
             write_manifest workspace
               {|
@@ -36,11 +36,10 @@ deps = ["core"]
               "deps should show direct workspace dependencies";
             assert_string_contains ~needle:"External-packages: unix\n" deps.output
               "deps should include transitive external packages";
-            assert_string_contains ~needle:"Resolved-packages:\n- unix -> "
-              deps.output
-              "deps should show resolved ocamlfind paths")) );
+            assert_string_contains ~needle:"Resolved-packages:\n- unix -> " deps.output
+              "deps should show resolved ocamlfind paths") );
     ( "reports missing external packages with target context",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-deps-missing" (fun workspace ->
             write_manifest workspace
               {|
@@ -60,8 +59,8 @@ deps = ["core"]
             assert_true (deps.status <> 0)
               "deps should fail when a required package is unavailable";
             assert_string_contains
-              ~needle:"executable 'demo' requires package 'definitely_missing_wadi_pkg' is not available via ocamlfind"
-              deps.output
-              "deps should name the failing target and package")) );
+              ~needle:
+                "executable 'demo' requires package 'definitely_missing_wadi_pkg' is not \
+                 available via ocamlfind"
+              deps.output "deps should name the failing target and package") );
   ]
-

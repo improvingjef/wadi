@@ -1,5 +1,4 @@
 let artifact_root workspace_root = Filename.concat workspace_root "_wadi"
-
 let default_profile = Manifest.default_profile_name
 
 let build_root_for_profile workspace_root profile =
@@ -10,11 +9,8 @@ let build_root workspace_root = build_root_for_profile workspace_root default_pr
 let install_root_for_profile workspace_root profile =
   Filename.concat (artifact_root workspace_root) ("install/" ^ profile)
 
-let install_root workspace_root =
-  install_root_for_profile workspace_root default_profile
-
+let install_root workspace_root = install_root_for_profile workspace_root default_profile
 let relative_install_bin_dir = "bin"
-
 let relative_install_lib_dir = "lib"
 
 let target_root_for_profile workspace_root profile kind =
@@ -48,9 +44,9 @@ let target_out_dir ?(profile = default_profile) workspace_root = function
       executable_out_dir_for_profile workspace_root profile executable.name
   | Manifest.Test test -> test_out_dir_for_profile workspace_root profile test.name
 
-let library_archive_for_backend ?(profile = default_profile) workspace_root backend
-    name =
-  Filename.concat (library_out_dir_for_profile workspace_root profile name)
+let library_archive_for_backend ?(profile = default_profile) workspace_root backend name =
+  Filename.concat
+    (library_out_dir_for_profile workspace_root profile name)
     ("lib" ^ name ^ Toolchain.library_archive_extension backend)
 
 let library_archive workspace_root name =
@@ -63,9 +59,7 @@ let test_binary ?(profile = default_profile) workspace_root name =
   Filename.concat (test_out_dir_for_profile workspace_root profile name) name
 
 let stamp_path out_dir = Filename.concat out_dir ".wadi-stamp"
-
 let explain_path out_dir = Explain.report_path out_dir
-
 let explain_json_path out_dir = Explain.json_path out_dir
 
 let repl_root_for_profile workspace_root profile =
@@ -77,11 +71,9 @@ let repl_binary ?(profile = default_profile) workspace_root name =
   Filename.concat (repl_root_for_profile workspace_root profile) (name ^ ".top")
 
 let repl_stamp_path ?(profile = default_profile) workspace_root name =
-  Filename.concat (repl_root_for_profile workspace_root profile)
-    (name ^ ".top.stamp")
+  Filename.concat (repl_root_for_profile workspace_root profile) (name ^ ".top.stamp")
 
 let install_bin_dir prefix = Filename.concat prefix relative_install_bin_dir
-
 let relative_install_library_dir name = Filename.concat "lib" name
 
 let install_library_dir prefix name =
@@ -111,8 +103,7 @@ let install_metadata_path prefix workspace_name =
   Filename.concat prefix (relative_install_metadata_path workspace_name)
 
 let relative_install_manifest_copy_path workspace_name =
-  Filename.concat (relative_install_share_dir workspace_name)
-    Manifest.default_filename
+  Filename.concat (relative_install_share_dir workspace_name) Manifest.default_filename
 
 let install_manifest_copy_path prefix workspace_name =
   Filename.concat prefix (relative_install_manifest_copy_path workspace_name)

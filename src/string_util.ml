@@ -3,15 +3,12 @@ let split_once ~on text =
   | None -> None
   | Some index ->
       let left = String.sub text 0 index in
-      let right =
-        String.sub text (index + 1) (String.length text - index - 1)
-      in
+      let right = String.sub text (index + 1) (String.length text - index - 1) in
       Some (left, right)
 
 let starts_with ~prefix text =
   let prefix_length = String.length prefix in
-  String.length text >= prefix_length
-  && String.sub text 0 prefix_length = prefix
+  String.length text >= prefix_length && String.sub text 0 prefix_length = prefix
 
 let ends_with ~suffix text =
   let suffix_length = String.length suffix in
@@ -20,8 +17,7 @@ let ends_with ~suffix text =
   && String.sub text (text_length - suffix_length) suffix_length = suffix
 
 let split_dot text =
-  String.split_on_char '.' text
-  |> List.map String.trim
+  String.split_on_char '.' text |> List.map String.trim
   |> List.filter (fun item -> item <> "")
 
 let join_dot parts = String.concat "." parts
@@ -56,17 +52,12 @@ let dedup_preserve items =
 
 let split_whitespace text =
   let length = String.length text in
-  let is_whitespace = function
-    | ' ' | '\t' | '\n' | '\r' -> true
-    | _ -> false
-  in
+  let is_whitespace = function ' ' | '\t' | '\n' | '\r' -> true | _ -> false in
   let rec skip index =
-    if index < length && is_whitespace text.[index] then skip (index + 1)
-    else index
+    if index < length && is_whitespace text.[index] then skip (index + 1) else index
   in
   let rec take index =
-    if index < length && not (is_whitespace text.[index]) then take (index + 1)
-    else index
+    if index < length && not (is_whitespace text.[index]) then take (index + 1) else index
   in
   let rec loop index acc =
     let start = skip index in
@@ -94,8 +85,7 @@ let json_escape text =
       | '\t' -> Buffer.add_string buffer "\\t"
       | ch ->
           let code = Char.code ch in
-          if code < 0x20 then
-            Buffer.add_string buffer (Printf.sprintf "\\u%04x" code)
+          if code < 0x20 then Buffer.add_string buffer (Printf.sprintf "\\u%04x" code)
           else Buffer.add_char buffer ch)
     text;
   Buffer.contents buffer

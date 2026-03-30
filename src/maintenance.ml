@@ -8,31 +8,26 @@ type update_homebrew_tap_options = {
 }
 
 let ( let* ) = Result.bind
-
-let manifest_path root_dir =
-  Filename.concat root_dir Manifest.default_filename
+let manifest_path root_dir = Filename.concat root_dir Manifest.default_filename
 
 let bootstrap_seed_root root_dir =
   Filename.concat root_dir (Filename.concat "_bootstrap" "seed")
 
 let bootstrap_seed_metadata_path root_dir =
-  Filename.concat root_dir
-    (Filename.concat "_bootstrap" "bootstrap.seed-metadata.mk")
+  Filename.concat root_dir (Filename.concat "_bootstrap" "bootstrap.seed-metadata.mk")
 
 let write_file_if_changed path contents =
   if Fs.exists path && Fs.read_file path = contents then ()
-  else (
+  else
     let temp_path = path ^ ".tmp" in
     Fs.write_file temp_path contents;
-    Unix.rename temp_path path)
+    Unix.rename temp_path path
 
 let refresh_bootstrap_seed_metadata ~root_dir =
   let manifest_path = manifest_path root_dir in
   let seed_root = bootstrap_seed_root root_dir in
   let output_path = bootstrap_seed_metadata_path root_dir in
-  let* contents =
-    Bootstrap.render_seed_metadata ~seed_root ~manifest_path ()
-  in
+  let* contents = Bootstrap.render_seed_metadata ~seed_root ~manifest_path () in
   write_file_if_changed output_path contents;
   Ok output_path
 
@@ -49,13 +44,11 @@ let ensure_git_repo root_dir =
   let outcome =
     Process.run_capture ~cwd:root_dir "git" [ "rev-parse"; "--is-inside-work-tree" ]
   in
-  if outcome.status = 0 then Ok ()
-  else Error ("not a git repository: " ^ root_dir)
+  if outcome.status = 0 then Ok () else Error ("not a git repository: " ^ root_dir)
 
 let validate_version version =
   let parts = String_util.split_dot version in
-  if List.length parts <> 3 then
-    Error "version must look like X.Y.Z"
+  if List.length parts <> 3 then Error "version must look like X.Y.Z"
   else
     let valid_part part =
       let part = String.trim part in
@@ -63,15 +56,11 @@ let validate_version version =
       &&
       let rec loop index =
         if index = String.length part then true
-        else
-          match part.[index] with
-          | '0' .. '9' -> loop (index + 1)
-          | _ -> false
+        else match part.[index] with '0' .. '9' -> loop (index + 1) | _ -> false
       in
       loop 0
     in
-    if List.for_all valid_part parts then Ok ()
-    else Error "version must look like X.Y.Z"
+    if List.for_all valid_part parts then Ok () else Error "version must look like X.Y.Z"
 
 let update_release_version ~metadata_path version =
   let contents = Fs.read_file metadata_path in
@@ -86,8 +75,7 @@ let update_release_version ~metadata_path version =
         else line)
       lines
   in
-  if not !updated then
-    Error ("failed to update " ^ metadata_path)
+  if not !updated then Error ("failed to update " ^ metadata_path)
   else (
     write_file_if_changed metadata_path (String.concat "\n" rewritten);
     Ok ())
@@ -103,10 +91,8 @@ let homebrew_formula_contents metadata = function
   | Some formula_path, None ->
       if Fs.exists formula_path then Ok (Fs.read_file formula_path)
       else Error ("formula not found: " ^ formula_path)
-  | None, Some source_archive ->
-      render_formula_from_archive metadata source_archive
-  | Some _, Some _ ->
-      Error "pass --formula or --source-archive, not both"
+  | None, Some source_archive -> render_formula_from_archive metadata source_archive
+  | Some _, Some _ -> Error "pass --formula or --source-archive, not both"
   | None, None -> Error "provide --formula or --source-archive"
 
 let tap_needs_clone tap_dir =
@@ -119,13 +105,11 @@ let tap_needs_clone tap_dir =
   else Error ("tap dir is not a git checkout: " ^ tap_dir)
 
 let update_homebrew_tap (options : update_homebrew_tap_options) =
-  if options.do_push && not options.do_commit then
-    Error "--push requires --commit"
+  if options.do_push && not options.do_commit then Error "--push requires --commit"
   else
     let* metadata = Release_metadata.load_for_root ~root_dir:options.root_dir () in
     let* formula_contents =
-      homebrew_formula_contents metadata
-        (options.formula_path, options.source_archive)
+      homebrew_formula_contents metadata (options.formula_path, options.source_archive)
     in
     let* should_clone = tap_needs_clone options.tap_dir in
     let* () =
@@ -141,17 +125,13 @@ let update_homebrew_tap (options : update_homebrew_tap_options) =
         [ "status"; "--short"; "--"; "Formula/wadi.rb" ]
     in
     if status.status <> 0 then
-      Error
-        (Printf.sprintf "failed to inspect tap status\n%s" status.output)
+      Error (Printf.sprintf "failed to inspect tap status\n%s" status.output)
     else if String.trim status.output = "" then
       Ok (Printf.sprintf "Homebrew tap already up to date: %s" formula_output)
     else
       let* () =
         if options.do_commit then
-          let* _ =
-            run_command ~cwd:options.tap_dir "git"
-              [ "add"; "Formula/wadi.rb" ]
-          in
+          let* _ = run_command ~cwd:options.tap_dir "git" [ "add"; "Formula/wadi.rb" ] in
           let* _ =
             run_command ~cwd:options.tap_dir
               ~env:
@@ -178,8 +158,8 @@ let update_homebrew_tap (options : update_homebrew_tap_options) =
         else Ok ()
       in
       Ok
-        (Printf.sprintf "Updated %s for brew tap %s && brew install %s"
-           formula_output metadata.homebrew_tap metadata.package_name)
+        (Printf.sprintf "Updated %s for brew tap %s && brew install %s" formula_output
+           metadata.homebrew_tap metadata.package_name)
 
 let cut_release ~root_dir ~version ~create_tag =
   let* () = validate_version version in
@@ -217,8 +197,7 @@ let cut_release ~root_dir ~version ~create_tag =
         Process.run_capture ~cwd:root_dir "git"
           [ "rev-parse"; "-q"; "--verify"; "refs/tags/" ^ expected_tag ]
       in
-      if existing.status = 0 then
-        Error ("git tag already exists: " ^ expected_tag)
+      if existing.status = 0 then Error ("git tag already exists: " ^ expected_tag)
       else
         run_command ~cwd:root_dir
           ~env:
@@ -229,18 +208,14 @@ let cut_release ~root_dir ~version ~create_tag =
               ("GIT_COMMITTER_EMAIL", metadata.maintainer_email);
             ]
           "git"
-          [
-            "tag";
-            "-a";
-            expected_tag;
-            "-m";
-            metadata.package_name ^ " " ^ version;
-          ]
+          [ "tag"; "-a"; expected_tag; "-m"; metadata.package_name ^ " " ^ version ]
         |> Result.map ignore
     else Ok ()
   in
   Ok
     (Printf.sprintf
-       "Release cut for %s refreshed release/metadata.sh, wadi.opam, \
-        Formula/wadi.rb, dist/%s, and %s"
-       expected_tag (Release_metadata.source_archive_name metadata) asset_index_path)
+       "Release cut for %s refreshed release/metadata.sh, wadi.opam, Formula/wadi.rb, \
+        dist/%s, and %s"
+       expected_tag
+       (Release_metadata.source_archive_name metadata)
+       asset_index_path)

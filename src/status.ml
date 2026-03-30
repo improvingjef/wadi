@@ -10,11 +10,7 @@ type target_status = {
   resolution : string list;
 }
 
-type summary = {
-  rebuilt : int;
-  regenerated : int;
-  reused : int;
-}
+type summary = { rebuilt : int; regenerated : int; reused : int }
 
 type report = {
   workspace_name : string option;
@@ -38,8 +34,7 @@ let resolution_value prefix lines =
   List.find_map
     (fun line ->
       if String_util.starts_with ~prefix line then
-        Some
-          (String.sub line prefix_length (String.length line - prefix_length))
+        Some (String.sub line prefix_length (String.length line - prefix_length))
       else None)
     lines
 
@@ -73,8 +68,7 @@ let count_states targets =
     (fun summary target ->
       match target.state with
       | "rebuilt" -> { summary with rebuilt = summary.rebuilt + 1 }
-      | "regenerated" ->
-          { summary with regenerated = summary.regenerated + 1 }
+      | "regenerated" -> { summary with regenerated = summary.regenerated + 1 }
       | "reused" -> { summary with reused = summary.reused + 1 }
       | _ -> summary)
     { rebuilt = 0; regenerated = 0; reused = 0 }
@@ -89,19 +83,17 @@ let collect_results items f =
   in
   loop [] items
 
-let report ~workspace_root ?(requested_targets = [])
-    ?(backend_request = Toolchain.Auto) ?profile workspace =
+let report ~workspace_root ?(requested_targets = []) ?(backend_request = Toolchain.Auto)
+    ?profile workspace =
   let workspace_root = Fs.realpath workspace_root in
   let profile = resolve_profile workspace profile in
   let* explain_reports =
-    Builder.explain_current ~workspace_root ~requested_targets ~backend_request
-      ~profile workspace
+    Builder.explain_current ~workspace_root ~requested_targets ~backend_request ~profile
+      workspace
   in
   let* targets =
     collect_results explain_reports (fun (report : Builder.explain_report) ->
-        parse_target_status
-          ("status report for " ^ report.target_name)
-          report.json_report)
+        parse_target_status ("status report for " ^ report.target_name) report.json_report)
   in
   let summary = count_states targets in
   Ok
@@ -123,9 +115,7 @@ let render_requested_targets requested_targets =
   if requested_targets = [] then "all" else String.concat ", " requested_targets
 
 let render_reasons reasons =
-  match reasons with
-  | [] -> "none"
-  | reasons -> String.concat "; " reasons
+  match reasons with [] -> "none" | reasons -> String.concat "; " reasons
 
 let render_target index (target : target_status) =
   String.concat "\n"
@@ -142,22 +132,18 @@ let render_report (report : report) =
   let header =
     [
       ("Workspace: "
-      ^
-      match report.workspace_name with
-      | Some name -> name
-      | None -> "unnamed");
+      ^ match report.workspace_name with Some name -> name | None -> "unnamed");
       "Workspace-root: " ^ report.workspace_root;
       "Profile: " ^ report.profile;
       "Requested-targets: " ^ render_requested_targets report.requested_targets;
-      "Backend-request: "
-      ^ Toolchain.backend_request_name report.backend_request;
+      "Backend-request: " ^ Toolchain.backend_request_name report.backend_request;
       ("Selected-backend: "
       ^
       match report.selected_backend with
       | Some backend -> backend
       | None -> "unresolved");
-      Printf.sprintf "Summary: rebuilt=%d regenerated=%d reused=%d"
-        report.summary.rebuilt report.summary.regenerated report.summary.reused;
+      Printf.sprintf "Summary: rebuilt=%d regenerated=%d reused=%d" report.summary.rebuilt
+        report.summary.regenerated report.summary.reused;
     ]
   in
   let targets =
@@ -168,13 +154,8 @@ let render_report (report : report) =
   String.concat "\n" (header @ targets @ [ "" ])
 
 let json_string text = "\"" ^ String_util.json_escape text ^ "\""
-
-let json_array render items =
-  "[" ^ String.concat ", " (List.map render items) ^ "]"
-
-let json_option render = function
-  | Some value -> render value
-  | None -> "null"
+let json_array render items = "[" ^ String.concat ", " (List.map render items) ^ "]"
+let json_option render = function Some value -> render value | None -> "null"
 
 let render_json_target (target : target_status) =
   String.concat "\n"
@@ -187,11 +168,8 @@ let render_json_target (target : target_status) =
       "      \"state\": " ^ json_string target.state ^ ",";
       "      \"artifact\": " ^ json_string target.artifact ^ ",";
       "      \"output_dir\": " ^ json_string target.output_dir ^ ",";
-      "      \"reasons\": "
-      ^ json_array json_string target.reasons
-      ^ ",";
-      "      \"resolution\": "
-      ^ json_array json_string target.resolution;
+      "      \"reasons\": " ^ json_array json_string target.reasons ^ ",";
+      "      \"resolution\": " ^ json_array json_string target.resolution;
       "    }";
     ]
 
@@ -200,28 +178,19 @@ let render_json_report (report : report) =
     match report.targets with
     | [] -> "[]"
     | targets ->
-        "[\n"
-        ^ String.concat ",\n" (List.map render_json_target targets)
-        ^ "\n  ]"
+        "[\n" ^ String.concat ",\n" (List.map render_json_target targets) ^ "\n  ]"
   in
   String.concat "\n"
     [
       "{";
-      "  \"workspace\": "
-      ^
-      json_option json_string report.workspace_name
-      ^ ",";
+      "  \"workspace\": " ^ json_option json_string report.workspace_name ^ ",";
       "  \"workspace_root\": " ^ json_string report.workspace_root ^ ",";
       "  \"profile\": " ^ json_string report.profile ^ ",";
-      "  \"requested_targets\": "
-      ^ json_array json_string report.requested_targets
-      ^ ",";
+      "  \"requested_targets\": " ^ json_array json_string report.requested_targets ^ ",";
       "  \"backend_request\": "
       ^ json_string (Toolchain.backend_request_name report.backend_request)
       ^ ",";
-      "  \"selected_backend\": "
-      ^ json_option json_string report.selected_backend
-      ^ ",";
+      "  \"selected_backend\": " ^ json_option json_string report.selected_backend ^ ",";
       "  \"summary\": {";
       "    \"rebuilt\": " ^ string_of_int report.summary.rebuilt ^ ",";
       "    \"regenerated\": " ^ string_of_int report.summary.regenerated ^ ",";

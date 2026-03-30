@@ -1,7 +1,4 @@
-type lock_policy =
-  | Ignore_lock
-  | Warn_locked
-  | Require_locked
+type lock_policy = Ignore_lock | Warn_locked | Require_locked
 
 type build_options = {
   workspace_dir : string;
@@ -110,10 +107,7 @@ type graph_options = {
   profile : string option;
 }
 
-type deps_options = {
-  workspace_dir : string;
-  targets : string list;
-}
+type deps_options = { workspace_dir : string; targets : string list }
 
 type lock_options = {
   workspace_dir : string;
@@ -176,7 +170,6 @@ type install_options = {
 }
 
 type release_artifacts_options = { output_dir : string }
-
 type sync_generated_options = unit
 
 type package_options = {
@@ -189,10 +182,7 @@ type package_options = {
   source_archive_mode : Packager.source_archive_mode;
 }
 
-type release_cut_options = {
-  version : string option;
-  tag : bool;
-}
+type release_cut_options = { version : string option; tag : bool }
 
 type update_homebrew_tap_options = {
   tap_dir : string option;
@@ -214,19 +204,10 @@ type explain_options = {
 
 type completion_mode =
   | Render_script of string
-  | Query of {
-      previous : string list;
-      current : string;
-      describe : bool;
-    }
+  | Query of { previous : string list; current : string; describe : bool }
 
-type completion_options = {
-  workspace_dir : string;
-  mode : completion_mode;
-}
-
+type completion_options = { workspace_dir : string; mode : completion_mode }
 type docs_options = unit
-
 type toolchain_options = { verbose : bool }
 
 type migrate_options = {
@@ -236,25 +217,15 @@ type migrate_options = {
   force : bool;
 }
 
-type command_result =
-  | Exit_code of int
-  | Forward_status of Unix.process_status
-
-type completion_candidate = {
-  value : string;
-  hint : string option;
-}
+type command_result = Exit_code of int | Forward_status of Unix.process_status
+type completion_candidate = { value : string; hint : string option }
 
 type completion_response =
   | Completion_candidates of completion_candidate list
   | Complete_directories
   | Complete_files
 
-type option_doc = {
-  usage : string;
-  flags : string list;
-  description : string;
-}
+type option_doc = { usage : string; flags : string list; description : string }
 
 type command_doc = {
   name : string;
@@ -308,8 +279,7 @@ let jobs_option =
   {
     usage = "-j N, --jobs N";
     flags = [ "-j"; "--jobs" ];
-    description =
-      "Run up to N test binaries concurrently (default: number of CPUs).";
+    description = "Run up to N test binaries concurrently (default: number of CPUs).";
   }
 
 let help_option =
@@ -388,7 +358,8 @@ let asset_index_output_option =
     usage = "--asset-index-output PATH";
     flags = [ "--asset-index-output" ];
     description =
-      "Write a machine-readable release asset index with names, URLs, sizes, and checksums.";
+      "Write a machine-readable release asset index with names, URLs, sizes, and \
+       checksums.";
   }
 
 let source_archive_option =
@@ -396,7 +367,8 @@ let source_archive_option =
     usage = "--source-archive PATH";
     flags = [ "--source-archive" ];
     description =
-      "Reuse an explicit source archive when rendering packaging metadata instead of rebuilding one.";
+      "Reuse an explicit source archive when rendering packaging metadata instead of \
+       rebuilding one.";
   }
 
 let formula_input_option =
@@ -427,21 +399,24 @@ let source_archive_mode_option =
     usage = "--source-archive-mode tracked|worktree";
     flags = [ "--source-archive-mode" ];
     description =
-      "Choose whether rebuilt source archives come from tracked git paths only or from the live non-ignored worktree.";
+      "Choose whether rebuilt source archives come from tracked git paths only or from \
+       the live non-ignored worktree.";
   }
 
 let version_option =
   {
     usage = "--version X.Y.Z";
     flags = [ "--version" ];
-    description = "Set the canonical release version to X.Y.Z before regenerating metadata.";
+    description =
+      "Set the canonical release version to X.Y.Z before regenerating metadata.";
   }
 
 let tag_option =
   {
     usage = "--tag";
     flags = [ "--tag" ];
-    description = "Create the annotated git tag that matches the refreshed release version.";
+    description =
+      "Create the annotated git tag that matches the refreshed release version.";
   }
 
 let tap_dir_option =
@@ -492,15 +467,15 @@ let current_option =
     usage = "--current";
     flags = [ "--current" ];
     description =
-      "Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources.";
+      "Compute a fresh rebuild explanation from current inputs without compiling, \
+       linking, or materializing generated sources.";
   }
 
 let plan_option =
   {
     usage = "--plan";
     flags = [ "--plan" ];
-    description =
-      "Print the resolved REPL plan and exit without launching the toplevel.";
+    description = "Print the resolved REPL plan and exit without launching the toplevel.";
   }
 
 let ppx_plan_option =
@@ -508,7 +483,8 @@ let ppx_plan_option =
     usage = "--plan";
     flags = [ "--plan" ];
     description =
-      "Print the resolved preprocessor and PPX pipeline without dumping transformed source.";
+      "Print the resolved preprocessor and PPX pipeline without dumping transformed \
+       source.";
   }
 
 let script_option =
@@ -516,7 +492,8 @@ let script_option =
     usage = "--script PATH";
     flags = [ "--script" ];
     description =
-      "Read noninteractive toplevel phrases from PATH via stdin instead of passing a script file as an OCaml argv.";
+      "Read noninteractive toplevel phrases from PATH via stdin instead of passing a \
+       script file as an OCaml argv.";
   }
 
 let warmup_option =
@@ -545,7 +522,8 @@ let debounce_ms_option =
     usage = "--debounce-ms COUNT";
     flags = [ "--debounce-ms" ];
     description =
-      "Wait COUNT milliseconds after the first detected change before rerunning the watched subtool.";
+      "Wait COUNT milliseconds after the first detected change before rerunning the \
+       watched subtool.";
   }
 
 let max_runs_option =
@@ -561,7 +539,8 @@ let keep_going_option =
     usage = "--keep-going";
     flags = [ "--keep-going" ];
     description =
-      "Keep watching after a failed run instead of exiting with the first non-zero status.";
+      "Keep watching after a failed run instead of exiting with the first non-zero \
+       status.";
   }
 
 let keep_going_build_option =
@@ -569,7 +548,8 @@ let keep_going_build_option =
     usage = "--keep-going";
     flags = [ "--keep-going"; "-k" ];
     description =
-      "Continue building remaining targets after a failure instead of stopping at the first error.";
+      "Continue building remaining targets after a failure instead of stopping at the \
+       first error.";
   }
 
 let include_glob_option =
@@ -577,7 +557,8 @@ let include_glob_option =
     usage = "--include GLOB";
     flags = [ "--include" ];
     description =
-      "Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant source trees.";
+      "Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant \
+       source trees.";
   }
 
 let ignore_glob_option =
@@ -585,15 +566,15 @@ let ignore_glob_option =
     usage = "--ignore GLOB";
     flags = [ "--ignore" ];
     description =
-      "Ignore paths matching GLOB in addition to the built-in .git, _wadi, and _bootstrap exclusions.";
+      "Ignore paths matching GLOB in addition to the built-in .git, _wadi, and \
+       _bootstrap exclusions.";
   }
 
 let dir_option =
   {
     usage = "--dir DIR";
     flags = [ "--dir" ];
-    description =
-      "Create or update the scaffold in DIR instead of the current directory.";
+    description = "Create or update the scaffold in DIR instead of the current directory.";
   }
 
 let name_option =
@@ -637,7 +618,8 @@ let locked_option =
     usage = "--locked";
     flags = [ "--locked" ];
     description =
-      "Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.";
+      "Require wadi.lock to match the current manifest, recorded toolchain facts, and \
+       resolved package paths before continuing.";
   }
 
 let warn_locked_option =
@@ -645,7 +627,8 @@ let warn_locked_option =
     usage = "--warn-locked";
     flags = [ "--warn-locked" ];
     description =
-      "Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.";
+      "Warn when wadi.lock is missing or stale against the current manifest, toolchain \
+       facts, or resolved package paths, but continue with the build or install.";
   }
 
 let source_option =
@@ -660,7 +643,8 @@ let git_option =
     usage = "--git URL";
     flags = [ "--git" ];
     description =
-      "Clone the vendored package from URL into vendor/NAME and verify the pinned commit checksum.";
+      "Clone the vendored package from URL into vendor/NAME and verify the pinned commit \
+       checksum.";
   }
 
 let url_option =
@@ -668,7 +652,8 @@ let url_option =
     usage = "--url URL";
     flags = [ "--url" ];
     description =
-      "Download and extract the vendored source archive from URL into vendor/NAME and verify its checksum.";
+      "Download and extract the vendored source archive from URL into vendor/NAME and \
+       verify its checksum.";
   }
 
 let ref_option =
@@ -684,44 +669,39 @@ let checksum_option =
     usage = "--checksum VALUE";
     flags = [ "--checksum" ];
     description =
-      "Pin remote vendored sources. Git sources compare the resolved commit id; URL sources verify the downloaded archive digest (plain hex defaults to sha256:).";
+      "Pin remote vendored sources. Git sources compare the resolved commit id; URL \
+       sources verify the downloaded archive digest (plain hex defaults to sha256:).";
   }
 
 let interface_option =
   {
     usage = "--interface";
     flags = [ "--interface" ];
-    description = "Inspect or apply the target module interface (`.mli`) instead of the implementation.";
+    description =
+      "Inspect or apply the target module interface (`.mli`) instead of the \
+       implementation.";
   }
 
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
-
 let completion_protocol_name = "__wadi_completion"
-
 let completion_protocol_version = "1"
 
 let sanitize_completion_field text =
   let buffer = Buffer.create (String.length text) in
   String.iter
     (function
-      | '\t' | '\n' | '\r' -> Buffer.add_char buffer ' '
-      | ch -> Buffer.add_char buffer ch)
+      | '\t' | '\n' | '\r' -> Buffer.add_char buffer ' ' | ch -> Buffer.add_char buffer ch)
     text;
   Buffer.contents buffer
 
 let completion_protocol_header kind =
-  String.concat "\t"
-    [ completion_protocol_name; completion_protocol_version; kind ]
+  String.concat "\t" [ completion_protocol_name; completion_protocol_version; kind ]
 
 let completion_candidate_line ?hint value =
   match hint with
   | Some hint ->
       String.concat "\t"
-        [
-          "candidate";
-          sanitize_completion_field value;
-          sanitize_completion_field hint;
-        ]
+        [ "candidate"; sanitize_completion_field value; sanitize_completion_field hint ]
   | None -> String.concat "\t" [ "candidate"; sanitize_completion_field value ]
 
 let no_watch_root_files _ = []
@@ -738,7 +718,8 @@ let build_doc =
     name = "build";
     summary = "Compile libraries, executables, and tests into predictable artifact roots.";
     signature =
-      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]";
+      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi build";
@@ -768,7 +749,8 @@ let status_doc =
     summary =
       "Summarize which targets are rebuilt, regenerated, or reused without compiling.";
     signature =
-      "wadi status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]";
+      "wadi status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--json] [TARGET ...]";
     examples =
       [
         "wadi status";
@@ -777,13 +759,7 @@ let status_doc =
         "wadi status --json --profile release";
       ];
     options =
-      [
-        workspace_option;
-        profile_option;
-        backend_option;
-        json_option;
-        help_option;
-      ];
+      [ workspace_option; profile_option; backend_option; json_option; help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
   }
@@ -792,9 +768,11 @@ let doctor_doc =
   {
     name = "doctor";
     summary =
-      "Validate workspace configuration, toolchain health, package resolution, and lock drift.";
+      "Validate workspace configuration, toolchain health, package resolution, and lock \
+       drift.";
     signature =
-      "wadi doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]";
+      "wadi doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--json] [--locked | --warn-locked] [TARGET ...]";
     examples =
       [
         "wadi doctor";
@@ -822,7 +800,8 @@ let watch_doc =
     summary =
       "Poll the workspace and rerun a selected wadi subtool whenever inputs change.";
     signature =
-      "wadi watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]";
+      "wadi watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs \
+       COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]";
     examples =
       [
         "wadi watch build";
@@ -852,7 +831,8 @@ let init_doc =
     name = "init";
     summary = "Scaffold a minimal wadi workspace without hand-writing the first manifest.";
     signature =
-      "wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]";
+      "wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] \
+       [--executable NAME] [--bare] [--force]";
     examples =
       [
         "wadi init";
@@ -880,9 +860,9 @@ let action_doc =
   {
     name = "action";
     summary =
-      "Run declared generated-file actions for selected targets without compiling or linking.";
-    signature =
-      "wadi action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+      "Run declared generated-file actions for selected targets without compiling or \
+       linking.";
+    signature = "wadi action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi action";
@@ -901,7 +881,8 @@ let ppx_doc =
     summary =
       "Inspect or dump the post-preprocess, post-PPX source for one target module.";
     signature =
-      "wadi ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]";
+      "wadi ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] \
+       [--output PATH] TARGET [MODULE]";
     examples =
       [
         "wadi ppx demo";
@@ -929,7 +910,8 @@ let run_doc =
     name = "run";
     summary = "Build and launch an executable target with exact argv forwarding.";
     signature =
-      "wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
+      "wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--verbose] [TARGET] [-- ARG ...]";
     examples =
       [
         "wadi run";
@@ -937,7 +919,8 @@ let run_doc =
         "wadi run --profile release hello -- --loud";
         "wadi run -- --port 8080";
       ];
-    options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
+    options =
+      [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
   }
@@ -947,7 +930,8 @@ let test_doc =
     name = "test";
     summary = "Build and execute declared test targets with a direct failure summary.";
     signature =
-      "wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [-j N] [--verbose] [TARGET ...]";
+      "wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [-j \
+       N] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi test";
@@ -955,7 +939,15 @@ let test_doc =
         "wadi test -j 8 unit integration";
         "wadi test --workspace examples/hello --profile ci --verbose";
       ];
-    options = [ workspace_option; profile_option; backend_option; jobs_option; verbose_option; help_option ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        jobs_option;
+        verbose_option;
+        help_option;
+      ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
   }
@@ -963,10 +955,10 @@ let test_doc =
 let bench_doc =
   {
     name = "bench";
-    summary =
-      "Build executable targets and report stable benchmark timing summaries.";
+    summary = "Build executable targets and report stable benchmark timing summaries.";
     signature =
-      "wadi bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]";
+      "wadi bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]";
     examples =
       [
         "wadi bench";
@@ -1011,8 +1003,7 @@ let promote_doc =
     name = "promote";
     summary =
       "Copy declared non-source action outputs back into the workspace on purpose.";
-    signature =
-      "wadi promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+    signature = "wadi promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
         "wadi promote";
@@ -1027,9 +1018,11 @@ let promote_doc =
 let graph_doc =
   {
     name = "graph";
-    summary = "Show target build order, module order, and pipeline shape without compiling.";
+    summary =
+      "Show target build order, module order, and pipeline shape without compiling.";
     signature =
-      "wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]";
+      "wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [TARGET ...]";
     examples =
       [
         "wadi graph";
@@ -1061,9 +1054,9 @@ let lock_doc =
   {
     name = "lock";
     summary =
-      "Snapshot resolved toolchain facts and external package paths into a machine-readable lock file.";
-    signature =
-      "wadi lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]";
+      "Snapshot resolved toolchain facts and external package paths into a \
+       machine-readable lock file.";
+    signature = "wadi lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]";
     examples =
       [
         "wadi lock";
@@ -1080,14 +1073,17 @@ let vendor_doc =
   {
     name = "vendor";
     summary =
-      "Copy or fetch a source dependency into vendor/ and register it as a workspace member.";
+      "Copy or fetch a source dependency into vendor/ and register it as a workspace \
+       member.";
     signature =
-      "wadi vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]";
+      "wadi vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] \
+       [--checksum VALUE] [--name NAME] [--force]";
     examples =
       [
         "wadi vendor --source ../dep";
         "wadi vendor --git https://example.com/dep.git --checksum 0123abcd --name dep";
-        "wadi vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep";
+        "wadi vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd \
+         --name dep";
         "wadi vendor --workspace examples/app --source ../core --force";
       ];
     options =
@@ -1110,9 +1106,11 @@ let env_doc =
   {
     name = "env";
     summary =
-      "Print the exact subprocess environment a build, action, run, test, bench, or install step would inherit.";
+      "Print the exact subprocess environment a build, action, run, test, bench, or \
+       install step would inherit.";
     signature =
-      "wadi env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]";
+      "wadi env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL \
+       [TARGET ...]";
     examples =
       [
         "wadi env build";
@@ -1125,13 +1123,7 @@ let env_doc =
         "wadi env bench demo";
       ];
     options =
-      [
-        workspace_option;
-        profile_option;
-        json_option;
-        changed_only_option;
-        help_option;
-      ];
+      [ workspace_option; profile_option; json_option; changed_only_option; help_option ];
     completion_words = [ "build"; "action"; "run"; "test"; "bench"; "install" ];
     watch_root_files = no_watch_root_files;
   }
@@ -1142,7 +1134,8 @@ let repl_doc =
     summary =
       "Build a bytecode toplevel with workspace libraries and packages already wired in.";
     signature =
-      "wadi repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]";
+      "wadi repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] \
+       [--script PATH] [TARGET] [-- OCAML_ARG ...]";
     examples =
       [
         "wadi repl core";
@@ -1170,7 +1163,9 @@ let install_doc =
     name = "install";
     summary = "Stage installable libraries, executables, and metadata under a prefix.";
     signature =
-      "wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]";
+      "wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET \
+       ...]";
     examples =
       [
         "wadi install";
@@ -1199,13 +1194,10 @@ let release_artifacts_doc =
   {
     name = "release-artifacts";
     summary =
-      "Render CLI docs, shell completions, and packaged install-tree payloads from the live binary.";
+      "Render CLI docs, shell completions, and packaged install-tree payloads from the \
+       live binary.";
     signature = "wadi release-artifacts [--output-dir DIR]";
-    examples =
-      [
-        "wadi release-artifacts";
-        "wadi release-artifacts --output-dir dist";
-      ];
+    examples = [ "wadi release-artifacts"; "wadi release-artifacts --output-dir dist" ];
     options = [ output_dir_option; help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
@@ -1215,15 +1207,21 @@ let package_doc =
   {
     name = "package";
     summary =
-      "Render opam, Homebrew, checksum, and release-asset metadata from canonical release facts.";
+      "Render opam, Homebrew, checksum, and release-asset metadata from canonical \
+       release facts.";
     signature =
-      "wadi package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]";
+      "wadi package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] \
+       [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | \
+       --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode \
+       tracked|worktree]";
     examples =
       [
         "wadi package";
         "wadi package --output-dir dist";
-        "wadi package --source-archive-dir dist --asset-index-output dist/release-assets.json";
-        "wadi package --source-archive dist/wadi-source.tar.gz --checksums-output dist/SHA256SUMS";
+        "wadi package --source-archive-dir dist --asset-index-output \
+         dist/release-assets.json";
+        "wadi package --source-archive dist/wadi-source.tar.gz --checksums-output \
+         dist/SHA256SUMS";
         "wadi package --source-archive-dir dist --source-archive-mode worktree";
       ];
     options =
@@ -1247,7 +1245,8 @@ let sync_generated_doc =
   {
     name = "sync-generated";
     summary =
-      "Refresh bootstrap seed metadata, CLI docs, shell completions, and packaging manifests together.";
+      "Refresh bootstrap seed metadata, CLI docs, shell completions, and packaging \
+       manifests together.";
     signature = "wadi sync-generated";
     examples = [ "wadi sync-generated" ];
     options = [ help_option ];
@@ -1259,13 +1258,11 @@ let release_cut_doc =
   {
     name = "release-cut";
     summary =
-      "Bump the canonical release version, refresh packaging metadata, validate it, and optionally tag the repo.";
+      "Bump the canonical release version, refresh packaging metadata, validate it, and \
+       optionally tag the repo.";
     signature = "wadi release-cut --version X.Y.Z [--tag]";
     examples =
-      [
-        "wadi release-cut --version 0.2.0";
-        "wadi release-cut --version 0.2.0 --tag";
-      ];
+      [ "wadi release-cut --version 0.2.0"; "wadi release-cut --version 0.2.0 --tag" ];
     options = [ version_option; tag_option; help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
@@ -1274,14 +1271,16 @@ let release_cut_doc =
 let update_homebrew_tap_doc =
   {
     name = "update-homebrew-tap";
-    summary =
-      "Clone or update the canonical Homebrew tap with the rendered wadi formula.";
+    summary = "Clone or update the canonical Homebrew tap with the rendered wadi formula.";
     signature =
-      "wadi update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]";
+      "wadi update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] \
+       [--commit] [--push]";
     examples =
       [
-        "wadi update-homebrew-tap --tap-dir ../homebrew-wadi --formula Formula/wadi.rb --commit";
-        "wadi update-homebrew-tap --tap-dir ../homebrew-wadi --source-archive dist/wadi-0.1.0-source.tar.gz --commit --push";
+        "wadi update-homebrew-tap --tap-dir ../homebrew-wadi --formula Formula/wadi.rb \
+         --commit";
+        "wadi update-homebrew-tap --tap-dir ../homebrew-wadi --source-archive \
+         dist/wadi-0.1.0-source.tar.gz --commit --push";
       ];
     options =
       [
@@ -1332,9 +1331,11 @@ let toolchain_doc =
 let explain_doc =
   {
     name = "explain";
-    summary = "Show why a target rebuilt or reused artifacts and which commands were planned.";
+    summary =
+      "Show why a target rebuilt or reused artifacts and which commands were planned.";
     signature =
-      "wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]";
+      "wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] \
+       [--current] [--json] [TARGET ...]";
     examples =
       [
         "wadi explain";
@@ -1362,8 +1363,7 @@ let migrate_doc =
     name = "migrate";
     summary =
       "Scan dune files and emit a first-pass wadi.toml manifest with review comments.";
-    signature =
-      "wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]";
+    signature = "wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]";
     examples =
       [
         "wadi migrate --stdout";
@@ -1378,14 +1378,9 @@ let migrate_doc =
 
 let render_usage docs =
   String.concat "\n"
-    ([
-       "Usage:";
-     ]
+    ([ "Usage:" ]
     @ List.map (fun doc -> "  " ^ doc.signature) docs
-    @ [
-        "";
-        "Examples:";
-      ]
+    @ [ ""; "Examples:" ]
     @ List.concat_map
         (fun doc -> List.map (fun example -> "  " ^ example) doc.examples)
         docs)
@@ -1424,7 +1419,6 @@ let command_docs =
   ]
 
 let usage () = render_usage command_docs
-
 let command_usage doc = render_usage [ doc ]
 
 let render_options_markdown options =
@@ -1441,11 +1435,7 @@ let render_examples_markdown examples =
 
 let render_markdown docs =
   String.concat "\n"
-    ([
-       "# Wadi CLI";
-       "";
-       "Generated from the live command table.";
-     ]
+    ([ "# Wadi CLI"; ""; "Generated from the live command table." ]
     @ List.concat_map
         (fun doc ->
           [
@@ -1471,10 +1461,9 @@ let command_flag_words doc =
 
 let completion_query_command ?workspace_dir ?(describe = false) () =
   "wadi completion"
-  ^
-  (match workspace_dir with
-  | Some dir -> " --workspace " ^ String_util.shell_quote dir
-  | None -> "")
+  ^ (match workspace_dir with
+    | Some dir -> " --workspace " ^ String_util.shell_quote dir
+    | None -> "")
   ^ " --query"
   ^ if describe then " --describe" else ""
 
@@ -1494,7 +1483,8 @@ let render_bash_completion ?workspace_dir () =
       "  done";
       "}";
       "_wadi() {";
-      "  local cur response first_line body record protocol version kind value description";
+      "  local cur response first_line body record protocol version kind value \
+       description";
       "  local -a previous values described";
       "  cur=\"${COMP_WORDS[COMP_CWORD]}\"";
       "  previous=(\"${COMP_WORDS[@]:1:$((COMP_CWORD-1))}\")";
@@ -1596,7 +1586,9 @@ let long_flag_name flag =
   else None
 
 let short_flag_name flag =
-  if String_util.starts_with ~prefix:"-" flag && not (String_util.starts_with ~prefix:"--" flag)
+  if
+    String_util.starts_with ~prefix:"-" flag
+    && not (String_util.starts_with ~prefix:"--" flag)
   then Some (String.sub flag 1 (String.length flag - 1))
   else None
 
@@ -1604,13 +1596,8 @@ let render_fish_option command_name (option_doc : option_doc) =
   let long_flags = List.filter_map long_flag_name option_doc.flags in
   let short_flags = List.filter_map short_flag_name option_doc.flags in
   let flag_parts =
-    (match short_flags with
-    | short :: _ -> [ "-s"; short ]
-    | [] -> [])
-    @
-    (match long_flags with
-    | long :: _ -> [ "-l"; long ]
-    | [] -> [])
+    (match short_flags with short :: _ -> [ "-s"; short ] | [] -> [])
+    @ match long_flags with long :: _ -> [ "-l"; long ] | [] -> []
   in
   if flag_parts = [] then ""
   else
@@ -1677,8 +1664,7 @@ let completion_script ?workspace_dir shell =
   | "zsh" -> Ok (render_zsh_completion ?workspace_dir ())
   | "fish" -> Ok (render_fish_completion ?workspace_dir ())
   | shell ->
-      Error
-        (Printf.sprintf "unknown shell '%s'; expected bash, fish, or zsh" shell)
+      Error (Printf.sprintf "unknown shell '%s'; expected bash, fish, or zsh" shell)
 
 let report_error message =
   prerr_endline ("wadi: " ^ message);
@@ -1697,46 +1683,39 @@ let choose_lock_policy current requested =
 let parse_count flag value =
   try
     let parsed = int_of_string value in
-    if parsed < 0 then
-      Error (Printf.sprintf "%s requires a non-negative integer" flag)
+    if parsed < 0 then Error (Printf.sprintf "%s requires a non-negative integer" flag)
     else Ok parsed
   with Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
 
 let parse_positive_count flag value =
   let* parsed = parse_count flag value in
-  if parsed = 0 then
-    Error (Printf.sprintf "%s requires a positive integer" flag)
+  if parsed = 0 then Error (Printf.sprintf "%s requires a positive integer" flag)
   else Ok parsed
 
 let parse_build_args (args : string list) : (build_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : build_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
     | "--locked" :: rest ->
         let* lock_policy = choose_lock_policy options.lock_policy Require_locked in
         loop { options with lock_policy } rest
     | "--warn-locked" :: rest ->
         let* lock_policy = choose_lock_policy options.lock_policy Warn_locked in
         loop { options with lock_policy } rest
-    | ("--keep-going" | "-k") :: rest ->
-        loop { options with keep_going = true } rest
+    | ("--keep-going" | "-k") :: rest -> loop { options with keep_going = true } rest
     | ("-j" | "--jobs") :: n :: rest ->
         let* jobs = parse_positive_count "-j" n in
         loop { options with jobs } rest
     | ("-j" | "--jobs") :: [] -> Error "-j requires a positive integer"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage build_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -1759,17 +1738,14 @@ let parse_status_args (args : string list) : (status_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : status_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
     | "--json" :: rest -> loop { options with json = true } rest
     | "--help" :: _ -> Error (command_usage status_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
@@ -1790,17 +1766,14 @@ let parse_doctor_args (args : string list) : (doctor_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : doctor_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
     | "--json" :: rest -> loop { options with json = true } rest
     | "--locked" :: rest ->
         let* lock_policy = choose_lock_policy options.lock_policy Require_locked in
@@ -1834,11 +1807,9 @@ let parse_init_args (args : string list) : (init_options, string) result =
     | "--member" :: [] -> Error "--member requires a path"
     | "--name" :: name :: rest -> loop { options with name = Some name } rest
     | "--name" :: [] -> Error "--name requires a value"
-    | "--library" :: name :: rest ->
-        loop { options with library = Some name } rest
+    | "--library" :: name :: rest -> loop { options with library = Some name } rest
     | "--library" :: [] -> Error "--library requires a value"
-    | "--executable" :: name :: rest ->
-        loop { options with executable = Some name } rest
+    | "--executable" :: name :: rest -> loop { options with executable = Some name } rest
     | "--executable" :: [] -> Error "--executable requires a value"
     | "--bare" :: rest -> loop { options with bare = true } rest
     | "--force" :: rest -> loop { options with force = true } rest
@@ -1862,14 +1833,11 @@ let parse_init_args (args : string list) : (init_options, string) result =
 let parse_action_args (args : string list) : (action_options, string) result =
   let rec loop (options : action_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage action_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -1882,19 +1850,15 @@ let parse_run_args (args : string list) : (run_options, string) result =
   let rec loop (options : run_options) = function
     | [] -> Ok { options with args = options.args }
     | "--" :: rest -> Ok { options with args = rest }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage run_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -1903,8 +1867,8 @@ let parse_run_args (args : string list) : (run_options, string) result =
         | None -> loop { options with target = Some target } rest
         | Some _ ->
             Error
-              "run accepts at most one target before '--'; use '--' to pass \
-               program arguments")
+              "run accepts at most one target before '--'; use '--' to pass program \
+               arguments")
   in
   loop
     {
@@ -1921,23 +1885,19 @@ let parse_test_args (args : string list) : (test_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : test_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
     | ("-j" | "--jobs") :: value :: rest ->
         let* jobs = parse_positive_count "-j" value in
         loop { options with jobs } rest
     | ("-j" | "--jobs") :: [] -> Error "-j requires a positive integer"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage test_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -1954,26 +1914,21 @@ let parse_test_args (args : string list) : (test_options, string) result =
     }
     args
 
-let parse_iterations value =
-  parse_positive_count "--iterations" value
+let parse_iterations value = parse_positive_count "--iterations" value
 
 let parse_bench_args (args : string list) : (bench_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : bench_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--json" :: rest -> loop { options with json = true } rest
     | "--warmup" :: value :: rest ->
         let* warmup = parse_count "--warmup" value in
@@ -2004,8 +1959,7 @@ let parse_bench_args (args : string list) : (bench_options, string) result =
 let parse_watch_args (args : string list) : (watch_options, string) result =
   let rec loop (options : watch_options) = function
     | [] -> Ok options
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | "--poll-ms" :: value :: rest ->
         let* poll_ms = parse_positive_count "--poll-ms" value in
@@ -2019,8 +1973,7 @@ let parse_watch_args (args : string list) : (watch_options, string) result =
         let* max_runs = parse_positive_count "--max-runs" value in
         loop { options with max_runs = Some max_runs } rest
     | "--max-runs" :: [] -> Error "--max-runs requires an integer"
-    | "--keep-going" :: rest ->
-        loop { options with keep_going = true } rest
+    | "--keep-going" :: rest -> loop { options with keep_going = true } rest
     | "--include" :: glob :: rest ->
         loop { options with include_globs = glob :: options.include_globs } rest
     | "--include" :: [] -> Error "--include requires a glob"
@@ -2062,14 +2015,11 @@ let parse_watch_args (args : string list) : (watch_options, string) result =
 let parse_clean_args (args : string list) : (clean_options, string) result =
   let rec loop (options : clean_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage clean_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -2080,14 +2030,11 @@ let parse_clean_args (args : string list) : (clean_options, string) result =
 let parse_promote_args (args : string list) : (promote_options, string) result =
   let rec loop (options : promote_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage promote_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -2099,17 +2046,14 @@ let parse_graph_args (args : string list) : (graph_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : graph_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
     | "--help" :: _ -> Error (command_usage graph_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -2127,8 +2071,7 @@ let parse_graph_args (args : string list) : (graph_options, string) result =
 let parse_deps_args (args : string list) : (deps_options, string) result =
   let rec loop (options : deps_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | "--help" :: _ -> Error (command_usage deps_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
@@ -2143,11 +2086,9 @@ let parse_lock_args (args : string list) : (lock_options, string) result =
         if options.stdout && Option.is_some options.output_path then
           Error "--stdout cannot be combined with --output"
         else Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--output" :: path :: rest ->
-        loop { options with output_path = Some path } rest
+    | "--output" :: path :: rest -> loop { options with output_path = Some path } rest
     | "--output" :: [] -> Error "--output requires a path"
     | "--stdout" :: rest -> loop { options with stdout = true } rest
     | "--help" :: _ -> Error (command_usage lock_doc)
@@ -2160,19 +2101,14 @@ let parse_lock_args (args : string list) : (lock_options, string) result =
 let parse_ppx_args (args : string list) : (ppx_options, string) result =
   let rec loop (options : ppx_options) = function
     | [] -> Ok options
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: value :: rest ->
-        loop { options with profile = Some value } rest
+    | "--profile" :: value :: rest -> loop { options with profile = Some value } rest
     | "--profile" :: [] -> Error "--profile requires a name"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
-    | "--interface" :: rest ->
-        loop { options with interface = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
+    | "--interface" :: rest -> loop { options with interface = true } rest
     | "--plan" :: rest -> loop { options with plan = true } rest
-    | "--output" :: path :: rest ->
-        loop { options with output_path = Some path } rest
+    | "--output" :: path :: rest -> loop { options with output_path = Some path } rest
     | "--output" :: [] -> Error "--output requires a path"
     | "--help" :: _ -> Error (command_usage ppx_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
@@ -2180,8 +2116,7 @@ let parse_ppx_args (args : string list) : (ppx_options, string) result =
     | value :: rest -> (
         match (options.target, options.module_name) with
         | None, _ -> loop { options with target = Some value } rest
-        | Some _, None ->
-            loop { options with module_name = Some value } rest
+        | Some _, None -> loop { options with module_name = Some value } rest
         | Some _, Some _ -> Error "ppx accepts at most TARGET and MODULE")
   in
   let* options =
@@ -2202,32 +2137,24 @@ let parse_ppx_args (args : string list) : (ppx_options, string) result =
   | None, _, _, _ -> Error "ppx requires a target name"
   | Some _, None, false, Some _ ->
       Error "ppx --output requires MODULE unless --plan is set"
-  | Some _, None, _, _ when options.interface ->
-      Error "ppx --interface requires MODULE"
-  | Some _, _, true, Some _ ->
-      Error "ppx --plan cannot be combined with --output"
+  | Some _, None, _, _ when options.interface -> Error "ppx --interface requires MODULE"
+  | Some _, _, true, Some _ -> Error "ppx --plan cannot be combined with --output"
   | Some _, _, _, _ -> Ok options
 
 let parse_vendor_args (args : string list) : (vendor_options, string) result =
   let rec loop (options : vendor_options) = function
     | [] -> Ok options
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--source" :: dir :: rest ->
-        loop { options with source_dir = Some dir } rest
+    | "--source" :: dir :: rest -> loop { options with source_dir = Some dir } rest
     | "--source" :: [] -> Error "--source requires a directory"
-    | "--git" :: url :: rest ->
-        loop { options with git_url = Some url } rest
+    | "--git" :: url :: rest -> loop { options with git_url = Some url } rest
     | "--git" :: [] -> Error "--git requires a URL"
-    | "--url" :: url :: rest ->
-        loop { options with archive_url = Some url } rest
+    | "--url" :: url :: rest -> loop { options with archive_url = Some url } rest
     | "--url" :: [] -> Error "--url requires a URL"
-    | "--ref" :: value :: rest ->
-        loop { options with ref_name = Some value } rest
+    | "--ref" :: value :: rest -> loop { options with ref_name = Some value } rest
     | "--ref" :: [] -> Error "--ref requires a value"
-    | "--checksum" :: value :: rest ->
-        loop { options with checksum = Some value } rest
+    | "--checksum" :: value :: rest -> loop { options with checksum = Some value } rest
     | "--checksum" :: [] -> Error "--checksum requires a value"
     | "--name" :: name :: rest -> loop { options with name = Some name } rest
     | "--name" :: [] -> Error "--name requires a value"
@@ -2237,7 +2164,8 @@ let parse_vendor_args (args : string list) : (vendor_options, string) result =
         Error (Printf.sprintf "unknown option '%s'" option)
     | _ :: _ ->
         Error
-          "vendor does not accept positional arguments; use --source DIR, --git URL, or --url URL"
+          "vendor does not accept positional arguments; use --source DIR, --git URL, or \
+           --url URL"
   in
   let* options =
     loop
@@ -2267,10 +2195,8 @@ let parse_vendor_args (args : string list) : (vendor_options, string) result =
   else if options.checksum <> None && options.source_dir <> None then
     Error "vendor --checksum is only valid with --git URL or --url URL"
   else if
-    (options.git_url <> None || options.archive_url <> None)
-    && options.checksum = None
-  then
-    Error "vendor remote sources require --checksum VALUE"
+    (options.git_url <> None || options.archive_url <> None) && options.checksum = None
+  then Error "vendor remote sources require --checksum VALUE"
   else Ok options
 
 let parse_env_args (args : string list) : (env_options, string) result =
@@ -2287,7 +2213,7 @@ let parse_env_args (args : string list) : (env_options, string) result =
                 targets = List.rev targets;
                 json;
                 changed_only;
-              } )
+              })
     | "--workspace" :: dir :: rest ->
         loop dir profile json changed_only subtool targets rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
@@ -2305,13 +2231,11 @@ let parse_env_args (args : string list) : (env_options, string) result =
         match subtool with
         | None ->
             let* subtool = Env_report.parse_subtool value in
-            loop workspace_dir profile json changed_only (Some subtool) targets
-              rest
+            loop workspace_dir profile json changed_only (Some subtool) targets rest
         | Some Env_report.Run when targets <> [] ->
             Error "env run accepts at most one target"
         | Some _ ->
-            loop workspace_dir profile json changed_only subtool
-              (value :: targets) rest)
+            loop workspace_dir profile json changed_only subtool (value :: targets) rest)
   in
   loop "." None false false None [] args
 
@@ -2319,18 +2243,14 @@ let parse_repl_args (args : string list) : (repl_options, string) result =
   let rec loop (options : repl_options) = function
     | [] -> Ok options
     | "--" :: rest -> Ok { options with args = rest }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: value :: rest ->
-        loop { options with profile = Some value } rest
+    | "--profile" :: value :: rest -> loop { options with profile = Some value } rest
     | "--profile" :: [] -> Error "--profile requires a name"
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--plan" :: rest -> loop { options with plan = true } rest
     | "--json" :: rest -> loop { options with json = true } rest
-    | "--script" :: path :: rest ->
-        loop { options with script_path = Some path } rest
+    | "--script" :: path :: rest -> loop { options with script_path = Some path } rest
     | "--script" :: [] -> Error "--script requires a path"
     | "--help" :: _ -> Error (command_usage repl_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
@@ -2354,8 +2274,7 @@ let parse_repl_args (args : string list) : (repl_options, string) result =
       }
       args
   in
-  if options.json && not options.plan then
-    Error "repl --json requires --plan"
+  if options.json && not options.plan then Error "repl --json requires --plan"
   else Ok options
 
 let parse_toolchain_args args =
@@ -2376,19 +2295,18 @@ let parse_docs_args args =
 
 let parse_completion_args args =
   let rec loop workspace_dir shell query describe current previous = function
-    | [] ->
+    | [] -> (
         if query then
           Ok
             {
               workspace_dir;
               mode = Query { previous = List.rev previous; current; describe };
             }
-        else (
+        else
           match shell with
           | Some shell -> Ok { workspace_dir; mode = Render_script shell }
           | None -> Error "completion requires a shell name")
-    | "--workspace" :: dir :: rest ->
-        loop dir shell query describe current previous rest
+    | "--workspace" :: dir :: rest -> loop dir shell query describe current previous rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
     | "--query" :: rest -> loop workspace_dir shell true describe current previous rest
     | "--describe" :: rest ->
@@ -2403,25 +2321,19 @@ let parse_completion_args args =
           Ok
             {
               workspace_dir;
-              mode =
-                Query
-                  {
-                    previous = List.rev_append previous rest;
-                    current;
-                    describe;
-                  };
+              mode = Query { previous = List.rev_append previous rest; current; describe };
             }
         else Error "completion accepts exactly one shell name"
     | "--help" :: _ when not query -> Error (command_usage completion_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
-    | value :: rest ->
+    | value :: rest -> (
         if query then
           loop workspace_dir shell query describe current (value :: previous) rest
         else
           match shell with
           | None -> loop workspace_dir (Some value) query describe current previous rest
-          | Some _ -> Error "completion accepts exactly one shell name"
+          | Some _ -> Error "completion accepts exactly one shell name")
   in
   loop "." None false false "" [] args
 
@@ -2431,11 +2343,9 @@ let parse_migrate_args args =
         if options.stdout && Option.is_some options.output_path then
           Error "--stdout cannot be combined with --output"
         else Ok options
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--output" :: path :: rest ->
-        loop { options with output_path = Some path } rest
+    | "--output" :: path :: rest -> loop { options with output_path = Some path } rest
     | "--output" :: [] -> Error "--output requires a path"
     | "--stdout" :: rest -> loop { options with stdout = true } rest
     | "--force" :: rest -> loop { options with force = true } rest
@@ -2444,30 +2354,23 @@ let parse_migrate_args args =
         Error (Printf.sprintf "unknown option '%s'" option)
     | _ :: _ -> Error "migrate does not accept positional arguments"
   in
-  loop
-    { workspace_dir = "."; output_path = None; stdout = false; force = false }
-    args
+  loop { workspace_dir = "."; output_path = None; stdout = false; force = false } args
 
 let parse_install_args (args : string list) : (install_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : install_options) = function
     | [] -> Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
-    | "--prefix" :: prefix :: rest ->
-        loop { options with prefix = Some prefix } rest
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
+    | "--prefix" :: prefix :: rest -> loop { options with prefix = Some prefix } rest
     | "--prefix" :: [] -> Error "--prefix requires a directory"
-    | "--destdir" :: destdir :: rest ->
-        loop { options with destdir = Some destdir } rest
+    | "--destdir" :: destdir :: rest -> loop { options with destdir = Some destdir } rest
     | "--destdir" :: [] -> Error "--destdir requires a directory"
     | "--locked" :: rest ->
         let* lock_policy = choose_lock_policy options.lock_policy Require_locked in
@@ -2475,8 +2378,7 @@ let parse_install_args (args : string list) : (install_options, string) result =
     | "--warn-locked" :: rest ->
         let* lock_policy = choose_lock_policy options.lock_policy Warn_locked in
         loop { options with lock_policy } rest
-    | ("--verbose" | "-v") :: rest ->
-        loop { options with verbose = true } rest
+    | ("--verbose" | "-v") :: rest -> loop { options with verbose = true } rest
     | "--help" :: _ -> Error (command_usage install_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
@@ -2513,7 +2415,8 @@ let parse_package_args args =
     | None -> Ok (Some next)
     | Some _ ->
         Error
-          "pass only one of --source-archive, --source-archive-dir, or --reuse-source-archive-dir"
+          "pass only one of --source-archive, --source-archive-dir, or \
+           --reuse-source-archive-dir"
   in
   let rec loop options = function
     | [] -> Ok options
@@ -2539,12 +2442,10 @@ let parse_package_args args =
     | "--source-archive" :: [] -> Error "--source-archive requires a path"
     | "--source-archive-dir" :: dir :: rest ->
         let* archive_input =
-          choose_archive_input options.archive_input
-            (Packager.Source_archive_dir dir)
+          choose_archive_input options.archive_input (Packager.Source_archive_dir dir)
         in
         loop { options with archive_input } rest
-    | "--source-archive-dir" :: [] ->
-        Error "--source-archive-dir requires a directory"
+    | "--source-archive-dir" :: [] -> Error "--source-archive-dir requires a directory"
     | "--reuse-source-archive-dir" :: dir :: rest ->
         let* archive_input =
           choose_archive_input options.archive_input
@@ -2589,8 +2490,7 @@ let parse_sync_generated_args args =
 let parse_release_cut_args args =
   let rec loop options = function
     | [] -> Ok options
-    | "--version" :: version :: rest ->
-        loop { options with version = Some version } rest
+    | "--version" :: version :: rest -> loop { options with version = Some version } rest
     | "--version" :: [] -> Error "--version requires a value"
     | "--tag" :: rest -> loop { options with tag = true } rest
     | "--help" :: _ -> Error (command_usage release_cut_doc)
@@ -2605,8 +2505,7 @@ let parse_update_homebrew_tap_args args =
     | [] -> Ok options
     | "--tap-dir" :: dir :: rest -> loop { options with tap_dir = Some dir } rest
     | "--tap-dir" :: [] -> Error "--tap-dir requires a directory"
-    | "--formula" :: path :: rest ->
-        loop { options with formula_path = Some path } rest
+    | "--formula" :: path :: rest -> loop { options with formula_path = Some path } rest
     | "--formula" :: [] -> Error "--formula requires a path"
     | "--source-archive" :: path :: rest ->
         loop { options with source_archive = Some path } rest
@@ -2616,8 +2515,7 @@ let parse_update_homebrew_tap_args args =
     | "--help" :: _ -> Error (command_usage update_homebrew_tap_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
-    | _ :: _ ->
-        Error "update-homebrew-tap does not accept positional arguments"
+    | _ :: _ -> Error "update-homebrew-tap does not accept positional arguments"
   in
   loop
     {
@@ -2636,17 +2534,14 @@ let parse_explain_args (args : string list) : (explain_options, string) result =
         if options.backend_specified && not options.current then
           Error "--backend is only supported with --current"
         else Ok { options with targets = List.rev options.targets }
-    | "--workspace" :: dir :: rest ->
-        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
     | "--workspace" :: [] -> Error "--workspace requires a directory"
-    | "--profile" :: profile :: rest ->
-        loop { options with profile = Some profile } rest
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
     | "--profile" :: [] -> Error "--profile requires a name"
     | "--backend" :: backend :: rest ->
         let* backend_request = Toolchain.parse_backend_request backend in
         loop { options with backend_request; backend_specified = true } rest
-    | "--backend" :: [] ->
-        Error "--backend requires auto, native, or bytecode"
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
     | "--current" :: rest -> loop { options with current = true } rest
     | "--json" :: rest -> loop { options with json = true } rest
     | "--help" :: _ -> Error (command_usage explain_doc)
@@ -2668,8 +2563,7 @@ let parse_explain_args (args : string list) : (explain_options, string) result =
 
 let load_workspace workspace_dir =
   if not (Fs.is_directory workspace_dir) then
-    Error
-      (Printf.sprintf "workspace directory does not exist: %s" workspace_dir)
+    Error (Printf.sprintf "workspace directory does not exist: %s" workspace_dir)
   else
     let manifest_path = Filename.concat workspace_dir Manifest.default_filename in
     if not (Fs.exists manifest_path) then
@@ -2678,8 +2572,7 @@ let load_workspace workspace_dir =
 
 let load_workspace_if_present workspace_dir =
   if not (Fs.is_directory workspace_dir) then
-    Error
-      (Printf.sprintf "workspace directory does not exist: %s" workspace_dir)
+    Error (Printf.sprintf "workspace directory does not exist: %s" workspace_dir)
   else
     let manifest_path = Filename.concat workspace_dir Manifest.default_filename in
     if Fs.exists manifest_path then Manifest.load manifest_path |> Result.map Option.some
@@ -2690,9 +2583,7 @@ let profile_names workspace =
   :: List.map (fun (profile : Manifest.profile) -> profile.name) workspace.profiles
   |> String_util.dedup_preserve
 
-let all_target_names workspace =
-  List.map Manifest.target_name workspace.Manifest.targets
-
+let all_target_names workspace = List.map Manifest.target_name workspace.Manifest.targets
 let candidate ?hint value = { value; hint }
 
 let target_candidate target =
@@ -2709,15 +2600,13 @@ let executable_target_candidates workspace =
   List.filter_map
     (function
       | Manifest.Executable executable ->
-          Some
-            (candidate ?hint:executable.package_path executable.name)
+          Some (candidate ?hint:executable.package_path executable.name)
       | Manifest.Library _ | Manifest.Test _ -> None)
     workspace.Manifest.targets
 
 let bench_target_candidates workspace =
   List.map
-    (fun (bench : Manifest.bench_target) ->
-      candidate ?hint:bench.package_path bench.name)
+    (fun (bench : Manifest.bench_target) -> candidate ?hint:bench.package_path bench.name)
     workspace.Manifest.benches
   @ executable_target_candidates workspace
 
@@ -2757,29 +2646,27 @@ let find_command_doc name =
   List.find_opt (fun (doc : command_doc) -> doc.name = name) command_docs
 
 let option_expects_value = function
-  | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
-  | "--output" | "--output-dir" | "--opam-output" | "--formula-output"
-  | "--checksums-output" | "--asset-index-output" | "--source-archive"
-  | "--source-archive-dir" | "--reuse-source-archive-dir"
-  | "--source-archive-mode" | "--script"
-  | "--warmup" | "--iterations" | "--dir" | "--name" | "--member"
-  | "--library" | "--executable" | "--source" | "--git" | "--url"
-  | "--ref" | "--checksum" | "--poll-ms" | "--debounce-ms" | "--max-runs"
-  | "--include" | "--ignore" | "--version" | "--tap-dir" | "--formula" ->
+  | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir" | "--output"
+  | "--output-dir" | "--opam-output" | "--formula-output" | "--checksums-output"
+  | "--asset-index-output" | "--source-archive" | "--source-archive-dir"
+  | "--reuse-source-archive-dir" | "--source-archive-mode" | "--script" | "--warmup"
+  | "--iterations" | "--dir" | "--name" | "--member" | "--library" | "--executable"
+  | "--source" | "--git" | "--url" | "--ref" | "--checksum" | "--poll-ms"
+  | "--debounce-ms" | "--max-runs" | "--include" | "--ignore" | "--version" | "--tap-dir"
+  | "--formula" ->
       true
   | _ -> false
 
 let watch_option_expects_value = function
-  | "--workspace" | "--poll-ms" | "--debounce-ms" | "--max-runs"
-  | "--include" | "--ignore" ->
+  | "--workspace" | "--poll-ms" | "--debounce-ms" | "--max-runs" | "--include"
+  | "--ignore" ->
       true
   | _ -> false
 
 let rec positional_argument_count = function
   | [] -> 0
   | "--" :: rest -> List.length rest
-  | option :: _ :: rest when option_expects_value option ->
-      positional_argument_count rest
+  | option :: _ :: rest when option_expects_value option -> positional_argument_count rest
   | option :: rest when String_util.starts_with ~prefix:"-" option ->
       positional_argument_count rest
   | _value :: rest -> 1 + positional_argument_count rest
@@ -2787,8 +2674,7 @@ let rec positional_argument_count = function
 let rec positional_arguments acc = function
   | [] -> List.rev acc
   | "--" :: rest -> List.rev_append acc rest
-  | option :: _ :: rest when option_expects_value option ->
-      positional_arguments acc rest
+  | option :: _ :: rest when option_expects_value option -> positional_arguments acc rest
   | option :: rest when String_util.starts_with ~prefix:"-" option ->
       positional_arguments acc rest
   | value :: rest -> positional_arguments (value :: acc) rest
@@ -2806,11 +2692,11 @@ let positional_completion_candidates ?workspace command_name rest =
           List.map (fun word -> candidate word) completion_doc.completion_words
       | "env" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) env_doc.completion_words
-      | _ -> [] )
+      | _ -> [])
   | Some workspace -> (
       match command_name with
-      | "build" | "status" | "doctor" | "action" | "clean" | "promote"
-      | "graph" | "deps" | "lock" | "explain" ->
+      | "build" | "status" | "doctor" | "action" | "clean" | "promote" | "graph" | "deps"
+      | "lock" | "explain" ->
           List.map target_candidate workspace.Manifest.targets
       | "watch" when positional_argument_count rest = 0 ->
           List.filter_map
@@ -2840,7 +2726,7 @@ let positional_completion_candidates ?workspace command_name rest =
           | [ "test" ] -> test_target_candidates workspace
           | [ "bench" ] -> bench_target_candidates workspace
           | [ "install" ] -> installable_target_candidates workspace
-          | _ -> [] )
+          | _ -> [])
       | "install" -> installable_target_candidates workspace
       | "completion" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) completion_doc.completion_words
@@ -2850,16 +2736,14 @@ let positional_completion_candidates ?workspace command_name rest =
 let value_completion_candidates ?workspace = function
   | "--profile" -> (
       match workspace with
-      | Some workspace ->
-          List.map (fun word -> candidate word) (profile_names workspace)
+      | Some workspace -> List.map (fun word -> candidate word) (profile_names workspace)
       | None -> [])
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
   | "--workspace" | "--prefix" | "--destdir" | "--output" | "--output-dir"
-  | "--opam-output" | "--formula-output" | "--checksums-output"
-  | "--asset-index-output" | "--source-archive" | "--source-archive-dir"
-  | "--reuse-source-archive-dir" | "--script" | "--dir" | "--name"
-  | "--member" | "--library" | "--executable" | "--source" | "--git"
-  | "--url" | "--ref" | "--checksum" | "--version" | "--tap-dir"
+  | "--opam-output" | "--formula-output" | "--checksums-output" | "--asset-index-output"
+  | "--source-archive" | "--source-archive-dir" | "--reuse-source-archive-dir"
+  | "--script" | "--dir" | "--name" | "--member" | "--library" | "--executable"
+  | "--source" | "--git" | "--url" | "--ref" | "--checksum" | "--version" | "--tap-dir"
   | "--formula" ->
       []
   | "--source-archive-mode" ->
@@ -2867,14 +2751,12 @@ let value_completion_candidates ?workspace = function
   | _ -> []
 
 let value_completion_response ?workspace = function
-  | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source"
-  | "--output-dir" | "--source-archive-dir" | "--reuse-source-archive-dir"
-  | "--tap-dir" ->
+  | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source" | "--output-dir"
+  | "--source-archive-dir" | "--reuse-source-archive-dir" | "--tap-dir" ->
       Complete_directories
   | "--member" -> Complete_directories
-  | "--output" | "--opam-output" | "--formula-output"
-  | "--checksums-output" | "--asset-index-output" | "--source-archive"
-  | "--script" | "--formula" ->
+  | "--output" | "--opam-output" | "--formula-output" | "--checksums-output"
+  | "--asset-index-output" | "--source-archive" | "--script" | "--formula" ->
       Complete_files
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
@@ -2894,7 +2776,7 @@ let dedup_completion_candidates candidates =
 let filter_completion_candidates ~current candidates =
   dedup_completion_candidates candidates
   |> List.filter (fun candidate ->
-         current = "" || String_util.starts_with ~prefix:current candidate.value)
+      current = "" || String_util.starts_with ~prefix:current candidate.value)
 
 let completion_candidates_response ~current candidates =
   Completion_candidates (filter_completion_candidates ~current candidates)
@@ -2919,8 +2801,7 @@ let render_value_completion ?workspace ~current option_name =
   match value_completion_response ?workspace option_name with
   | Complete_directories -> Complete_directories
   | Complete_files -> Complete_files
-  | Completion_candidates candidates ->
-      completion_candidates_response ~current candidates
+  | Completion_candidates candidates -> completion_candidates_response ~current candidates
 
 let watch_command_candidates () =
   List.filter_map
@@ -2929,9 +2810,7 @@ let watch_command_candidates () =
     command_docs
 
 let resolve_path_from cwd path =
-  let path =
-    if Filename.is_relative path then Filename.concat cwd path else path
-  in
+  let path = if Filename.is_relative path then Filename.concat cwd path else path in
   Fs.realpath path
 
 let watch_inner_workspace_dir args =
@@ -2958,8 +2837,7 @@ and watch_completion_response workspace ~rest ~current =
       match find_command_doc command_name with
       | None -> Completion_candidates []
       | Some _ ->
-          completion_response workspace ~previous:(command_name :: inner_rest)
-            ~current)
+          completion_response workspace ~previous:(command_name :: inner_rest) ~current)
   | None -> (
       match List.rev rest with
       | option_name :: _ when watch_option_expects_value option_name ->
@@ -3010,13 +2888,11 @@ let resolve_run_target workspace requested_target =
       | None -> Error (Printf.sprintf "unknown target '%s'" name)
       | Some (Manifest.Library _) ->
           Error
-            (Printf.sprintf
-               "target '%s' is a library; wadi run only supports executables"
+            (Printf.sprintf "target '%s' is a library; wadi run only supports executables"
                name)
       | Some (Manifest.Test _) ->
           Error
-            (Printf.sprintf
-               "target '%s' is a test; wadi run only supports executables"
+            (Printf.sprintf "target '%s' is a test; wadi run only supports executables"
                name)
       | Some (Manifest.Executable executable) -> Ok executable)
   | None -> (
@@ -3050,8 +2926,7 @@ let resolve_explain_targets workspace requested_targets =
   else
     let index = Hashtbl.create (List.length workspace.Manifest.targets) in
     List.iter
-      (fun target ->
-        Hashtbl.replace index (Manifest.target_name target) target)
+      (fun target -> Hashtbl.replace index (Manifest.target_name target) target)
       workspace.Manifest.targets;
     let rec loop acc = function
       | [] -> Ok (List.rev acc)
@@ -3066,31 +2941,27 @@ let validate_lock_policy lock_policy ~workspace_root workspace requested_targets
   match lock_policy with
   | Ignore_lock -> Ok ()
   | Warn_locked -> (
-      match
-        Locker.validate_current ~workspace_root workspace requested_targets
-      with
+      match Locker.validate_current ~workspace_root workspace requested_targets with
       | Ok () -> Ok ()
       | Error message ->
           prerr_endline ("wadi: warning: " ^ message);
           Ok ())
-  | Require_locked ->
-      Locker.validate_current ~workspace_root workspace requested_targets
+  | Require_locked -> Locker.validate_current ~workspace_root workspace requested_targets
 
 let run_build (options : build_options) =
   match load_workspace options.workspace_dir with
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        validate_lock_policy options.lock_policy
-          ~workspace_root:options.workspace_dir workspace options.targets
+        validate_lock_policy options.lock_policy ~workspace_root:options.workspace_dir
+          workspace options.targets
       with
       | Ok () -> (
           match
-            Builder.build ~workspace_root:options.workspace_dir
-              ~verbose:options.verbose ~keep_going:options.keep_going
-              ~jobs:options.jobs ~requested_targets:options.targets
-              ~backend_request:options.backend_request ?profile:options.profile
-              workspace
+            Builder.build ~workspace_root:options.workspace_dir ~verbose:options.verbose
+              ~keep_going:options.keep_going ~jobs:options.jobs
+              ~requested_targets:options.targets ~backend_request:options.backend_request
+              ?profile:options.profile workspace
           with
           | Ok _ -> Exit_code 0
           | Error message -> report_error message)
@@ -3102,9 +2973,8 @@ let run_status_command (options : status_options) =
   | Ok workspace -> (
       match
         Status.report ~workspace_root:options.workspace_dir
-          ~requested_targets:options.targets
-          ~backend_request:options.backend_request ?profile:options.profile
-          workspace
+          ~requested_targets:options.targets ~backend_request:options.backend_request
+          ?profile:options.profile workspace
       with
       | Ok report ->
           print_string
@@ -3124,8 +2994,8 @@ let run_doctor (options : doctor_options) =
   | Ok workspace -> (
       match
         Doctor.report ~workspace_root:options.workspace_dir
-          ~requested_targets:options.targets
-          ~backend_request:options.backend_request ?profile:options.profile
+          ~requested_targets:options.targets ~backend_request:options.backend_request
+          ?profile:options.profile
           ~lock_policy:(doctor_lock_policy options.lock_policy)
           workspace
       with
@@ -3145,12 +3015,12 @@ let run_watch (options : watch_options) =
     let manifest_path = Filename.concat workspace_root Manifest.default_filename in
     if not (Fs.exists manifest_path) then
       report_error (Printf.sprintf "manifest not found: %s" manifest_path)
-    else (
+    else
       let start_watch command_name command_root_files =
         match
           Watch.run
             {
-              Watch.workspace_root = workspace_root;
+              Watch.workspace_root;
               poll_ms = options.poll_ms;
               debounce_ms = options.debounce_ms;
               max_runs = options.max_runs;
@@ -3167,13 +3037,11 @@ let run_watch (options : watch_options) =
       in
       match options.command_name with
       | None -> report_error "watch requires a subtool name"
-      | Some "watch" ->
-          report_error "watch cannot watch itself; choose another subtool"
+      | Some "watch" -> report_error "watch cannot watch itself; choose another subtool"
       | Some command_name -> (
           match find_command_doc command_name with
           | None ->
-              report_error
-                (Printf.sprintf "unknown subtool '%s' for watch" command_name)
+              report_error (Printf.sprintf "unknown subtool '%s' for watch" command_name)
           | Some doc -> (
               match watch_inner_workspace_dir options.command_args with
               | Some inner_workspace_dir ->
@@ -3183,22 +3051,19 @@ let run_watch (options : watch_options) =
                   if inner_workspace_root <> workspace_root then
                     report_error
                       (Printf.sprintf
-                         "watch subtool workspace %s conflicts with watched \
-                          workspace %s; remove the inner --workspace or point \
-                          it at the same tree"
+                         "watch subtool workspace %s conflicts with watched workspace \
+                          %s; remove the inner --workspace or point it at the same tree"
                          inner_workspace_root workspace_root)
                   else
-                    start_watch command_name
-                      (doc.watch_root_files options.command_args)
+                    start_watch command_name (doc.watch_root_files options.command_args)
               | None ->
-                  start_watch command_name
-                    (doc.watch_root_files options.command_args))))
+                  start_watch command_name (doc.watch_root_files options.command_args)))
 
 let run_init (options : init_options) =
   match
     Init.init ~root_dir:options.dir ?name:options.name ?library:options.library
-      ?executable:options.executable ?member:options.member_path
-      ~bare:options.bare ~force:options.force ()
+      ?executable:options.executable ?member:options.member_path ~bare:options.bare
+      ~force:options.force ()
   with
   | Ok report ->
       print_string (Init.render_report report);
@@ -3210,9 +3075,8 @@ let run_action_command (options : action_options) =
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        Actioner.run ~workspace_root:options.workspace_dir
-          ~verbose:options.verbose ?profile:options.profile
-          ~requested_targets:options.targets workspace
+        Actioner.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
+          ?profile:options.profile ~requested_targets:options.targets workspace
       with
       | Ok reports ->
           print_string (Actioner.render_report reports);
@@ -3225,9 +3089,8 @@ let run_graph (options : graph_options) =
   | Ok workspace -> (
       match
         Graph.plan ~workspace_root:options.workspace_dir
-          ~requested_targets:options.targets
-          ~backend_request:options.backend_request ?profile:options.profile
-          workspace
+          ~requested_targets:options.targets ~backend_request:options.backend_request
+          ?profile:options.profile workspace
       with
       | Ok report ->
           print_endline (Graph.render_report report);
@@ -3242,10 +3105,9 @@ let run_executable (options : run_options) =
       | Error message -> report_error message
       | Ok target -> (
           match
-            Builder.build ~workspace_root:options.workspace_dir
-              ~verbose:options.verbose ~requested_targets:[ target.name ]
-              ~backend_request:options.backend_request ?profile:options.profile
-              workspace
+            Builder.build ~workspace_root:options.workspace_dir ~verbose:options.verbose
+              ~requested_targets:[ target.name ] ~backend_request:options.backend_request
+              ?profile:options.profile workspace
           with
           | Error message -> report_error message
           | Ok result -> (
@@ -3271,9 +3133,8 @@ let run_tests (options : test_options) =
   | Ok workspace -> (
       match
         Tester.run ~workspace_root:options.workspace_dir ~verbose:options.verbose
-          ~backend_request:options.backend_request
-          ?profile:options.profile ~jobs:options.jobs
-          ~requested_targets:options.targets workspace
+          ~backend_request:options.backend_request ?profile:options.profile
+          ~jobs:options.jobs ~requested_targets:options.targets workspace
       with
       | Ok status -> Exit_code status
       | Error message -> report_error message)
@@ -3283,11 +3144,10 @@ let run_bench (options : bench_options) =
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        Bench.report ~workspace_root:options.workspace_dir
-          ~verbose:options.verbose ~backend_request:options.backend_request
-          ?profile:options.profile ?warmup:options.warmup
-          ?iterations:options.iterations ~requested_targets:options.targets
-          workspace
+        Bench.report ~workspace_root:options.workspace_dir ~verbose:options.verbose
+          ~backend_request:options.backend_request ?profile:options.profile
+          ?warmup:options.warmup ?iterations:options.iterations
+          ~requested_targets:options.targets workspace
       with
       | Ok summaries ->
           print_string
@@ -3299,15 +3159,14 @@ let run_bench (options : bench_options) =
 let run_clean (options : clean_options) =
   if not (Fs.is_directory options.workspace_dir) then
     report_error
-      (Printf.sprintf "workspace directory does not exist: %s"
-         options.workspace_dir)
-  else if options.targets = [] then (
+      (Printf.sprintf "workspace directory does not exist: %s" options.workspace_dir)
+  else if options.targets = [] then
     match
       Cleaner.clean_workspace ~workspace_root:options.workspace_dir
         ~profile:options.profile ~verbose:options.verbose
     with
     | Ok () -> Exit_code 0
-    | Error message -> report_error message)
+    | Error message -> report_error message
   else
     match load_workspace options.workspace_dir with
     | Error message -> report_error message
@@ -3315,8 +3174,7 @@ let run_clean (options : clean_options) =
         match
           Cleaner.clean_targets ~workspace_root:options.workspace_dir
             ~profile:options.profile ~verbose:options.verbose
-            ~requested_targets:options.targets
-            workspace
+            ~requested_targets:options.targets workspace
         with
         | Ok () -> Exit_code 0
         | Error message -> report_error message)
@@ -3326,9 +3184,8 @@ let run_promote (options : promote_options) =
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        Promoter.promote ~workspace_root:options.workspace_dir
-          ~verbose:options.verbose ?profile:options.profile
-          ~requested_targets:options.targets workspace
+        Promoter.promote ~workspace_root:options.workspace_dir ~verbose:options.verbose
+          ?profile:options.profile ~requested_targets:options.targets workspace
       with
       | Ok promoted ->
           print_string (Promoter.render_report promoted);
@@ -3363,8 +3220,7 @@ let run_lock (options : lock_options) =
             let output_path =
               match options.output_path with
               | Some path -> path
-              | None ->
-                  Filename.concat options.workspace_dir Locker.default_lock_filename
+              | None -> Filename.concat options.workspace_dir Locker.default_lock_filename
             in
             if Fs.is_directory output_path then
               report_error (Printf.sprintf "output path is a directory: %s" output_path)
@@ -3380,17 +3236,16 @@ let run_ppx (options : ppx_options) =
       let profile = resolve_profile workspace options.profile in
       match options.target with
       | None -> report_error "ppx requires a target name"
-      | Some target_name ->
+      | Some target_name -> (
           if options.plan || options.module_name = None then
             match
-              Ppx_tool.plan ~workspace_root:options.workspace_dir
-                ~verbose:options.verbose ?module_name:options.module_name
-                ~interface:options.interface ~profile workspace target_name
+              Ppx_tool.plan ~workspace_root:options.workspace_dir ~verbose:options.verbose
+                ?module_name:options.module_name ~interface:options.interface ~profile
+                workspace target_name
             with
             | Ok plan ->
                 print_string
-                  (Ppx_tool.render_plan ~workspace_root:options.workspace_dir
-                     plan);
+                  (Ppx_tool.render_plan ~workspace_root:options.workspace_dir plan);
                 Exit_code 0
             | Error message -> report_error message
           else
@@ -3400,15 +3255,14 @@ let run_ppx (options : ppx_options) =
                 match
                   Ppx_tool.apply ~workspace_root:options.workspace_dir
                     ~verbose:options.verbose ~interface:options.interface
-                    ?output_path:options.output_path ~profile workspace
-                    target_name module_name
+                    ?output_path:options.output_path ~profile workspace target_name
+                    module_name
                 with
                 | Ok applied ->
                     print_string
-                      (Ppx_tool.render_applied_report options.output_path
-                         applied);
+                      (Ppx_tool.render_applied_report options.output_path applied);
                     Exit_code 0
-                | Error message -> report_error message))
+                | Error message -> report_error message)))
 
 let run_vendor (options : vendor_options) =
   let source =
@@ -3417,23 +3271,20 @@ let run_vendor (options : vendor_options) =
     | None, Some git_url, None -> (
         match options.checksum with
         | Some checksum ->
-            Ok
-              (Vendor.Git_repo
-                 { url = git_url; ref_name = options.ref_name; checksum })
+            Ok (Vendor.Git_repo { url = git_url; ref_name = options.ref_name; checksum })
         | None -> Error "vendor remote sources require --checksum VALUE")
     | None, None, Some archive_url -> (
         match options.checksum with
         | Some checksum -> Ok (Vendor.Url_archive { url = archive_url; checksum })
         | None -> Error "vendor remote sources require --checksum VALUE")
-    | _ ->
-        Error "vendor requires exactly one of --source DIR, --git URL, or --url URL"
+    | _ -> Error "vendor requires exactly one of --source DIR, --git URL, or --url URL"
   in
   match source with
   | Error message -> report_error message
   | Ok source -> (
       match
-        Vendor.vendor ~workspace_root:options.workspace_dir source
-          ?name:options.name ~force:options.force ()
+        Vendor.vendor ~workspace_root:options.workspace_dir source ?name:options.name
+          ~force:options.force ()
       with
       | Ok report ->
           print_string (Vendor.render_report report);
@@ -3445,9 +3296,8 @@ let run_env (options : env_options) =
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        Env_report.report ~workspace_root:options.workspace_dir
-          ?profile:options.profile ~changed_only:options.changed_only workspace
-          options.subtool options.targets
+        Env_report.report ~workspace_root:options.workspace_dir ?profile:options.profile
+          ~changed_only:options.changed_only workspace options.subtool options.targets
       with
       | Ok report ->
           print_string
@@ -3462,15 +3312,13 @@ let run_repl (options : repl_options) =
   | Ok workspace -> (
       if options.plan then
         match
-          Repl.report ~workspace_root:options.workspace_dir
-            ~verbose:options.verbose ?profile:options.profile
-            ?target:options.target ?script_path:options.script_path
-            ~args:options.args workspace
+          Repl.report ~workspace_root:options.workspace_dir ~verbose:options.verbose
+            ?profile:options.profile ?target:options.target
+            ?script_path:options.script_path ~args:options.args workspace
         with
         | Ok plan ->
             print_string
-              (if options.json then Repl.render_json_plan plan
-               else Repl.render_plan plan);
+              (if options.json then Repl.render_json_plan plan else Repl.render_plan plan);
             Exit_code 0
         | Error message -> report_error message
       else
@@ -3487,16 +3335,15 @@ let run_install (options : install_options) =
   | Error message -> report_error message
   | Ok workspace -> (
       match
-        validate_lock_policy options.lock_policy
-          ~workspace_root:options.workspace_dir workspace options.targets
+        validate_lock_policy options.lock_policy ~workspace_root:options.workspace_dir
+          workspace options.targets
       with
       | Ok () -> (
           match
             Installer.install ~workspace_root:options.workspace_dir
               ~verbose:options.verbose ~backend_request:options.backend_request
-              ?profile:options.profile ?prefix:options.prefix
-              ?destdir:options.destdir ~requested_targets:options.targets
-              workspace
+              ?profile:options.profile ?prefix:options.prefix ?destdir:options.destdir
+              ~requested_targets:options.targets workspace
           with
           | Ok status -> Exit_code status
           | Error message -> report_error message)
@@ -3507,14 +3354,12 @@ let generate_release_artifacts ~root_dir ~output_dir =
   | Error message -> report_error message
   | Ok metadata -> (
       match
-        completion_script "bash",
-        completion_script "zsh",
-        completion_script "fish"
+        (completion_script "bash", completion_script "zsh", completion_script "fish")
       with
       | Ok bash, Ok zsh, Ok fish ->
-          Release_artifacts.write ~output_dir
-            ~package_name:metadata.package_name
-            ~docs:(render_markdown command_docs) ~bash ~zsh ~fish;
+          Release_artifacts.write ~output_dir ~package_name:metadata.package_name
+            ~docs:(render_markdown command_docs)
+            ~bash ~zsh ~fish;
           Exit_code 0
       | Error message, _, _ | _, Error message, _ | _, _, Error message ->
           report_error message)
@@ -3558,12 +3403,11 @@ let run_sync_generated (_options : sync_generated_options) =
                 checksums_output = None;
                 asset_index_output =
                   Some
-                    (Filename.concat (Filename.concat root_dir "dist")
+                    (Filename.concat
+                       (Filename.concat root_dir "dist")
                        "release-assets.json");
                 archive_input =
-                  Some
-                    (Packager.Source_archive_dir
-                       (Filename.concat root_dir "dist"));
+                  Some (Packager.Source_archive_dir (Filename.concat root_dir "dist"));
                 source_archive_mode = Packager.Tracked;
               }
           with
@@ -3576,8 +3420,7 @@ let run_release_cut (options : release_cut_options) =
   | None -> report_error "--version is required"
   | Some version -> (
       match
-        Maintenance.cut_release ~root_dir:(Sys.getcwd ()) ~version
-          ~create_tag:options.tag
+        Maintenance.cut_release ~root_dir:(Sys.getcwd ()) ~version ~create_tag:options.tag
       with
       | Ok message ->
           print_endline message;
@@ -3587,7 +3430,7 @@ let run_release_cut (options : release_cut_options) =
 let run_update_homebrew_tap (options : update_homebrew_tap_options) =
   match options.tap_dir with
   | None -> report_error "--tap-dir is required"
-  | Some tap_dir ->
+  | Some tap_dir -> (
       let maintenance_options : Maintenance.update_homebrew_tap_options =
         {
           root_dir = Sys.getcwd ();
@@ -3598,7 +3441,7 @@ let run_update_homebrew_tap (options : update_homebrew_tap_options) =
           do_push = options.push;
         }
       in
-      (match Maintenance.update_homebrew_tap maintenance_options with
+      match Maintenance.update_homebrew_tap maintenance_options with
       | Ok message ->
           print_endline message;
           Exit_code 0
@@ -3622,8 +3465,8 @@ let run_completion (options : completion_options) =
               print_string script;
               Exit_code 0
           | Error message -> report_error message)
-      | Query { previous; current; describe } ->
-          (match completion_response workspace ~previous ~current with
+      | Query { previous; current; describe } -> (
+          match completion_response workspace ~previous ~current with
           | Complete_directories ->
               print_endline (completion_protocol_header "directories");
               Exit_code 0
@@ -3636,8 +3479,7 @@ let run_completion (options : completion_options) =
                 (fun candidate ->
                   match (describe, candidate.hint) with
                   | true, Some hint ->
-                      print_endline
-                        (completion_candidate_line ~hint candidate.value)
+                      print_endline (completion_candidate_line ~hint candidate.value)
                   | _ -> print_endline (completion_candidate_line candidate.value))
                 candidates;
               Exit_code 0))
@@ -3649,8 +3491,7 @@ let run_toolchain (_options : toolchain_options) =
 let run_migrate (options : migrate_options) =
   if not (Fs.is_directory options.workspace_dir) then
     report_error
-      (Printf.sprintf "workspace directory does not exist: %s"
-         options.workspace_dir)
+      (Printf.sprintf "workspace directory does not exist: %s" options.workspace_dir)
   else
     match Migrate.run ~workspace_root:options.workspace_dir with
     | Error message -> report_error message
@@ -3662,18 +3503,16 @@ let run_migrate (options : migrate_options) =
           let output_path =
             match options.output_path with
             | Some path -> path
-            | None ->
-                Filename.concat options.workspace_dir Manifest.default_filename
+            | None -> Filename.concat options.workspace_dir Manifest.default_filename
           in
           if Fs.exists output_path && not options.force then
             report_error
               (Printf.sprintf
-                 "refusing to overwrite existing file %s; rerun with --force or \
-                  use --stdout"
+                 "refusing to overwrite existing file %s; rerun with --force or use \
+                  --stdout"
                  output_path)
           else if Fs.is_directory output_path then
-            report_error
-              (Printf.sprintf "output path is a directory: %s" output_path)
+            report_error (Printf.sprintf "output path is a directory: %s" output_path)
           else (
             Fs.write_file output_path migration.manifest;
             print_endline ("Wrote migration manifest " ^ output_path);
@@ -3697,12 +3536,12 @@ let run_explain (options : explain_options) =
                   "[\n" ^ String.concat ",\n" (List.map String.trim reports) ^ "\n]"
             else String.concat "\n\n" (List.rev reports)
           in
-          if options.current then
+          if options.current then (
             match
               Builder.explain_current ~workspace_root
                 ~requested_targets:(List.map Manifest.target_name targets)
-                ~backend_request:options.backend_request
-                ?profile:options.profile workspace
+                ~backend_request:options.backend_request ?profile:options.profile
+                workspace
             with
             | Error message -> report_error message
             | Ok reports ->
@@ -3713,16 +3552,14 @@ let run_explain (options : explain_options) =
                     reports
                 in
                 print_endline (render_reports payloads);
-                Exit_code 0
+                Exit_code 0)
           else
             let rec loop reports = function
               | [] ->
                   print_endline (render_reports reports);
                   Exit_code 0
               | target :: rest ->
-                  let out_dir =
-                    Layout.target_out_dir ~profile workspace_root target
-                  in
+                  let out_dir = Layout.target_out_dir ~profile workspace_root target in
                   let report_path =
                     if options.json then Layout.explain_json_path out_dir
                     else Layout.explain_path out_dir
@@ -3732,8 +3569,7 @@ let run_explain (options : explain_options) =
                   else
                     report_error
                       (Printf.sprintf
-                         "no explain data for %s '%s' in profile '%s'; build it \
-                          first"
+                         "no explain data for %s '%s' in profile '%s'; build it first"
                          (Manifest.target_kind_name target)
                          (Manifest.target_name target) profile)
             in
@@ -3743,8 +3579,7 @@ let commands =
   [
     Command { doc = init_doc; parse = parse_init_args; run = run_init };
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
-    Command
-      { doc = status_doc; parse = parse_status_args; run = run_status_command };
+    Command { doc = status_doc; parse = parse_status_args; run = run_status_command };
     Command { doc = doctor_doc; parse = parse_doctor_args; run = run_doctor };
     Command { doc = watch_doc; parse = parse_watch_args; run = run_watch };
     Command { doc = action_doc; parse = parse_action_args; run = run_action_command };
@@ -3775,11 +3610,7 @@ let commands =
         run = run_sync_generated;
       };
     Command
-      {
-        doc = release_cut_doc;
-        parse = parse_release_cut_args;
-        run = run_release_cut;
-      };
+      { doc = release_cut_doc; parse = parse_release_cut_args; run = run_release_cut };
     Command
       {
         doc = update_homebrew_tap_doc;
@@ -3787,10 +3618,8 @@ let commands =
         run = run_update_homebrew_tap;
       };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
-    Command
-      { doc = completion_doc; parse = parse_completion_args; run = run_completion };
-    Command
-      { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
+    Command { doc = completion_doc; parse = parse_completion_args; run = run_completion };
+    Command { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
     Command { doc = explain_doc; parse = parse_explain_args; run = run_explain };
     Command { doc = migrate_doc; parse = parse_migrate_args; run = run_migrate };
   ]
@@ -3803,10 +3632,7 @@ let dispatch_command command args =
       | Ok options -> run options)
 
 let find_command name =
-  List.find_opt
-    (function
-      | Command { doc; _ } -> doc.name = name)
-    commands
+  List.find_opt (function Command { doc; _ } -> doc.name = name) commands
 
 let run argv =
   match Array.to_list argv with

@@ -1,6 +1,4 @@
-type selection_kind =
-  | Requested
-  | Dependency
+type selection_kind = Requested | Dependency
 
 type installed_library = {
   name : string;
@@ -36,21 +34,15 @@ type prefix_request = {
 }
 
 let ( let* ) = Result.bind
-
-let report_detail ~verbose message =
-  if verbose then prerr_endline message
-
-let selection_kind_name = function
-  | Requested -> "requested"
-  | Dependency -> "dependency"
+let report_detail ~verbose message = if verbose then prerr_endline message
+let selection_kind_name = function Requested -> "requested" | Dependency -> "dependency"
 
 let workspace_label (workspace : Manifest.workspace) =
   match workspace.name with
   | Some name when String.trim name <> "" -> name
   | Some _ | None -> "workspace"
 
-let display_name name package_path =
-  name ^ Manifest.package_suffix package_path
+let display_name name package_path = name ^ Manifest.package_suffix package_path
 
 let library_install_name (library : Manifest.library) =
   Manifest.install_name library.name library.public_name
@@ -115,8 +107,7 @@ let install_layout ~workspace_root ~profile ~prefix ~destdir workspace_name =
   let stage_root =
     match destdir with
     | None -> prefix_request.resolved_prefix
-    | Some destdir ->
-        path_under_destdir ~destdir prefix_request.destdir_suffix
+    | Some destdir -> path_under_destdir ~destdir prefix_request.destdir_suffix
   in
   {
     prefix = prefix_request.logical_prefix;
@@ -131,22 +122,19 @@ let install_layout ~workspace_root ~profile ~prefix ~destdir workspace_name =
 let installable_targets (workspace : Manifest.workspace) =
   List.filter
     (function
-      | Manifest.Library _ | Manifest.Executable _ -> true
-      | Manifest.Test _ -> false)
+      | Manifest.Library _ | Manifest.Executable _ -> true | Manifest.Test _ -> false)
     workspace.targets
 
 let resolve_requested_targets workspace requested_targets =
   let requested_targets = String_util.dedup_preserve requested_targets in
   if requested_targets = [] then
     match installable_targets workspace with
-    | [] ->
-        Error "workspace does not define any installable libraries or executables"
+    | [] -> Error "workspace does not define any installable libraries or executables"
     | targets -> Ok targets
   else
     let index = Hashtbl.create (List.length workspace.targets) in
     List.iter
-      (fun target ->
-        Hashtbl.replace index (Manifest.target_name target) target)
+      (fun target -> Hashtbl.replace index (Manifest.target_name target) target)
       workspace.targets;
     let rec loop acc = function
       | [] -> Ok (List.rev acc)
@@ -156,8 +144,8 @@ let resolve_requested_targets workspace requested_targets =
           | Some (Manifest.Test _) ->
               Error
                 (Printf.sprintf
-                   "target '%s' is a test; wadi install only supports libraries \
-                    and executables"
+                   "target '%s' is a test; wadi install only supports libraries and \
+                    executables"
                    name)
           | Some target -> loop (target :: acc) rest)
     in
@@ -191,21 +179,20 @@ let expand_install_names workspace targets =
                 | Some dependency_target ->
                     Error
                       (Printf.sprintf
-                         "target '%s' depends on %s '%s'; wadi install only \
-                          closes over library dependencies"
+                         "target '%s' depends on %s '%s'; wadi install only closes over \
+                          library dependencies"
                          name
                          (Manifest.target_kind_name dependency_target)
                          dependency)
                 | None ->
                     Error
-                      (Printf.sprintf
-                         "target '%s' depends on unknown target '%s'" name
+                      (Printf.sprintf "target '%s' depends on unknown target '%s'" name
                          dependency))
               (Ok acc) (Manifest.target_deps target)
           in
           Ok (name :: acc))
   in
-let* names =
+  let* names =
     List.fold_left
       (fun result target ->
         let* acc = result in
@@ -219,9 +206,7 @@ let requested_roots_by_target workspace requested_names =
   let owners = Hashtbl.create (List.length workspace.targets) in
   let add_owner name owner =
     let existing =
-      match Hashtbl.find_opt owners name with
-      | Some roots -> roots
-      | None -> []
+      match Hashtbl.find_opt owners name with Some roots -> roots | None -> []
     in
     Hashtbl.replace owners name (String_util.dedup_preserve (existing @ [ owner ]))
   in
@@ -241,31 +226,21 @@ let requested_roots_by_target workspace requested_names =
   owners
 
 let library_install_filenames out_dir =
-  Sys.readdir out_dir
-  |> Array.to_list
+  Sys.readdir out_dir |> Array.to_list
   |> List.filter (fun name ->
-         let path = Filename.concat out_dir name in
-         if Sys.is_directory path then false
-         else
-           List.exists
-             (fun suffix -> String_util.ends_with ~suffix name)
-             [ ".cmi"; ".cmo"; ".cmx"; ".cmxa"; ".cma"; ".a"; ".o" ])
+      let path = Filename.concat out_dir name in
+      if Sys.is_directory path then false
+      else
+        List.exists
+          (fun suffix -> String_util.ends_with ~suffix name)
+          [ ".cmi"; ".cmo"; ".cmx"; ".cmxa"; ".cma"; ".a"; ".o" ])
   |> List.sort String.compare
 
-let json_array items =
-  "["
-  ^ String.concat ", " items
-  ^ "]"
+let json_array items = "[" ^ String.concat ", " items ^ "]"
+let json_string text = "\"" ^ String_util.json_escape text ^ "\""
+let json_optional_string = function Some text -> json_string text | None -> "null"
 
-let json_string text =
-  "\"" ^ String_util.json_escape text ^ "\""
-
-let json_optional_string = function
-  | Some text -> json_string text
-  | None -> "null"
-
-let render_meta ~(workspace : Manifest.workspace) (library : Manifest.library)
-    filenames =
+let render_meta ~(workspace : Manifest.workspace) (library : Manifest.library) filenames =
   let requires =
     String_util.dedup_preserve
       (List.map (dependency_install_name workspace) library.deps @ library.packages)
@@ -280,34 +255,26 @@ let render_meta ~(workspace : Manifest.workspace) (library : Manifest.library)
           (Printf.sprintf "%s library %s" (workspace_label workspace) library.name);
       "directory = " ^ json_string ".";
     ]
+    @ (match requires with
+      | [] -> []
+      | requires -> [ "requires = " ^ json_string (String.concat " " requires) ])
+    @ (match find_archive ".cma" with
+      | Some archive -> [ "archive(byte) = " ^ json_string archive ]
+      | None -> [])
     @
-    (match requires with
-    | [] -> []
-    | requires ->
-        [ "requires = " ^ json_string (String.concat " " requires) ])
-    @
-    (match find_archive ".cma" with
-    | Some archive ->
-        [ "archive(byte) = " ^ json_string archive ]
-    | None -> [])
-    @
-    (match find_archive ".cmxa" with
-    | Some archive ->
-        [ "archive(native) = " ^ json_string archive ]
-    | None -> [])
+    match find_archive ".cmxa" with
+    | Some archive -> [ "archive(native) = " ^ json_string archive ]
+    | None -> []
   in
   (String.concat "\n" lines ^ "\n", requires)
 
-let install_library ~verbose ~(layout : install_layout)
-    ~(workspace : Manifest.workspace) ~selection ~requested_by
-    (library : Manifest.library)
+let install_library ~verbose ~(layout : install_layout) ~(workspace : Manifest.workspace)
+    ~selection ~requested_by (library : Manifest.library)
     (artifact : Builder.built_artifact) =
   match artifact with
   | Builder.Built_library built_library ->
       let install_name = library_install_name library in
-      let install_dir =
-        Layout.install_library_dir layout.stage_root install_name
-      in
+      let install_dir = Layout.install_library_dir layout.stage_root install_name in
       let filenames = library_install_filenames built_library.out_dir in
       if Fs.exists install_dir then Fs.remove_tree install_dir;
       Fs.ensure_dir install_dir;
@@ -319,9 +286,7 @@ let install_library ~verbose ~(layout : install_layout)
           Fs.copy_file ~src ~dst)
         filenames;
       let meta, requires = render_meta ~workspace library filenames in
-      let meta_path =
-        Layout.install_library_meta_path layout.stage_root install_name
-      in
+      let meta_path = Layout.install_library_meta_path layout.stage_root install_name in
       Fs.write_file meta_path meta;
       print_endline
         (Printf.sprintf "Installed library %s -> %s"
@@ -334,8 +299,7 @@ let install_library ~verbose ~(layout : install_layout)
           files =
             List.map
               (fun name ->
-                Filename.concat
-                  (Layout.relative_install_library_dir install_name) name)
+                Filename.concat (Layout.relative_install_library_dir install_name) name)
               filenames;
           meta = Layout.relative_install_library_meta_path install_name;
           requires;
@@ -351,9 +315,7 @@ let install_executable ~verbose ~(layout : install_layout)
   match artifact with
   | Builder.Built_executable built_executable ->
       let install_name = executable_install_name executable in
-      let install_path =
-        Layout.install_executable_path layout.stage_root install_name
-      in
+      let install_path = Layout.install_executable_path layout.stage_root install_name in
       report_detail ~verbose
         (Printf.sprintf "Installing %s -> %s" built_executable.binary install_path);
       Fs.copy_file ~src:built_executable.binary ~dst:install_path;
@@ -372,9 +334,8 @@ let install_executable ~verbose ~(layout : install_layout)
       Error "internal error: expected a built executable artifact"
 
 let render_install_metadata ~workspace_name ~profile ~prefix ~requested_targets
-    ~(layout : install_layout)
-    ~(libraries : installed_library list) ~(executables : installed_executable list)
-    =
+    ~(layout : install_layout) ~(libraries : installed_library list)
+    ~(executables : installed_executable list) =
   let render_library (library : installed_library) =
     String.concat "\n"
       [
@@ -382,17 +343,14 @@ let render_install_metadata ~workspace_name ~profile ~prefix ~requested_targets
         "      \"name\": " ^ json_string library.name ^ ",";
         "      \"dir\": " ^ json_string library.dir ^ ",";
         "      \"meta\": " ^ json_string library.meta ^ ",";
-        "      \"requires\": "
-        ^ json_array (List.map json_string library.requires)
-        ^ ",";
+        "      \"requires\": " ^ json_array (List.map json_string library.requires) ^ ",";
         "      \"selection\": "
         ^ json_string (selection_kind_name library.selection)
         ^ ",";
         "      \"requested_by\": "
         ^ json_array (List.map json_string library.requested_by)
         ^ ",";
-        "      \"files\": "
-        ^ json_array (List.map json_string library.files);
+        "      \"files\": " ^ json_array (List.map json_string library.files);
         "    }";
       ]
   in
@@ -425,14 +383,10 @@ let render_install_metadata ~workspace_name ~profile ~prefix ~requested_targets
       "    \"bin_dir\": " ^ json_string layout.bin_dir ^ ",";
       "    \"lib_dir\": " ^ json_string layout.lib_dir ^ ",";
       "    \"share_dir\": " ^ json_string layout.share_dir ^ ",";
-      "    \"ocamlpath\": "
-      ^ json_array (List.map json_string layout.ocamlpath);
+      "    \"ocamlpath\": " ^ json_array (List.map json_string layout.ocamlpath);
       "  },";
-      "  \"libraries\": "
-      ^ json_array (List.map render_library libraries)
-      ^ ",";
-      "  \"executables\": "
-      ^ json_array (List.map render_executable executables);
+      "  \"libraries\": " ^ json_array (List.map render_library libraries) ^ ",";
+      "  \"executables\": " ^ json_array (List.map render_executable executables);
       "}";
       "";
     ]
@@ -459,9 +413,7 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
       ~backend_request ~profile workspace
   in
   let workspace_name = workspace_label workspace in
-  let layout =
-    install_layout ~workspace_root ~profile ~prefix ~destdir workspace_name
-  in
+  let layout = install_layout ~workspace_root ~profile ~prefix ~destdir workspace_name in
   Fs.ensure_dir layout.stage_root;
   let selected_index = Hashtbl.create (List.length selected_names) in
   List.iter (fun name -> Hashtbl.replace selected_index name ()) selected_names;
@@ -488,7 +440,7 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
   in
   let rec collect libraries executables = function
     | [] -> Ok (List.rev libraries, List.rev executables)
-    | Builder.Built_library built_library as artifact :: rest ->
+    | (Builder.Built_library built_library as artifact) :: rest ->
         let* manifest_library =
           match Hashtbl.find_opt library_index built_library.name with
           | Some library -> Ok library
@@ -499,8 +451,7 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
                    built_library.name)
         in
         let selection =
-          if Hashtbl.mem requested_index built_library.name then Requested
-          else Dependency
+          if Hashtbl.mem requested_index built_library.name then Requested else Dependency
         in
         let requested_by =
           match Hashtbl.find_opt requested_roots built_library.name with
@@ -512,7 +463,7 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
             manifest_library artifact
         in
         collect (library :: libraries) executables rest
-    | Builder.Built_executable built_executable as artifact :: rest ->
+    | (Builder.Built_executable built_executable as artifact) :: rest ->
         let* manifest_executable =
           match Hashtbl.find_opt executable_index built_executable.name with
           | Some executable -> Ok executable
@@ -532,8 +483,8 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
           | None -> []
         in
         let* executable =
-          install_executable ~verbose ~layout ~executable:manifest_executable
-            ~selection ~requested_by artifact
+          install_executable ~verbose ~layout ~executable:manifest_executable ~selection
+            ~requested_by artifact
         in
         collect libraries (executable :: executables) rest
     | Builder.Built_test _ :: rest -> collect libraries executables rest
@@ -542,13 +493,9 @@ let install ~workspace_root ~verbose ~backend_request ?profile ?prefix ?destdir
   let _manifest_copy = copy_manifest ~workspace_root ~layout workspace_name in
   let metadata =
     render_install_metadata ~workspace_name ~profile ~prefix:layout.prefix
-      ~requested_targets:requested_names
-      ~layout ~libraries
-      ~executables
+      ~requested_targets:requested_names ~layout ~libraries ~executables
   in
-  let metadata_path =
-    Layout.install_metadata_path layout.stage_root workspace_name
-  in
+  let metadata_path = Layout.install_metadata_path layout.stage_root workspace_name in
   Fs.write_file metadata_path metadata;
   print_endline (Printf.sprintf "Wrote install metadata -> %s" metadata_path);
   Ok 0

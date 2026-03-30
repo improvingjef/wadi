@@ -10,47 +10,49 @@ let write_executable workspace relative_path contents =
   path
 
 let path_with dir =
-  match Sys.getenv_opt "PATH" with
-  | Some path -> dir ^ ":" ^ path
-  | None -> dir
+  match Sys.getenv_opt "PATH" with Some path -> dir ^ ":" ^ path | None -> dir
 
 let write_wadi_shim cwd =
   ignore
     (write_executable cwd "wadi"
-       (Printf.sprintf "#!/bin/sh\nexec %s \"$@\"\n"
-          (Filename.quote (wadi_bin ()))))
+       (Printf.sprintf "#!/bin/sh\nexec %s \"$@\"\n" (Filename.quote (wadi_bin ()))))
 
 let run_bash_completion ~cwd script body =
   let script_path = Filename.concat cwd "wadi-completion.bash" in
   Fs.write_file script_path script;
   write_wadi_shim cwd;
-  Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "bash"
+  Process.run_capture ~cwd
+    ~env:[ ("PATH", path_with cwd) ]
+    "bash"
     [ "-lc"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
 
 let run_zsh_completion ~cwd script body =
   let script_path = Filename.concat cwd "wadi-completion.zsh" in
   Fs.write_file script_path script;
   write_wadi_shim cwd;
-  Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "zsh"
+  Process.run_capture ~cwd
+    ~env:[ ("PATH", path_with cwd) ]
+    "zsh"
     [ "-lc"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
 
 let run_fish_completion ~cwd script body =
   let script_path = Filename.concat cwd "wadi-completion.fish" in
   Fs.write_file script_path script;
   write_wadi_shim cwd;
-  Process.run_capture ~cwd ~env:[ ("PATH", path_with cwd) ] "fish"
+  Process.run_capture ~cwd
+    ~env:[ ("PATH", path_with cwd) ]
+    "fish"
     [ "-c"; Printf.sprintf "source %s\n%s" (Filename.quote script_path) body ]
 
 let setup_ppx_source_inspection_fixture workspace =
   let _ppx_binary =
-    Test_transforms.compile_string_marker_ppx workspace
-      ~relative_path:"ppx/rewrite.ml" ~output_relative_path:"ppx/rewrite.exe"
-      ~marker:"__PPX__"
+    Test_transforms.compile_string_marker_ppx workspace ~relative_path:"ppx/rewrite.ml"
+      ~output_relative_path:"ppx/rewrite.exe" ~marker:"__PPX__"
       (Test_transforms.Literal "rewritten by ppx")
   in
   ignore
-    (Test_transforms.write_token_preprocessor workspace "tools/expand.sh"
-       ~token:"__PRE__" ~replacement:"pre");
+    (Test_transforms.write_token_preprocessor workspace "tools/expand.sh" ~token:"__PRE__"
+       ~replacement:"pre");
   write_manifest workspace
     {|
 [preprocess.expand]
@@ -65,13 +67,12 @@ main = "main"
 preprocess = ["expand"]
 ppx = ["rewrite"]
 |};
-  write_source workspace "app/main.ml"
-    {|let () = print_endline "__PRE__:__PPX__"|}
+  write_source workspace "app/main.ml" {|let () = print_endline "__PRE__:__PPX__"|}
 
 let cases =
   [
     ( "runs the only executable target in a workspace",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let run = run_wadi ~cwd:workspace [ "run" ] in
             assert_int_equal 0 run.status
@@ -81,12 +82,11 @@ let cases =
             assert_string_contains ~needle:"Built executable hello" run.output
               "run should build the executable before launching it";
             assert_string_contains ~needle:"Hello, world!\n" run.output
-              "run should forward the program output")) );
+              "run should forward the program output") );
     ( "forwards arguments to the selected executable",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-run-args" (fun workspace ->
-            write_manifest workspace
-              {|
+            write_manifest workspace {|
 [executable.echo]
 dir = "app"
 main = "main"
@@ -101,15 +101,13 @@ let () =
   |> print_endline
 |};
             let run =
-              run_wadi ~cwd:workspace
-                [ "run"; "echo"; "--"; "red"; "blue"; "green" ]
+              run_wadi ~cwd:workspace [ "run"; "echo"; "--"; "red"; "blue"; "green" ]
             in
-            assert_int_equal 0 run.status
-              "run should succeed when forwarding argv";
+            assert_int_equal 0 run.status "run should succeed when forwarding argv";
             assert_string_contains ~needle:"red,blue,green\n" run.output
-              "run should pass arguments through unchanged")) );
+              "run should pass arguments through unchanged") );
     ( "rejects ambiguous default executable selection",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-run-ambiguous" (fun workspace ->
             write_manifest workspace
               {|
@@ -122,30 +120,26 @@ dir = "second"
 main = "main"
 |};
             write_source workspace "first/main.ml" {|let () = print_endline "first"|};
-            write_source workspace "second/main.ml"
-              {|let () = print_endline "second"|};
+            write_source workspace "second/main.ml" {|let () = print_endline "second"|};
             let run = run_wadi ~cwd:workspace [ "run" ] in
             assert_true (run.status <> 0)
               "run should fail when a workspace has multiple executables";
             assert_string_contains
               ~needle:"workspace defines multiple executables; choose one: first, second"
               run.output
-              "run should explain how to resolve ambiguous executable selection")) );
+              "run should explain how to resolve ambiguous executable selection") );
     ( "rejects library targets for run",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let run = run_wadi ~cwd:workspace [ "run"; "greeting" ] in
-            assert_true (run.status <> 0)
-              "run should reject non-executable targets";
+            assert_true (run.status <> 0) "run should reject non-executable targets";
             assert_string_contains
               ~needle:"target 'greeting' is a library; wadi run only supports executables"
-              run.output
-              "run should report invalid target kinds clearly")) );
+              run.output "run should report invalid target kinds clearly") );
     ( "forwards signaled executable exits",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-run-signal" (fun workspace ->
-            write_manifest workspace
-              {|
+            write_manifest workspace {|
 [executable.sigterm]
 dir = "app"
 main = "main"
@@ -157,11 +151,10 @@ main = "main"
               "run should surface shell-compatible status codes for signals";
             assert_wait_status_signaled Sys.sigterm run.unix_status
               "run should terminate with the same signal as the executable";
-            assert_string_contains ~needle:"Built executable sigterm"
-              run.output
-              "run should still surface the build phase before the executable exits")) );
+            assert_string_contains ~needle:"Built executable sigterm" run.output
+              "run should still surface the build phase before the executable exits") );
     ( "reports member package paths in run summaries",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-run-package-path" (fun workspace ->
             write_manifest workspace
               {|
@@ -180,19 +173,15 @@ main = "main"
             let run = run_wadi ~cwd:workspace [ "run"; "demo" ] in
             assert_int_equal 0 run.status
               "member executables should still run successfully";
-            assert_string_contains
-              ~needle:"Running executable demo (packages/app) ->"
-              run.output
-              "run summaries should surface the member package path";
+            assert_string_contains ~needle:"Running executable demo (packages/app) ->"
+              run.output "run summaries should surface the member package path";
             assert_string_contains ~needle:"member run\n" run.output
-              "run should still stream the executable output")) );
+              "run should still stream the executable output") );
     ( "inspects preprocessor and ppx pipelines for a selected module",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-ppx-plan" (fun workspace ->
             setup_ppx_source_inspection_fixture workspace;
-            let plan =
-              run_wadi ~cwd:workspace [ "ppx"; "--plan"; "demo"; "main" ]
-            in
+            let plan = run_wadi ~cwd:workspace [ "ppx"; "--plan"; "demo"; "main" ] in
             assert_int_equal 0 plan.status
               "ppx --plan should inspect the selected target module";
             assert_string_contains ~needle:"Target: demo" plan.output
@@ -210,9 +199,9 @@ main = "main"
             assert_string_contains ~needle:"Prepared-source:" plan.output
               "ppx plans should show the transformed input path";
             assert_string_contains ~needle:"Compiler-command:" plan.output
-              "ppx plans should show the exact dump command")) );
+              "ppx plans should show the exact dump command") );
     ( "dumps transformed source for a module after preprocessors and ppx",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-ppx-apply" (fun workspace ->
             setup_ppx_source_inspection_fixture workspace;
             let dump = run_wadi ~cwd:workspace [ "ppx"; "demo"; "main" ] in
@@ -223,9 +212,9 @@ main = "main"
             assert_string_not_contains ~needle:"__PRE__" dump.output
               "ppx output should not leave the preprocessor marker behind";
             assert_string_not_contains ~needle:"__PPX__" dump.output
-              "ppx output should not leave the ppx marker behind")) );
+              "ppx output should not leave the ppx marker behind") );
     ( "runs declared actions without compiling target artifacts",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-action" (fun workspace ->
             write_manifest workspace
               {|
@@ -243,28 +232,28 @@ actions = ["generate"]
             write_source workspace "templates/version.txt" "action-only\n";
             ignore
               (write_executable workspace "tools/generate.sh"
-                 "#!/bin/sh\nset -eu\nvalue=$(cat ../templates/version.txt)\nprintf 'let value = \"%s\"\\n' \"$value\" > version.ml\n");
+                 "#!/bin/sh\n\
+                  set -eu\n\
+                  value=$(cat ../templates/version.txt)\n\
+                  printf 'let value = \"%s\"\\n' \"$value\" > version.ml\n");
             let first = run_wadi ~cwd:workspace [ "action"; "core" ] in
             assert_int_equal 0 first.status
               "action should execute declared target actions successfully";
-            assert_string_contains
-              ~needle:"Generated action outputs for library core ->"
-              first.output
-              "action should report generated outputs";
+            assert_string_contains ~needle:"Generated action outputs for library core ->"
+              first.output "action should report generated outputs";
             assert_file_exists
-              (Filename.concat (Layout.library_out_dir workspace "core")
+              (Filename.concat
+                 (Layout.library_out_dir workspace "core")
                  "generated/version.ml");
             assert_true
               (not (Fs.exists (Layout.library_archive workspace "core")))
               "action should not compile library archives while materializing actions";
             let second = run_wadi ~cwd:workspace [ "action"; "core" ] in
-            assert_int_equal 0 second.status
-              "re-running action should still succeed";
+            assert_int_equal 0 second.status "re-running action should still succeed";
             assert_string_contains ~needle:"Up to date actions for library core ->"
-              second.output
-              "action should report cached outputs when nothing changed")) );
+              second.output "action should report cached outputs when nothing changed") );
     ( "runs dependency actions when targeting a downstream executable",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-action-dependency" (fun workspace ->
             write_manifest workspace
               {|
@@ -288,19 +277,21 @@ deps = ["core"]
             write_source workspace "templates/version.txt" "dependency\n";
             ignore
               (write_executable workspace "tools/generate.sh"
-                 "#!/bin/sh\nset -eu\nvalue=$(cat ../templates/version.txt)\nprintf 'let value = \"%s\"\\n' \"$value\" > version.ml\n");
+                 "#!/bin/sh\n\
+                  set -eu\n\
+                  value=$(cat ../templates/version.txt)\n\
+                  printf 'let value = \"%s\"\\n' \"$value\" > version.ml\n");
             let run = run_wadi ~cwd:workspace [ "action"; "demo" ] in
             assert_int_equal 0 run.status
               "action should resolve dependency closures before running actions";
-            assert_string_contains
-              ~needle:"Generated action outputs for library core ->"
-              run.output
-              "action should report dependency-library actions when they run";
+            assert_string_contains ~needle:"Generated action outputs for library core ->"
+              run.output "action should report dependency-library actions when they run";
             assert_file_exists
-              (Filename.concat (Layout.library_out_dir workspace "core")
-                 "generated/version.ml"))) );
+              (Filename.concat
+                 (Layout.library_out_dir workspace "core")
+                 "generated/version.ml")) );
     ( "promotes declared non-source action outputs back into the workspace",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-promote" (fun workspace ->
             write_manifest workspace
               {|
@@ -326,13 +317,13 @@ actions = ["snapshot"]
             assert_string_equal "snapshot\n" (Fs.read_file promoted_path)
               "promote should copy generated output contents into the workspace";
             assert_string_contains
-              ~needle:(Printf.sprintf
-                         "Promoted action snapshot output snapshot.txt for library core -> %s\n"
-                         normalized_promoted_path)
-              promote.output
-              "promote should report each copied output directly")) );
+              ~needle:
+                (Printf.sprintf
+                   "Promoted action snapshot output snapshot.txt for library core -> %s\n"
+                   normalized_promoted_path)
+              promote.output "promote should report each copied output directly") );
     ( "promotes explicit checked-in generated source outputs back into the workspace",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-promote-checked-in-source" (fun workspace ->
             write_manifest workspace
               {|
@@ -350,23 +341,26 @@ actions = ["generate"]
             write_source workspace "lib/version.ml" {|let value = "checked-in"|};
             ignore
               (write_executable workspace "tools/generate.sh"
-                 "#!/bin/sh\nset -eu\nprintf 'let value = \"generated\"\\n' > version.ml\n");
+                 "#!/bin/sh\n\
+                  set -eu\n\
+                  printf 'let value = \"generated\"\\n' > version.ml\n");
             let promote = run_wadi ~cwd:workspace [ "promote"; "core" ] in
             assert_int_equal 0 promote.status
               "promote should allow explicitly checked-in generated OCaml sources";
             let promoted_path = Filename.concat workspace "lib/version.ml" in
             let normalized_promoted_path = Fs.realpath promoted_path in
-            assert_string_equal "let value = \"generated\"\n"
-              (Fs.read_file promoted_path)
+            assert_string_equal "let value = \"generated\"\n" (Fs.read_file promoted_path)
               "promote should refresh the checked-in OCaml snapshot";
             assert_string_contains
-              ~needle:(Printf.sprintf
-                         "Promoted action generate output version.ml for library core -> %s\n"
-                         normalized_promoted_path)
+              ~needle:
+                (Printf.sprintf
+                   "Promoted action generate output version.ml for library core -> %s\n"
+                   normalized_promoted_path)
               promote.output
-              "promote should report checked-in generated source snapshots like other promoted outputs")) );
+              "promote should report checked-in generated source snapshots like other \
+               promoted outputs") );
     ( "rejects promoting source-like action outputs",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-promote-source-like" (fun workspace ->
             write_manifest workspace
               {|
@@ -386,135 +380,180 @@ actions = ["generate"]
             let promote = run_wadi ~cwd:workspace [ "promote"; "core" ] in
             assert_true (promote.status <> 0)
               "promote should reject source-like outputs that would break future builds";
-            assert_string_contains
-              ~needle:"declare it under checked_in_sources = [...]"
+            assert_string_contains ~needle:"declare it under checked_in_sources = [...]"
               promote.output
               "promote should explain how to opt source-like outputs into safe promotion";
             assert_true
               (not (Fs.exists (Filename.concat workspace "lib/version.ml")))
-              "promote should not copy rejected source-like outputs into the workspace")) );
+              "promote should not copy rejected source-like outputs into the workspace")
+    );
     ( "prints top-level usage from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-usage" (fun workspace ->
             let run = run_wadi ~cwd:workspace [] in
             assert_true (run.status <> 0)
               "invoking wadi without a command should print usage";
             assert_string_contains
-              ~needle:"wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]"
+              ~needle:
+                "wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] \
+                 [--executable NAME] [--bare] [--force]"
               run.output "top-level usage should include the init command";
             assert_string_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi build [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] \
+                 [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
-              ~needle:"wadi status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]"
+              ~needle:
+                "wadi status [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--json] [TARGET ...]"
               run.output "top-level usage should include the status command";
             assert_string_contains
-              ~needle:"wadi doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]"
+              ~needle:
+                "wadi doctor [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]"
               run.output "top-level usage should include the doctor command";
             assert_string_contains
-              ~needle:"wadi watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]"
+              ~needle:
+                "wadi watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] \
+                 [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] \
+                 SUBTOOL [ARG ...]"
               run.output "top-level usage should include the watch command";
             assert_string_contains
-              ~needle:"wadi action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the action command";
             assert_string_contains
-              ~needle:"wadi ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]"
+              ~needle:
+                "wadi ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] \
+                 [--plan] [--output PATH] TARGET [MODULE]"
               run.output "top-level usage should include the ppx command";
             assert_string_contains
-              ~needle:"wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
+              ~needle:
+                "wadi run [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
               run.output "top-level usage should include the run command";
             assert_string_contains
-              ~needle:"wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [-j N] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi test [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [-j N] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the test command";
             assert_string_contains
-              ~needle:"wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the clean command";
             assert_string_contains
-              ~needle:"wadi promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the promote command";
             assert_string_contains
-              ~needle:"wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]"
+              ~needle:
+                "wadi graph [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [TARGET ...]"
               run.output "top-level usage should include the graph command";
-            assert_string_contains
-              ~needle:"wadi deps [--workspace DIR] [TARGET ...]"
+            assert_string_contains ~needle:"wadi deps [--workspace DIR] [TARGET ...]"
               run.output "top-level usage should include the deps command";
             assert_string_contains
-              ~needle:"wadi lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]"
+              ~needle:
+                "wadi lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]"
               run.output "top-level usage should include the lock command";
             assert_string_contains
-              ~needle:"wadi vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]"
+              ~needle:
+                "wadi vendor [--workspace DIR] (--source DIR | --git URL | --url URL) \
+                 [--ref REV] [--checksum VALUE] [--name NAME] [--force]"
               run.output "top-level usage should include the vendor command";
             assert_string_contains
-              ~needle:"wadi env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]"
+              ~needle:
+                "wadi env [--workspace DIR] [--profile NAME] [--json] [--changed-only] \
+                 SUBTOOL [TARGET ...]"
               run.output "top-level usage should include the env command";
             assert_string_contains
-              ~needle:"wadi repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]"
+              ~needle:
+                "wadi repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] \
+                 [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]"
               run.output "top-level usage should include the repl command";
             assert_string_contains
-              ~needle:"wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi install [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | \
+                 --warn-locked] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the install command";
+            assert_string_contains ~needle:"wadi release-artifacts [--output-dir DIR]"
+              run.output "top-level usage should include the release-artifacts command";
             assert_string_contains
-              ~needle:"wadi release-artifacts [--output-dir DIR]"
-              run.output
-              "top-level usage should include the release-artifacts command";
-            assert_string_contains
-              ~needle:"wadi package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]"
+              ~needle:
+                "wadi package [--output-dir DIR] [--opam-output PATH] [--formula-output \
+                 PATH] [--checksums-output PATH] [--asset-index-output PATH] \
+                 [--source-archive PATH | --source-archive-dir DIR | \
+                 --reuse-source-archive-dir DIR] [--source-archive-mode \
+                 tracked|worktree]"
               run.output "top-level usage should include the package command";
             assert_string_contains ~needle:"wadi sync-generated" run.output
               "top-level usage should include the sync-generated command";
-            assert_string_contains
-              ~needle:"wadi release-cut --version X.Y.Z [--tag]"
+            assert_string_contains ~needle:"wadi release-cut --version X.Y.Z [--tag]"
               run.output "top-level usage should include the release-cut command";
             assert_string_contains
-              ~needle:"wadi update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]"
-              run.output
-              "top-level usage should include the update-homebrew-tap command";
+              ~needle:
+                "wadi update-homebrew-tap --tap-dir DIR [--formula PATH | \
+                 --source-archive PATH] [--commit] [--push]"
+              run.output "top-level usage should include the update-homebrew-tap command";
             assert_string_contains ~needle:"wadi docs" run.output
               "top-level usage should include the docs command";
-            assert_string_contains
-              ~needle:"wadi completion [--workspace DIR] SHELL"
-              run.output
-              "top-level usage should include the completion command";
+            assert_string_contains ~needle:"wadi completion [--workspace DIR] SHELL"
+              run.output "top-level usage should include the completion command";
             assert_string_contains ~needle:"wadi toolchain" run.output
               "top-level usage should include the toolchain command";
             assert_string_contains
-              ~needle:"wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
+              ~needle:
+                "wadi explain [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--current] [--json] [TARGET ...]"
               run.output "top-level usage should include the explain command";
             assert_string_contains
-              ~needle:"wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]"
-              run.output "top-level usage should include the migrate command")) );
+              ~needle:
+                "wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]"
+              run.output "top-level usage should include the migrate command") );
     ( "prints command-specific help for explain from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-explain-help" (fun workspace ->
             let help = run_wadi ~cwd:workspace [ "explain"; "--help" ] in
             assert_true (help.status <> 0)
               "explain --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]"
+              ~needle:
+                "wadi explain [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--current] [--json] [TARGET ...]"
               help.output "explain help should include the explain signature";
             assert_string_not_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]"
-              help.output
-              "command-specific help should not include unrelated commands")) );
+              ~needle:
+                "wadi build [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] \
+                 [--verbose] [TARGET ...]"
+              help.output "command-specific help should not include unrelated commands")
+    );
     ( "prints command-specific help from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-help" (fun workspace ->
             let help = run_wadi ~cwd:workspace [ "build"; "--help" ] in
             assert_true (help.status <> 0)
               "build --help should short-circuit with usage text";
             assert_string_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]"
+              ~needle:
+                "wadi build [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] \
+                 [--verbose] [TARGET ...]"
               help.output "build help should include the build signature";
             assert_string_not_contains
-              ~needle:"wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
-              help.output
-              "command-specific help should not include unrelated commands")) );
+              ~needle:
+                "wadi run [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]"
+              help.output "command-specific help should not include unrelated commands")
+    );
     ( "renders markdown docs from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-docs" (fun workspace ->
             let docs = run_wadi ~cwd:workspace [ "docs" ] in
-            assert_int_equal 0 docs.status
-              "docs should render markdown successfully";
+            assert_int_equal 0 docs.status "docs should render markdown successfully";
             assert_string_contains ~needle:"# Wadi CLI" docs.output
               "docs output should start with the markdown title";
             assert_string_contains ~needle:"## init" docs.output
@@ -558,91 +597,108 @@ actions = ["generate"]
             assert_string_contains ~needle:"## completion" docs.output
               "docs output should include the completion command";
             assert_string_contains
-              ~needle:"- `--prefix DIR`: Stage installed files under DIR instead of the default profile root."
+              ~needle:
+                "- `--prefix DIR`: Stage installed files under DIR instead of the \
+                 default profile root."
               docs.output
               "docs output should include option descriptions from the command table";
             assert_string_contains
-              ~needle:"- `--destdir DIR`: Prepend DIR to the resolved install prefix for packaging-style staging."
-              docs.output
-              "docs output should include the install destdir description";
+              ~needle:
+                "- `--destdir DIR`: Prepend DIR to the resolved install prefix for \
+                 packaging-style staging."
+              docs.output "docs output should include the install destdir description";
             assert_string_contains
-              ~needle:"- `--json`: Print machine-readable JSON output instead of the text report."
-              docs.output
-              "docs output should include the explain JSON description";
+              ~needle:
+                "- `--json`: Print machine-readable JSON output instead of the text \
+                 report."
+              docs.output "docs output should include the explain JSON description";
             assert_string_contains
-              ~needle:"- `--current`: Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources."
-              docs.output
-              "docs output should include the current explain description";
+              ~needle:
+                "- `--current`: Compute a fresh rebuild explanation from current inputs \
+                 without compiling, linking, or materializing generated sources."
+              docs.output "docs output should include the current explain description";
             assert_string_contains
-              ~needle:"- `--output PATH`: Write the generated manifest to PATH instead of wadi.toml."
-              docs.output
-              "docs output should include the migrate output-path description";
+              ~needle:
+                "- `--output PATH`: Write the generated manifest to PATH instead of \
+                 wadi.toml."
+              docs.output "docs output should include the migrate output-path description";
             assert_string_contains
-              ~needle:"- `--member PATH`: Scaffold a package-local manifest at PATH and register it under members = [...]."
-              docs.output
-              "docs output should include the member init description";
+              ~needle:
+                "- `--member PATH`: Scaffold a package-local manifest at PATH and \
+                 register it under members = [...]."
+              docs.output "docs output should include the member init description";
             assert_string_contains
-              ~needle:"- `--locked`: Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing."
-              docs.output
-              "docs output should include the strict lock description";
+              ~needle:
+                "- `--locked`: Require wadi.lock to match the current manifest, recorded \
+                 toolchain facts, and resolved package paths before continuing."
+              docs.output "docs output should include the strict lock description";
             assert_string_contains
-              ~needle:"- `--warn-locked`: Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install."
-              docs.output
-              "docs output should include the warning lock description";
+              ~needle:
+                "- `--warn-locked`: Warn when wadi.lock is missing or stale against the \
+                 current manifest, toolchain facts, or resolved package paths, but \
+                 continue with the build or install."
+              docs.output "docs output should include the warning lock description";
             assert_string_contains
-              ~needle:"- `--output PATH`: Write the transformed source to PATH instead of stdout."
-              docs.output
-              "docs output should include the ppx output description";
+              ~needle:
+                "- `--output PATH`: Write the transformed source to PATH instead of \
+                 stdout."
+              docs.output "docs output should include the ppx output description";
             assert_string_contains
-              ~needle:"- `--output-dir DIR`: Write generated files under DIR instead of the current directory."
+              ~needle:
+                "- `--output-dir DIR`: Write generated files under DIR instead of the \
+                 current directory."
               docs.output
               "docs output should include the release/package output-dir description";
             assert_string_contains
-              ~needle:"- `--asset-index-output PATH`: Write a machine-readable release asset index with names, URLs, sizes, and checksums."
-              docs.output
-              "docs output should include the package asset-index description";
+              ~needle:
+                "- `--asset-index-output PATH`: Write a machine-readable release asset \
+                 index with names, URLs, sizes, and checksums."
+              docs.output "docs output should include the package asset-index description";
             assert_string_contains
-              ~needle:"- `--source-archive-mode tracked|worktree`: Choose whether rebuilt source archives come from tracked git paths only or from the live non-ignored worktree."
-              docs.output
-              "docs output should include the source-archive mode description";
+              ~needle:
+                "- `--source-archive-mode tracked|worktree`: Choose whether rebuilt \
+                 source archives come from tracked git paths only or from the live \
+                 non-ignored worktree."
+              docs.output "docs output should include the source-archive mode description";
             assert_string_contains
-              ~needle:"- `--tag`: Create the annotated git tag that matches the refreshed release version."
-              docs.output
-              "docs output should include the release-cut tag description";
+              ~needle:
+                "- `--tag`: Create the annotated git tag that matches the refreshed \
+                 release version."
+              docs.output "docs output should include the release-cut tag description";
             assert_string_contains
               ~needle:"- `--tap-dir DIR`: Update the Homebrew tap checkout rooted at DIR."
-              docs.output
-              "docs output should include the tap-dir description";
+              docs.output "docs output should include the tap-dir description";
             assert_string_contains
-              ~needle:"- `--stdout`: Print the generated output instead of writing a file."
-              docs.output
-              "docs output should include the migrate stdout description";
+              ~needle:
+                "- `--stdout`: Print the generated output instead of writing a file."
+              docs.output "docs output should include the migrate stdout description";
             assert_string_contains
-              ~needle:"- `--poll-ms COUNT`: Poll the workspace for file changes every COUNT milliseconds."
-              docs.output
-              "docs output should include watch poll interval documentation";
+              ~needle:
+                "- `--poll-ms COUNT`: Poll the workspace for file changes every COUNT \
+                 milliseconds."
+              docs.output "docs output should include watch poll interval documentation";
             assert_string_contains
-              ~needle:"- `--keep-going`: Keep watching after a failed run instead of exiting with the first non-zero status."
+              ~needle:
+                "- `--keep-going`: Keep watching after a failed run instead of exiting \
+                 with the first non-zero status."
               docs.output
               "docs output should include watch failure handling documentation";
             assert_string_contains
-              ~needle:"- `--include GLOB`: Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant source trees."
-              docs.output
-              "docs output should include watch include-glob documentation";
+              ~needle:
+                "- `--include GLOB`: Watch only paths matching GLOB. Repeat to narrow \
+                 large workspaces to the relevant source trees."
+              docs.output "docs output should include watch include-glob documentation";
             assert_string_contains
-              ~needle:"- `--ignore GLOB`: Ignore paths matching GLOB in addition to the built-in .git, _wadi, and _bootstrap exclusions."
-              docs.output
-              "docs output should include watch ignore-glob documentation";
-            assert_string_contains
-              ~needle:"- `wadi env action core`"
-              docs.output
+              ~needle:
+                "- `--ignore GLOB`: Ignore paths matching GLOB in addition to the \
+                 built-in .git, _wadi, and _bootstrap exclusions."
+              docs.output "docs output should include watch ignore-glob documentation";
+            assert_string_contains ~needle:"- `wadi env action core`" docs.output
               "docs output should include env action examples from the command table";
-            assert_string_contains
-              ~needle:"- `wadi env run demo`"
-              docs.output
-              "docs output should include env examples from the command table")) );
+            assert_string_contains ~needle:"- `wadi env run demo`" docs.output
+              "docs output should include env examples from the command table") );
     ( "generates release docs and distributable completion artifacts from the live binary",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-release-artifacts" (fun output_dir ->
             let repo_root = Sys.getcwd () in
             let script_path =
@@ -651,35 +707,33 @@ actions = ["generate"]
             let generated =
               Process.run_capture ~cwd:repo_root
                 ~env:[ ("WADI_BIN", wadi_bin ()) ]
-                "bash" [ script_path; "--output-dir"; output_dir ]
+                "bash"
+                [ script_path; "--output-dir"; output_dir ]
             in
             assert_int_equal 0 generated.status
               "release artifact generation should succeed";
             let docs = run_wadi ~cwd:repo_root [ "docs" ] in
-            let bash_completion =
-              run_wadi ~cwd:repo_root [ "completion"; "bash" ]
-            in
-            let zsh_completion =
-              run_wadi ~cwd:repo_root [ "completion"; "zsh" ]
-            in
-            let fish_completion =
-              run_wadi ~cwd:repo_root [ "completion"; "fish" ]
-            in
+            let bash_completion = run_wadi ~cwd:repo_root [ "completion"; "bash" ] in
+            let zsh_completion = run_wadi ~cwd:repo_root [ "completion"; "zsh" ] in
+            let fish_completion = run_wadi ~cwd:repo_root [ "completion"; "fish" ] in
             assert_int_equal 0 docs.status
               "docs should render successfully before comparing release artifacts";
             assert_int_equal 0 bash_completion.status
-              "bash completion should render successfully before comparing release artifacts";
+              "bash completion should render successfully before comparing release \
+               artifacts";
             assert_int_equal 0 zsh_completion.status
-              "zsh completion should render successfully before comparing release artifacts";
+              "zsh completion should render successfully before comparing release \
+               artifacts";
             assert_int_equal 0 fish_completion.status
-              "fish completion should render successfully before comparing release artifacts";
+              "fish completion should render successfully before comparing release \
+               artifacts";
             assert_string_equal docs.output
               (Fs.read_file (Filename.concat output_dir "docs/cli.md"))
               "release docs should come directly from wadi docs";
             assert_string_equal docs.output
-              (Fs.read_file
-                 (Filename.concat output_dir "package/share/doc/wadi/cli.md"))
-              "release artifacts should also stage docs under a package-manager install tree";
+              (Fs.read_file (Filename.concat output_dir "package/share/doc/wadi/cli.md"))
+              "release artifacts should also stage docs under a package-manager install \
+               tree";
             assert_string_equal bash_completion.output
               (Fs.read_file (Filename.concat output_dir "completions/wadi.bash"))
               "packaged bash completion should come directly from wadi completion bash";
@@ -693,19 +747,21 @@ actions = ["generate"]
               (Fs.read_file
                  (Filename.concat output_dir
                     "package/share/bash-completion/completions/wadi"))
-              "release artifacts should also stage bash completion under a package-manager install tree";
+              "release artifacts should also stage bash completion under a \
+               package-manager install tree";
             assert_string_equal zsh_completion.output
               (Fs.read_file
-                 (Filename.concat output_dir
-                    "package/share/zsh/site-functions/_wadi"))
-              "release artifacts should also stage zsh completion under a package-manager install tree";
+                 (Filename.concat output_dir "package/share/zsh/site-functions/_wadi"))
+              "release artifacts should also stage zsh completion under a \
+               package-manager install tree";
             assert_string_equal fish_completion.output
               (Fs.read_file
                  (Filename.concat output_dir
                     "package/share/fish/vendor_completions.d/wadi.fish"))
-              "release artifacts should also stage fish completion under a package-manager install tree")) );
+              "release artifacts should also stage fish completion under a \
+               package-manager install tree") );
     ( "keeps committed release artifacts in sync with the command table",
-      (fun () ->
+      fun () ->
         let repo_root = Sys.getcwd () in
         let docs = run_wadi ~cwd:repo_root [ "docs" ] in
         let bash_completion = run_wadi ~cwd:repo_root [ "completion"; "bash" ] in
@@ -723,8 +779,7 @@ actions = ["generate"]
           (Fs.read_file (Filename.concat repo_root "docs/cli.md"))
           "the committed CLI reference should stay synced with wadi docs";
         assert_string_equal docs.output
-          (Fs.read_file
-             (Filename.concat repo_root "package/share/doc/wadi/cli.md"))
+          (Fs.read_file (Filename.concat repo_root "package/share/doc/wadi/cli.md"))
           "the committed packaged doc copy should stay synced with wadi docs";
         assert_string_equal bash_completion.output
           (Fs.read_file (Filename.concat repo_root "completions/wadi.bash"))
@@ -737,20 +792,22 @@ actions = ["generate"]
           "the committed fish completion should stay synced with wadi completion fish";
         assert_string_equal bash_completion.output
           (Fs.read_file
-             (Filename.concat repo_root
-                "package/share/bash-completion/completions/wadi"))
-          "the committed packaged bash completion should stay synced with wadi completion bash";
+             (Filename.concat repo_root "package/share/bash-completion/completions/wadi"))
+          "the committed packaged bash completion should stay synced with wadi \
+           completion bash";
         assert_string_equal zsh_completion.output
           (Fs.read_file
              (Filename.concat repo_root "package/share/zsh/site-functions/_wadi"))
-          "the committed packaged zsh completion should stay synced with wadi completion zsh";
+          "the committed packaged zsh completion should stay synced with wadi completion \
+           zsh";
         assert_string_equal fish_completion.output
           (Fs.read_file
              (Filename.concat repo_root
                 "package/share/fish/vendor_completions.d/wadi.fish"))
-          "the committed packaged fish completion should stay synced with wadi completion fish") );
+          "the committed packaged fish completion should stay synced with wadi \
+           completion fish" );
     ( "queries workspace-local targets and profiles at completion time",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-workspace-completion" (fun workspace ->
             write_manifest workspace
               {|
@@ -780,24 +837,40 @@ main = "main"
             with_temp_dir "wadi-cli-workspace-completion-cwd" (fun outside ->
                 let target_query =
                   run_wadi ~cwd:outside
-                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "build" ]
+                    [
+                      "completion";
+                      "--workspace";
+                      workspace;
+                      "--query";
+                      "--current";
+                      "";
+                      "--";
+                      "build";
+                    ]
                 in
                 assert_int_equal 0 target_query.status
                   "completion queries should load workspace-local targets when asked";
-                assert_string_contains
-                  ~needle:"__wadi_completion\t1\tcandidates\n"
+                assert_string_contains ~needle:"__wadi_completion\t1\tcandidates\n"
                   target_query.output
                   "completion queries should announce the protocol version";
                 assert_string_contains ~needle:"candidate\tcore\n" target_query.output
                   "completion queries should suggest library targets";
                 assert_string_contains ~needle:"candidate\tdemo\n" target_query.output
                   "completion queries should suggest executable targets";
-                assert_string_contains
-                  ~needle:"candidate\tdemo_suite\n" target_query.output
-                  "completion queries should suggest test targets";
+                assert_string_contains ~needle:"candidate\tdemo_suite\n"
+                  target_query.output "completion queries should suggest test targets";
                 let action_query =
                   run_wadi ~cwd:outside
-                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "action" ]
+                    [
+                      "completion";
+                      "--workspace";
+                      workspace;
+                      "--query";
+                      "--current";
+                      "";
+                      "--";
+                      "action";
+                    ]
                 in
                 assert_int_equal 0 action_query.status
                   "action completion queries should load workspace-local targets";
@@ -807,16 +880,33 @@ main = "main"
                   "action completion queries should suggest executables";
                 let promote_query =
                   run_wadi ~cwd:outside
-                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "promote" ]
+                    [
+                      "completion";
+                      "--workspace";
+                      workspace;
+                      "--query";
+                      "--current";
+                      "";
+                      "--";
+                      "promote";
+                    ]
                 in
                 assert_int_equal 0 promote_query.status
                   "promote completion queries should load workspace-local targets";
-                assert_string_contains ~needle:"candidate\tcore\n"
-                  promote_query.output
+                assert_string_contains ~needle:"candidate\tcore\n" promote_query.output
                   "promote completion queries should suggest libraries";
                 let bench_query =
                   run_wadi ~cwd:outside
-                    [ "completion"; "--workspace"; workspace; "--query"; "--current"; ""; "--"; "bench" ]
+                    [
+                      "completion";
+                      "--workspace";
+                      workspace;
+                      "--query";
+                      "--current";
+                      "";
+                      "--";
+                      "bench";
+                    ]
                 in
                 assert_int_equal 0 bench_query.status
                   "bench completion queries should load declared benchmarks";
@@ -840,13 +930,12 @@ main = "main"
                 in
                 assert_int_equal 0 profile_query.status
                   "completion queries should load profile values when asked";
-                assert_string_contains
-                  ~needle:"candidate\trelease\n" profile_query.output
+                assert_string_contains ~needle:"candidate\trelease\n" profile_query.output
                   "completion queries should suggest the default profile name";
                 assert_string_contains ~needle:"candidate\tdev\n" profile_query.output
-                  "completion queries should suggest additional profile names")) ));
+                  "completion queries should suggest additional profile names")) );
     ( "completes env subtools and workspace-local targets",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-env-completion" (fun workspace ->
             write_manifest workspace
               {|
@@ -907,11 +996,10 @@ main = "main"
               "env install completion should include libraries";
             assert_string_contains ~needle:"candidate\tdemo\n" install_targets.output
               "env install completion should include executables";
-            assert_string_not_contains ~needle:"candidate\tunit\n"
-              install_targets.output
-              "env install completion should not include tests")) );
+            assert_string_not_contains ~needle:"candidate\tunit\n" install_targets.output
+              "env install completion should not include tests") );
     ( "delegates watch completion to the selected subtool",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-watch-completion" (fun workspace ->
             write_manifest workspace
               {|
@@ -963,11 +1051,9 @@ main = "main"
             in
             assert_int_equal 0 subtool_flags.status
               "watch subtool flag completion should query successfully";
-            assert_string_contains ~needle:"candidate\t--profile\n"
-              subtool_flags.output
+            assert_string_contains ~needle:"candidate\t--profile\n" subtool_flags.output
               "watch build completion should expose delegated build flags";
-            assert_string_contains ~needle:"candidate\t--backend\n"
-              subtool_flags.output
+            assert_string_contains ~needle:"candidate\t--backend\n" subtool_flags.output
               "watch build completion should include backend selection";
             let profile_values =
               run_wadi ~cwd:workspace
@@ -984,17 +1070,18 @@ main = "main"
             in
             assert_int_equal 0 profile_values.status
               "watch subtool value completion should query successfully";
-            assert_string_contains ~needle:"candidate\trelease\n"
-              profile_values.output
+            assert_string_contains ~needle:"candidate\trelease\n" profile_values.output
               "watch build completion should delegate profile values";
             assert_string_contains ~needle:"candidate\tdev\n" profile_values.output
-              "watch build completion should include additional profiles")) );
+              "watch build completion should include additional profiles") );
     ( "returns versioned directory and file completion protocol headers for path flags",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-path-query" (fun workspace ->
             let workspace_query =
               run_wadi ~cwd:workspace
-                [ "completion"; "--query"; "--current"; "wo"; "--"; "build"; "--workspace" ]
+                [
+                  "completion"; "--query"; "--current"; "wo"; "--"; "build"; "--workspace";
+                ]
             in
             assert_int_equal 0 workspace_query.status
               "workspace-directory completion queries should succeed";
@@ -1003,30 +1090,33 @@ main = "main"
               "workspace-directory completion should use the versioned directory response";
             let prefix_query =
               run_wadi ~cwd:workspace
-                [ "completion"; "--query"; "--current"; "st"; "--"; "install"; "--prefix" ]
+                [
+                  "completion"; "--query"; "--current"; "st"; "--"; "install"; "--prefix";
+                ]
             in
             assert_int_equal 0 prefix_query.status
               "prefix completion queries should succeed";
-            assert_string_equal "__wadi_completion\t1\tdirectories\n"
-              prefix_query.output
+            assert_string_equal "__wadi_completion\t1\tdirectories\n" prefix_query.output
               "prefix completion should use the versioned directory response";
             let destdir_query =
               run_wadi ~cwd:workspace
-                [ "completion"; "--query"; "--current"; "pk"; "--"; "install"; "--destdir" ]
+                [
+                  "completion"; "--query"; "--current"; "pk"; "--"; "install"; "--destdir";
+                ]
             in
             assert_int_equal 0 destdir_query.status
               "destdir completion queries should succeed";
-            assert_string_equal "__wadi_completion\t1\tdirectories\n"
-              destdir_query.output
+            assert_string_equal "__wadi_completion\t1\tdirectories\n" destdir_query.output
               "destdir completion should use the versioned directory response";
             let output_query =
               run_wadi ~cwd:workspace
-                [ "completion"; "--query"; "--current"; "co"; "--"; "migrate"; "--output" ]
+                [
+                  "completion"; "--query"; "--current"; "co"; "--"; "migrate"; "--output";
+                ]
             in
             assert_int_equal 0 output_query.status
               "output-path completion queries should succeed";
-            assert_string_equal "__wadi_completion\t1\tfiles\n"
-              output_query.output
+            assert_string_equal "__wadi_completion\t1\tfiles\n" output_query.output
               "output-path completion should use the versioned file response";
             let script_query =
               run_wadi ~cwd:workspace
@@ -1034,11 +1124,10 @@ main = "main"
             in
             assert_int_equal 0 script_query.status
               "script-path completion queries should succeed";
-            assert_string_equal "__wadi_completion\t1\tfiles\n"
-              script_query.output
-              "script-path completion should use the versioned file response")) );
+            assert_string_equal "__wadi_completion\t1\tfiles\n" script_query.output
+              "script-path completion should use the versioned file response") );
     ( "returns member package paths in described completion queries",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-completion-describe" (fun workspace ->
             write_manifest workspace
               {|
@@ -1086,62 +1175,52 @@ deps = ["core"]
                 in
                 assert_int_equal 0 query.status
                   "described completion queries should succeed";
-                assert_string_contains
-                  ~needle:"__wadi_completion\t1\tcandidates\n"
+                assert_string_contains ~needle:"__wadi_completion\t1\tcandidates\n"
                   query.output
                   "described completion queries should announce the protocol version";
                 assert_string_contains ~needle:"candidate\tshared\n" query.output
                   "root targets should still be listed plainly";
-                assert_string_contains
-                  ~needle:"candidate\tcore\tpackages/core\n"
+                assert_string_contains ~needle:"candidate\tcore\tpackages/core\n"
                   query.output
                   "member library completions should include their package path";
-                assert_string_contains
-                  ~needle:"candidate\tdemo\tpackages/app\n"
+                assert_string_contains ~needle:"candidate\tdemo\tpackages/app\n"
                   query.output
-                  "member executable completions should include their package path")) ));
+                  "member executable completions should include their package path")) );
     ( "queries top-level command names outside a workspace",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-query-top-level" (fun workspace ->
             let query =
-              run_wadi ~cwd:workspace
-                [ "completion"; "--query"; "--current"; "bu" ]
+              run_wadi ~cwd:workspace [ "completion"; "--query"; "--current"; "bu" ]
             in
             assert_int_equal 0 query.status
               "top-level completion queries should succeed without a manifest";
-            assert_string_contains
-              ~needle:"__wadi_completion\t1\tcandidates\n"
+            assert_string_contains ~needle:"__wadi_completion\t1\tcandidates\n"
               query.output
               "top-level completion queries should announce the protocol version";
             assert_string_contains ~needle:"candidate\tbuild\n" query.output
               "top-level completion queries should suggest command names";
             assert_string_not_contains ~needle:"candidate\trun\n" query.output
-              "query filtering should preserve the current prefix")) );
+              "query filtering should preserve the current prefix") );
     ( "renders bash completions from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-bash-completion" (fun workspace ->
             let completion = run_wadi ~cwd:workspace [ "completion"; "bash" ] in
             assert_int_equal 0 completion.status
               "bash completion generation should succeed";
             assert_string_contains ~needle:"_wadi()" completion.output
               "bash completion output should define the completion function";
-            assert_string_contains ~needle:"wadi completion --query"
-              completion.output
+            assert_string_contains ~needle:"wadi completion --query" completion.output
               "bash completion should query the live workspace at runtime";
-            assert_string_contains ~needle:"--describe"
-              completion.output
+            assert_string_contains ~needle:"--describe" completion.output
               "bash completion should request described runtime suggestions";
-            assert_string_contains
-              ~needle:"COMP_WORDS[@]:1:$((COMP_CWORD-1))"
+            assert_string_contains ~needle:"COMP_WORDS[@]:1:$((COMP_CWORD-1))"
               completion.output
               "bash completion should forward the live command line to the query protocol";
             assert_string_contains ~needle:"_wadi_query" completion.output
               "bash completion should route through a shared runtime query helper";
-            assert_string_contains ~needle:"_wadi_show_descriptions"
-              completion.output
+            assert_string_contains ~needle:"_wadi_show_descriptions" completion.output
               "bash completion should provide a description fallback helper";
-            assert_string_contains ~needle:"__wadi_completion"
-              completion.output
+            assert_string_contains ~needle:"__wadi_completion" completion.output
               "bash completion should recognize the versioned completion protocol";
             assert_string_contains ~needle:"read -r protocol version kind"
               completion.output
@@ -1151,9 +1230,9 @@ deps = ["core"]
               "bash completion should fall back to shell-native directory completion";
             assert_string_contains ~needle:"compgen -V COMPREPLY -f -- \"$cur\""
               completion.output
-              "bash completion should fall back to shell-native file completion")) );
+              "bash completion should fall back to shell-native file completion") );
     ( "bash completion uses shell-native directory completion for path flags",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-bash-paths" (fun workspace ->
             Fs.ensure_dir (Filename.concat workspace "project");
             Fs.ensure_dir (Filename.concat workspace "prefix-dir");
@@ -1163,7 +1242,14 @@ deps = ["core"]
               "bash completion script generation should succeed before runtime checks";
             let bash =
               run_bash_completion ~cwd:workspace completion.output
-                "COMP_WORDS=(wadi build --workspace pr)\nCOMP_CWORD=3\n_wadi\nprintf 'reply:%s\\n' \"${COMPREPLY[@]}\"\nCOMP_WORDS=(wadi repl --script se)\nCOMP_CWORD=3\n_wadi\nprintf 'file:%s\\n' \"${COMPREPLY[@]}\"\n"
+                "COMP_WORDS=(wadi build --workspace pr)\n\
+                 COMP_CWORD=3\n\
+                 _wadi\n\
+                 printf 'reply:%s\\n' \"${COMPREPLY[@]}\"\n\
+                 COMP_WORDS=(wadi repl --script se)\n\
+                 COMP_CWORD=3\n\
+                 _wadi\n\
+                 printf 'file:%s\\n' \"${COMPREPLY[@]}\"\n"
             in
             assert_int_equal 0 bash.status
               "the bash completion function should succeed for directory flags";
@@ -1173,11 +1259,10 @@ deps = ["core"]
               "directory completion should reuse bash's native directory matcher";
             assert_string_contains ~needle:"file:session.ml\n" bash.output
               "file completion should reuse bash's native file matcher";
-            assert_string_not_contains ~needle:"__wadi_completion"
-              bash.output
-              "the protocol header should stay internal to the completion function")) );
+            assert_string_not_contains ~needle:"__wadi_completion" bash.output
+              "the protocol header should stay internal to the completion function") );
     ( "bash completion prints package-path hints while completing plain target names",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-bash-descriptions" (fun workspace ->
             write_manifest workspace
               {|
@@ -1213,83 +1298,78 @@ deps = ["core"]
               "bash completion script generation should succeed before hint checks";
             let bash =
               run_bash_completion ~cwd:workspace completion.output
-                "COMP_WORDS=(wadi build \"\")\nCOMP_CWORD=2\n_wadi\nprintf 'reply:%s\\n' \"${COMPREPLY[@]}\"\n"
+                "COMP_WORDS=(wadi build \"\")\n\
+                 COMP_CWORD=2\n\
+                 _wadi\n\
+                 printf 'reply:%s\\n' \"${COMPREPLY[@]}\"\n"
             in
             assert_int_equal 0 bash.status
               "the bash completion function should succeed for target queries";
             assert_string_contains ~needle:"core\tpackages/core\n" bash.output
               "bash completion should surface member package hints";
             assert_string_contains ~needle:"demo\tpackages/app\n" bash.output
-              "bash completion should print executable package hints as fallback descriptions";
+              "bash completion should print executable package hints as fallback \
+               descriptions";
             assert_string_contains ~needle:"reply:core\n" bash.output
               "bash completion should still complete plain target names";
             assert_string_contains ~needle:"reply:demo\n" bash.output
               "bash completion should keep completion values separate from descriptions";
-            assert_string_not_contains ~needle:"reply:core\tpackages/core"
-              bash.output
-              "bash completion should not inject package hints into inserted words")) );
+            assert_string_not_contains ~needle:"reply:core\tpackages/core" bash.output
+              "bash completion should not inject package hints into inserted words") );
     ( "renders zsh completions from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-zsh-completion" (fun workspace ->
             let completion = run_wadi ~cwd:workspace [ "completion"; "zsh" ] in
             assert_int_equal 0 completion.status
               "zsh completion generation should succeed";
             assert_string_contains ~needle:"#compdef wadi" completion.output
               "zsh completion output should declare the compdef";
-            assert_string_contains ~needle:"wadi completion --query"
-              completion.output
+            assert_string_contains ~needle:"wadi completion --query" completion.output
               "zsh completion should query the live workspace at runtime";
-            assert_string_contains ~needle:"--describe"
-              completion.output
+            assert_string_contains ~needle:"--describe" completion.output
               "zsh completion should request described runtime suggestions";
             assert_string_contains ~needle:"words[2,CURRENT-1]" completion.output
               "zsh completion should forward prior words to the query protocol";
             assert_string_contains ~needle:"_describe 'value' suggestions"
-              completion.output
-              "zsh completion should describe runtime query suggestions";
+              completion.output "zsh completion should describe runtime query suggestions";
             assert_string_contains ~needle:"read -r protocol version kind"
               completion.output
               "zsh completion should parse protocol headers before describing suggestions";
-            assert_string_contains ~needle:"_files -/"
-              completion.output
-              "zsh completion should delegate directory-valued flags to native path completion";
+            assert_string_contains ~needle:"_files -/" completion.output
+              "zsh completion should delegate directory-valued flags to native path \
+               completion";
             assert_string_contains ~needle:"if [[ \"$kind\" == files ]]; then"
-              completion.output
-              "zsh completion should recognize file-valued path queries")) );
+              completion.output "zsh completion should recognize file-valued path queries")
+    );
     ( "renders fish completions from the command table",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-fish-completion" (fun workspace ->
             let completion = run_wadi ~cwd:workspace [ "completion"; "fish" ] in
             assert_int_equal 0 completion.status
               "fish completion generation should succeed";
-            assert_string_contains
-              ~needle:"complete -c wadi -f -a '(__wadi_complete)'"
+            assert_string_contains ~needle:"complete -c wadi -f -a '(__wadi_complete)'"
               completion.output
               "fish completion should delegate to the runtime query helper";
-            assert_string_contains
-              ~needle:"commandline -opc"
-              completion.output
+            assert_string_contains ~needle:"commandline -opc" completion.output
               "fish completion should forward committed words to the query protocol";
-            assert_string_contains ~needle:"wadi completion --query"
-              completion.output
+            assert_string_contains ~needle:"wadi completion --query" completion.output
               "fish completion should query the live workspace at runtime";
-            assert_string_contains ~needle:"--describe"
-              completion.output
+            assert_string_contains ~needle:"--describe" completion.output
               "fish completion should request described runtime suggestions";
-            assert_string_contains ~needle:"set -l tab (printf '\\t')"
-              completion.output
+            assert_string_contains ~needle:"set -l tab (printf '\\t')" completion.output
               "fish completion should define a tab separator for protocol parsing";
             assert_string_contains ~needle:"string split $tab -- $response[1]"
               completion.output
               "fish completion should parse protocol headers before forwarding results";
-            assert_string_contains ~needle:"__fish_complete_directories"
-              completion.output
-              "fish completion should delegate directory-valued flags to native path completion";
-            assert_string_contains ~needle:"__fish_complete_path"
-              completion.output
-              "fish completion should delegate file-valued flags to native path completion")) );
-    ( "executes zsh completion runtime branches for described, directory, and file completions",
-      (fun () ->
+            assert_string_contains ~needle:"__fish_complete_directories" completion.output
+              "fish completion should delegate directory-valued flags to native path \
+               completion";
+            assert_string_contains ~needle:"__fish_complete_path" completion.output
+              "fish completion should delegate file-valued flags to native path \
+               completion") );
+    ( "executes zsh completion runtime branches for described, directory, and file \
+       completions",
+      fun () ->
         with_temp_dir "wadi-cli-zsh-runtime" (fun workspace ->
             write_manifest workspace
               {|
@@ -1327,24 +1407,43 @@ deps = ["core"]
               "zsh completion script generation should succeed before runtime checks";
             let zsh =
               run_zsh_completion ~cwd:workspace completion.output
-                "function _describe() {\n  local tag=\"$1\"\n  local array_name=\"$2\"\n  local -a items\n  items=(\"${(@P)array_name}\")\n  printf 'tag:%s\\n' \"$tag\"\n  printf 'suggestion:%s\\n' \"$items[@]\"\n}\nfunction _files() {\n  printf 'files:%s\\n' \"$*\"\n}\nwords=(wadi build '')\nCURRENT=3\n_wadi\nwords=(wadi build --workspace pr)\nCURRENT=4\n_wadi\nwords=(wadi repl --script se)\nCURRENT=4\n_wadi\n"
+                "function _describe() {\n\
+                \  local tag=\"$1\"\n\
+                \  local array_name=\"$2\"\n\
+                \  local -a items\n\
+                \  items=(\"${(@P)array_name}\")\n\
+                \  printf 'tag:%s\\n' \"$tag\"\n\
+                \  printf 'suggestion:%s\\n' \"$items[@]\"\n\
+                 }\n\
+                 function _files() {\n\
+                \  printf 'files:%s\\n' \"$*\"\n\
+                 }\n\
+                 words=(wadi build '')\n\
+                 CURRENT=3\n\
+                 _wadi\n\
+                 words=(wadi build --workspace pr)\n\
+                 CURRENT=4\n\
+                 _wadi\n\
+                 words=(wadi repl --script se)\n\
+                 CURRENT=4\n\
+                 _wadi\n"
             in
             assert_int_equal 0 zsh.status
               "the zsh completion function should execute successfully";
             assert_string_contains ~needle:"tag:value\n" zsh.output
               "zsh completion should route described candidates through _describe";
-            assert_string_contains ~needle:"suggestion:core:packages/core\n"
-              zsh.output
+            assert_string_contains ~needle:"suggestion:core:packages/core\n" zsh.output
               "zsh runtime completion should surface member package hints";
-            assert_string_contains ~needle:"suggestion:demo:packages/app\n"
-              zsh.output
+            assert_string_contains ~needle:"suggestion:demo:packages/app\n" zsh.output
               "zsh runtime completion should include executable package hints";
             assert_string_contains ~needle:"files:-/\n" zsh.output
               "zsh runtime completion should delegate directory path flags to _files";
             assert_string_contains ~needle:"files:\n" zsh.output
-              "zsh runtime completion should delegate file path flags to _files without the directory filter")) );
-    ( "executes fish completion runtime branches for described, directory, and file completions",
-      (fun () ->
+              "zsh runtime completion should delegate file path flags to _files without \
+               the directory filter") );
+    ( "executes fish completion runtime branches for described, directory, and file \
+       completions",
+      fun () ->
         with_temp_dir "wadi-cli-fish-runtime" (fun workspace ->
             write_manifest workspace
               {|
@@ -1382,7 +1481,45 @@ deps = ["core"]
               "fish completion script generation should succeed before runtime checks";
             let fish =
               run_fish_completion ~cwd:workspace completion.output
-                "set -g wadi_mode described\nfunction commandline\n  switch $argv[1]\n    case -opc\n      switch $wadi_mode\n        case described\n          echo wadi\n          echo build\n        case path\n          echo wadi\n          echo build\n          echo --workspace\n        case file\n          echo wadi\n          echo repl\n          echo --script\n      end\n    case -ct\n      switch $wadi_mode\n        case described\n          echo ''\n        case path\n          echo pr\n        case file\n          echo se\n      end\n  end\nend\nfunction __fish_complete_directories\n  printf 'dir:%s\\n' $argv\nend\nfunction __fish_complete_path\n  printf 'file:%s\\n' $argv\nend\n__wadi_complete\nset -g wadi_mode path\n__wadi_complete\nset -g wadi_mode file\n__wadi_complete\n"
+                "set -g wadi_mode described\n\
+                 function commandline\n\
+                \  switch $argv[1]\n\
+                \    case -opc\n\
+                \      switch $wadi_mode\n\
+                \        case described\n\
+                \          echo wadi\n\
+                \          echo build\n\
+                \        case path\n\
+                \          echo wadi\n\
+                \          echo build\n\
+                \          echo --workspace\n\
+                \        case file\n\
+                \          echo wadi\n\
+                \          echo repl\n\
+                \          echo --script\n\
+                \      end\n\
+                \    case -ct\n\
+                \      switch $wadi_mode\n\
+                \        case described\n\
+                \          echo ''\n\
+                \        case path\n\
+                \          echo pr\n\
+                \        case file\n\
+                \          echo se\n\
+                \      end\n\
+                \  end\n\
+                 end\n\
+                 function __fish_complete_directories\n\
+                \  printf 'dir:%s\\n' $argv\n\
+                 end\n\
+                 function __fish_complete_path\n\
+                \  printf 'file:%s\\n' $argv\n\
+                 end\n\
+                 __wadi_complete\n\
+                 set -g wadi_mode path\n\
+                 __wadi_complete\n\
+                 set -g wadi_mode file\n\
+                 __wadi_complete\n"
             in
             assert_int_equal 0 fish.status
               "the fish completion function should execute successfully";
@@ -1391,14 +1528,15 @@ deps = ["core"]
             assert_string_contains ~needle:"demo\tpackages/app\n" fish.output
               "fish runtime completion should include executable package hints";
             assert_string_contains ~needle:"dir:pr\n" fish.output
-              "fish runtime completion should delegate directory flags to the native directory completer";
+              "fish runtime completion should delegate directory flags to the native \
+               directory completer";
             assert_string_contains ~needle:"file:se\n" fish.output
-              "fish runtime completion should delegate file flags to the native file completer")) );
+              "fish runtime completion should delegate file flags to the native file \
+               completer") );
     ( "binds generated completion scripts to an explicit workspace when requested",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-completion-workspace-script" (fun workspace ->
-            write_manifest workspace
-              {|
+            write_manifest workspace {|
 [library.core]
 dir = "lib"
 modules = ["core"]
@@ -1406,19 +1544,20 @@ modules = ["core"]
             write_source workspace "lib/core.ml" {|let value = 1|};
             with_temp_dir "wadi-cli-completion-workspace-script-cwd" (fun outside ->
                 let completion =
-                  run_wadi ~cwd:outside
-                    [ "completion"; "--workspace"; workspace; "bash" ]
+                  run_wadi ~cwd:outside [ "completion"; "--workspace"; workspace; "bash" ]
                 in
                 assert_int_equal 0 completion.status
                   "workspace-bound completion script generation should succeed";
                 assert_string_contains
                   ~needle:("--workspace " ^ Filename.quote workspace)
                   completion.output
-                  "generated completion scripts should preserve the requested workspace binding";
+                  "generated completion scripts should preserve the requested workspace \
+                   binding";
                 assert_string_not_contains ~needle:"core\n" completion.output
-                  "runtime completion scripts should not snapshot workspace nouns into the script body")) ));
+                  "runtime completion scripts should not snapshot workspace nouns into \
+                   the script body")) );
     ( "rejects unknown completion shells clearly",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-cli-completion-error" (fun workspace ->
             let completion = run_wadi ~cwd:workspace [ "completion"; "pwsh" ] in
             assert_true (completion.status <> 0)
@@ -1426,5 +1565,5 @@ modules = ["core"]
             assert_string_contains
               ~needle:"unknown shell 'pwsh'; expected bash, fish, or zsh"
               completion.output
-              "completion should report the supported shell names directly")) );
+              "completion should report the supported shell names directly") );
   ]

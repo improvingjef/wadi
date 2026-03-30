@@ -1,8 +1,4 @@
-type root_file = {
-  relative_path : string;
-  reload_policy : bool;
-  select_for_rerun : bool;
-}
+type root_file = { relative_path : string; reload_policy : bool; select_for_rerun : bool }
 
 type options = {
   workspace_root : string;
@@ -32,11 +28,8 @@ type compiled_options = {
 }
 
 let default_ignore_globs = [ ".git/**"; "_wadi/**"; "_bootstrap/**" ]
-
 let ignore_file_name = ".wadiwatchignore"
-
 let manifest_relative_path = Manifest.default_filename
-
 let lock_relative_path = Locker.default_lock_filename
 
 type policy = {
@@ -82,11 +75,9 @@ let rec segment_matches pattern segment =
       match pattern.[pattern_index] with
       | '*' ->
           loop (pattern_index + 1) segment_index
-          || (segment_index < segment_length
-             && loop pattern_index (segment_index + 1))
+          || (segment_index < segment_length && loop pattern_index (segment_index + 1))
       | '?' ->
-          segment_index < segment_length
-          && loop (pattern_index + 1) (segment_index + 1)
+          segment_index < segment_length && loop (pattern_index + 1) (segment_index + 1)
       | ch ->
           segment_index < segment_length
           && Char.equal ch segment.[segment_index]
@@ -98,15 +89,11 @@ let rec glob_matches pattern path =
   match (pattern, path) with
   | [], [] -> true
   | [], _ -> false
-  | "**" :: rest, _ ->
+  | "**" :: rest, _ -> (
       glob_matches rest path
-      ||
-      (match path with
-      | _ :: path_rest -> glob_matches pattern path_rest
-      | [] -> false)
+      || match path with _ :: path_rest -> glob_matches pattern path_rest | [] -> false)
   | pattern_segment :: pattern_rest, path_segment :: path_rest ->
-      segment_matches pattern_segment path_segment
-      && glob_matches pattern_rest path_rest
+      segment_matches pattern_segment path_segment && glob_matches pattern_rest path_rest
   | _ -> false
 
 let rec glob_covers_prefix pattern path =
@@ -130,8 +117,7 @@ let matches_any_prefix globs relative_path =
   List.exists (fun glob -> glob_covers_prefix glob path) globs
 
 let compile_globs globs =
-  globs |> List.map split_glob_segments
-  |> List.filter (fun segments -> segments <> [])
+  globs |> List.map split_glob_segments |> List.filter (fun segments -> segments <> [])
 
 let manifest_root_file =
   {
@@ -141,18 +127,10 @@ let manifest_root_file =
   }
 
 let ignore_root_file =
-  {
-    relative_path = ignore_file_name;
-    reload_policy = true;
-    select_for_rerun = false;
-  }
+  { relative_path = ignore_file_name; reload_policy = true; select_for_rerun = false }
 
 let lock_root_file =
-  {
-    relative_path = lock_relative_path;
-    reload_policy = false;
-    select_for_rerun = true;
-  }
+  { relative_path = lock_relative_path; reload_policy = false; select_for_rerun = true }
 
 let dedup_root_files root_files =
   let seen = Hashtbl.create (List.length root_files) in
@@ -166,8 +144,7 @@ let dedup_root_files root_files =
 
 let compile_options (options : options) =
   let root_files =
-    dedup_root_files
-      (manifest_root_file :: ignore_root_file :: options.command_root_files)
+    dedup_root_files (manifest_root_file :: ignore_root_file :: options.command_root_files)
   in
   {
     workspace_root = options.workspace_root;
@@ -198,21 +175,17 @@ let protect_load path f =
   try f () with
   | Sys_error message -> Error message
   | Unix.Unix_error (error, _, _) ->
-      Error
-        (Printf.sprintf "%s: %s" path (Unix.error_message error))
+      Error (Printf.sprintf "%s: %s" path (Unix.error_message error))
   | exn -> Error (Printf.sprintf "%s: %s" path (Printexc.to_string exn))
 
 let load_policy options =
-  let manifest_path =
-    Filename.concat options.workspace_root Manifest.default_filename
-  in
+  let manifest_path = Filename.concat options.workspace_root Manifest.default_filename in
   let* watch_config =
     protect_load manifest_path (fun () -> Manifest.load_watch_config manifest_path)
   in
   let* ignore_file_globs =
-    protect_load
-      (Filename.concat options.workspace_root ignore_file_name)
-      (fun () -> load_ignore_file_globs options.workspace_root)
+    protect_load (Filename.concat options.workspace_root ignore_file_name) (fun () ->
+        load_ignore_file_globs options.workspace_root)
   in
   let include_globs_text =
     String_util.dedup_preserve
@@ -234,14 +207,10 @@ let load_policy options =
 let stat_signature path =
   let stats = Unix.lstat path in
   match stats.Unix.st_kind with
-  | Unix.S_REG ->
-      Printf.sprintf "file\t%d\t%.6f" stats.Unix.st_size stats.Unix.st_mtime
+  | Unix.S_REG -> Printf.sprintf "file\t%d\t%.6f" stats.Unix.st_size stats.Unix.st_mtime
   | Unix.S_DIR -> "dir"
   | Unix.S_LNK ->
-      let target =
-        try Unix.readlink path with
-        | Unix.Unix_error _ -> "<unreadable>"
-      in
+      let target = try Unix.readlink path with Unix.Unix_error _ -> "<unreadable>" in
       "symlink\t" ^ target
   | Unix.S_CHR -> "char"
   | Unix.S_BLK -> "block"
@@ -267,7 +236,8 @@ let path_is_manifest options relative_path =
 let path_is_ignore_file options relative_path =
   root_file options
     (fun root_file ->
-      root_file.reload_policy && not root_file.select_for_rerun
+      root_file.reload_policy
+      && (not root_file.select_for_rerun)
       && String.equal root_file.relative_path ignore_file_name)
     relative_path
 
@@ -278,11 +248,13 @@ let path_is_selected_root_file options relative_path =
   root_file options (fun root_file -> root_file.select_for_rerun) relative_path
 
 let path_is_ignored options policy relative_path =
-  relative_path <> "" && not (path_is_root_file options relative_path)
+  relative_path <> ""
+  && (not (path_is_root_file options relative_path))
   && matches_any_glob policy.ignore_globs relative_path
 
 let path_is_relevant options policy relative_path =
-  path_is_root_file options relative_path || policy.include_globs = []
+  path_is_root_file options relative_path
+  || policy.include_globs = []
   || matches_any_prefix policy.include_globs relative_path
 
 let path_is_selected options policy relative_path =
@@ -291,9 +263,7 @@ let path_is_selected options policy relative_path =
   else policy.include_globs = [] || matches_any_glob policy.include_globs relative_path
 
 let render_globs empty_label globs =
-  match globs with
-  | [] -> empty_label
-  | globs -> String.concat ", " globs
+  match globs with [] -> empty_label | globs -> String.concat ", " globs
 
 let render_policy policy =
   Printf.sprintf "include=%s ignore=%s"
@@ -315,8 +285,7 @@ let render_root_file_role root_file =
 let render_root_file_roles options =
   options.root_files
   |> List.map (fun root_file ->
-         Printf.sprintf "%s=%s" root_file.relative_path
-           (render_root_file_role root_file))
+      Printf.sprintf "%s=%s" root_file.relative_path (render_root_file_role root_file))
   |> render_globs "<none>"
 
 let policy_changed previous next =
@@ -333,23 +302,19 @@ let selected_snapshot options policy =
     else
       let signature = stat_signature path in
       let include_entry =
-        relative_path = "" || path_is_selected options policy relative_path
+        relative_path = ""
+        || path_is_selected options policy relative_path
         || (signature = "dir" && path_is_relevant options policy relative_path)
       in
       let label = if relative_path = "" then "." else relative_path in
-      let acc =
-        if include_entry then (label ^ "\t" ^ signature) :: acc else acc
-      in
+      let acc = if include_entry then (label ^ "\t" ^ signature) :: acc else acc in
       if signature <> "dir" then acc
       else
-        let entries =
-          Sys.readdir path |> Array.to_list |> List.sort String.compare
-        in
+        let entries = Sys.readdir path |> Array.to_list |> List.sort String.compare in
         List.fold_left
           (fun acc entry ->
             let child_relative =
-              if relative_path = "" then entry
-              else Filename.concat relative_path entry
+              if relative_path = "" then entry else Filename.concat relative_path entry
             in
             collect child_relative (Filename.concat path entry) acc)
           acc entries
@@ -360,10 +325,9 @@ let control_snapshot options =
   options.root_files
   |> List.filter (fun root_file -> root_file.reload_policy)
   |> List.map (fun root_file ->
-         root_file.relative_path
-         ^ "\t"
-         ^ stat_signature_or_missing
-             (Filename.concat options.workspace_root root_file.relative_path))
+      root_file.relative_path ^ "\t"
+      ^ stat_signature_or_missing
+          (Filename.concat options.workspace_root root_file.relative_path))
 
 let initial_state options =
   let* policy = load_policy options in
@@ -385,16 +349,13 @@ let execute_run options run_index =
       (options.command_name :: options.command_args)
     |> fun outcome -> outcome.Process.unix_status
   in
-  print_endline
-    (Printf.sprintf "Watch-result %d: %s" run_index (render_status status));
+  print_endline (Printf.sprintf "Watch-result %d: %s" run_index (render_status status));
   status
 
 let rec wait_for_change options (state : state) =
   sleep_ms options.poll_ms;
   let next_control_snapshot = control_snapshot options in
-  let selected_snapshot_before_reload =
-    selected_snapshot options state.policy
-  in
+  let selected_snapshot_before_reload = selected_snapshot options state.policy in
   if
     next_control_snapshot = state.control_snapshot
     && selected_snapshot_before_reload = state.selected_snapshot
@@ -402,9 +363,7 @@ let rec wait_for_change options (state : state) =
   else (
     if options.debounce_ms > 0 then sleep_ms options.debounce_ms;
     let next_control_snapshot = control_snapshot options in
-    let selected_snapshot_before_reload =
-      selected_snapshot options state.policy
-    in
+    let selected_snapshot_before_reload = selected_snapshot options state.policy in
     let control_changed = next_control_snapshot <> state.control_snapshot in
     if not control_changed then
       if selected_snapshot_before_reload = state.selected_snapshot then
@@ -428,8 +387,7 @@ let rec wait_for_change options (state : state) =
           else next_state
       | Error message ->
           print_endline
-            (Printf.sprintf
-               "Watch-config: keeping previous policy after reload error: %s"
+            (Printf.sprintf "Watch-config: keeping previous policy after reload error: %s"
                message);
           let next_state =
             {
@@ -446,23 +404,19 @@ let run options =
   let options = compile_options options in
   let* state = initial_state options in
   print_endline
-    (Printf.sprintf
-       "Watching %s (poll=%dms debounce=%dms) for `wadi %s`"
+    (Printf.sprintf "Watching %s (poll=%dms debounce=%dms) for `wadi %s`"
        options.workspace_root options.poll_ms options.debounce_ms
        (command_line options.command_name options.command_args));
+  print_endline (Printf.sprintf "Watch-config: %s" (render_policy state.policy));
+  print_endline (Printf.sprintf "Watch-root-files: %s" (render_root_files options));
   print_endline
-    (Printf.sprintf "Watch-config: %s" (render_policy state.policy));
-  print_endline
-    (Printf.sprintf "Watch-root-files: %s" (render_root_files options));
-  print_endline
-    (Printf.sprintf "Watch-root-file-roles: %s"
-       (render_root_file_roles options));
+    (Printf.sprintf "Watch-root-file-roles: %s" (render_root_file_roles options));
   let rec loop run_index state =
     let status = execute_run options run_index in
     let state =
       { state with selected_snapshot = selected_snapshot options state.policy }
     in
-    if not (Process.is_success status) && not options.keep_going then Ok status
+    if (not (Process.is_success status)) && not options.keep_going then Ok status
     else
       match options.max_runs with
       | Some limit when run_index >= limit -> Ok status

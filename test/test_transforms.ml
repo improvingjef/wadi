@@ -1,8 +1,6 @@
 open Test_support
 
-type replacement =
-  | Literal of string
-  | First_line_of_file of string
+type replacement = Literal of string | First_line_of_file of string
 
 let write_executable workspace relative_path contents =
   let path = Filename.concat workspace relative_path in
@@ -89,10 +87,11 @@ let expr mapper expression =
 let () =
   run_main (fun _argv -> { default_mapper with expr })
 |}
-    (replacement_function replacement) marker
+    (replacement_function replacement)
+    marker
 
-let compile_string_marker_ppx workspace ~relative_path ~output_relative_path
-    ~marker replacement =
+let compile_string_marker_ppx workspace ~relative_path ~output_relative_path ~marker
+    replacement =
   compile_ppx workspace relative_path
     (marker_rewriter_source ~marker replacement)
     output_relative_path

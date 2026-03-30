@@ -35,8 +35,7 @@ let write_generated_assets workspace =
     (generated_release_artifacts @ generated_release_metadata)
 
 let setup_generated_asset_workspace workspace =
-  write_manifest workspace
-    {|
+  write_manifest workspace {|
 [executable.demo]
 dir = "app"
 main = "main"
@@ -124,7 +123,7 @@ fi
 let cases =
   [
     ( "validates a healthy workspace and current lock snapshot",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
@@ -142,11 +141,10 @@ let cases =
               "doctor should report package resolution health";
             assert_string_contains ~needle:"lock: pass" doctor.output
               "doctor should report lock validation success";
-            assert_string_contains ~needle:"Summary: pass=5 warn=0 fail=0"
-              doctor.output
-              "doctor should summarize all successful checks")) );
+            assert_string_contains ~needle:"Summary: pass=5 warn=0 fail=0" doctor.output
+              "doctor should summarize all successful checks") );
     ( "reports missing external packages directly",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-doctor-packages" (fun workspace ->
             write_manifest workspace
               {|
@@ -168,11 +166,12 @@ deps = ["core"]
             assert_string_contains ~needle:"packages: fail" doctor.output
               "doctor should mark package resolution as failed";
             assert_string_contains
-              ~needle:"executable 'demo' requires package 'definitely_missing_wadi_pkg' is not available via ocamlfind"
-              doctor.output
-              "doctor should keep the direct package-resolution error")) );
+              ~needle:
+                "executable 'demo' requires package 'definitely_missing_wadi_pkg' is not \
+                 available via ocamlfind"
+              doctor.output "doctor should keep the direct package-resolution error") );
     ( "warns about stale lock data by default",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
@@ -183,12 +182,10 @@ deps = ["core"]
               "doctor should warn about stale lock data by default";
             assert_string_contains ~needle:"lock: warn" doctor.output
               "doctor should downgrade lock drift to a warning by default";
-            assert_string_contains
-              ~needle:"failed to read"
-              doctor.output
-              "doctor should surface the lock parsing error in its warning output")) );
+            assert_string_contains ~needle:"failed to read" doctor.output
+              "doctor should surface the lock parsing error in its warning output") );
     ( "fails on stale lock data when --locked is requested",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
@@ -199,12 +196,10 @@ deps = ["core"]
               "doctor --locked should fail on stale or unreadable lock data";
             assert_string_contains ~needle:"lock: fail" doctor.output
               "doctor should upgrade lock drift to a failure with --locked";
-            assert_string_contains
-              ~needle:"Refresh the snapshot with `wadi lock`."
-              doctor.output
-              "doctor should keep the actionable lock refresh guidance")) );
+            assert_string_contains ~needle:"Refresh the snapshot with `wadi lock`."
+              doctor.output "doctor should keep the actionable lock refresh guidance") );
     ( "passes generated-asset checks when committed outputs are current",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-doctor-generated-assets-pass" (fun workspace ->
             setup_generated_asset_workspace workspace;
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
@@ -215,17 +210,14 @@ deps = ["core"]
               "doctor should pass when generated assets are current";
             assert_string_contains ~needle:"generated-assets: pass" doctor.output
               "doctor should report generated asset validation";
-            assert_string_contains ~needle:"release-artifacts: current"
-              doctor.output
+            assert_string_contains ~needle:"release-artifacts: current" doctor.output
               "doctor should confirm release artifact outputs are current";
-            assert_string_contains ~needle:"release-metadata: current"
-              doctor.output
+            assert_string_contains ~needle:"release-metadata: current" doctor.output
               "doctor should confirm release metadata outputs are current";
-            assert_string_contains ~needle:"Summary: pass=6 warn=0 fail=0"
-              doctor.output
-              "doctor should include the generated-asset check in the passing summary")) );
+            assert_string_contains ~needle:"Summary: pass=6 warn=0 fail=0" doctor.output
+              "doctor should include the generated-asset check in the passing summary") );
     ( "warns when generated assets drift from their generators",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-doctor-generated-assets-warn" (fun workspace ->
             setup_generated_asset_workspace workspace;
             let lock = run_wadi ~cwd:workspace [ "lock" ] in
@@ -240,10 +232,9 @@ deps = ["core"]
             assert_string_contains ~needle:"docs/cli.md drifted" doctor.output
               "doctor should report which generated asset drifted";
             assert_string_contains
-              ~needle:"Refresh generated assets with `make sync-generated`."
-              doctor.output
-              "doctor should include the maintenance command for refreshing drifted assets";
-            assert_string_contains ~needle:"Summary: pass=5 warn=1 fail=0"
-              doctor.output
-              "doctor should summarize generated-asset drift as a warning")) );
+              ~needle:"Refresh generated assets with `make sync-generated`." doctor.output
+              "doctor should include the maintenance command for refreshing drifted \
+               assets";
+            assert_string_contains ~needle:"Summary: pass=5 warn=1 fail=0" doctor.output
+              "doctor should summarize generated-asset drift as a warning") );
   ]

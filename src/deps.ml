@@ -18,8 +18,7 @@ let ( let* ) = Result.bind
 let index_targets workspace =
   let table = Hashtbl.create (List.length workspace.Manifest.targets) in
   List.iter
-    (fun target ->
-      Hashtbl.replace table (Manifest.target_name target) target)
+    (fun target -> Hashtbl.replace table (Manifest.target_name target) target)
     workspace.Manifest.targets;
   table
 
@@ -45,22 +44,19 @@ let effective_packages index target =
       Hashtbl.replace seen name ();
       match Hashtbl.find_opt index name with
       | Some (Manifest.Library library) ->
-          let* dependency_packages =
-            collect_many library.name library.Manifest.deps
-          in
-          Ok
-            (String_util.dedup_preserve
-               (library.packages @ dependency_packages))
+          let* dependency_packages = collect_many library.name library.Manifest.deps in
+          Ok (String_util.dedup_preserve (library.packages @ dependency_packages))
       | Some dependency_target ->
           Error
             (Printf.sprintf
                "target '%s' depends on %s '%s'; only libraries may be dependencies"
                dependent_name
-               (Manifest.target_kind_name dependency_target) name)
+               (Manifest.target_kind_name dependency_target)
+               name)
       | None ->
           Error
-            (Printf.sprintf "target '%s' depends on unknown target '%s'"
-               dependent_name name))
+            (Printf.sprintf "target '%s' depends on unknown target '%s'" dependent_name
+               name))
   and collect_many dependent_name names =
     let rec loop acc = function
       | [] -> Ok (List.rev acc |> List.concat |> String_util.dedup_preserve)
@@ -94,9 +90,9 @@ let report_for_targets ~session workspace requested_targets =
         let* package_resolution =
           Toolchain.resolve_packages ~session closure_packages
           |> Result.map_error (fun message ->
-                 Printf.sprintf "%s '%s' requires %s"
-                   (Manifest.target_kind_name target)
-                   (Manifest.target_name target) message)
+              Printf.sprintf "%s '%s' requires %s"
+                (Manifest.target_kind_name target)
+                (Manifest.target_name target) message)
         in
         loop
           ({
@@ -110,9 +106,7 @@ let report_for_targets ~session workspace requested_targets =
   in
   loop [] targets
 
-let joined_names = function
-  | [] -> "none"
-  | names -> String.concat ", " names
+let joined_names = function [] -> "none" | names -> String.concat ", " names
 
 let render_package_roots = function
   | Ok [] -> [ "Package-roots:"; "- none" ]
@@ -130,8 +124,7 @@ let render_target_report (report : target_report) =
           package_paths
   in
   [
-    Printf.sprintf "Target: %s"
-      (Manifest.target_display_name report.target);
+    Printf.sprintf "Target: %s" (Manifest.target_display_name report.target);
     "Kind: " ^ Manifest.target_kind_name report.target;
     "Workspace-deps: " ^ joined_names report.direct_workspace_deps;
     "External-packages: " ^ joined_names report.closure_packages;
@@ -143,10 +136,7 @@ let render_report (report : report) =
   String.concat "\n"
     ([
        ("Workspace: "
-       ^
-       match report.workspace_name with
-       | Some name -> name
-       | None -> "unnamed");
+       ^ match report.workspace_name with Some name -> name | None -> "unnamed");
        ("Requested-targets: "
        ^
        if report.requested_targets = [] then "all"

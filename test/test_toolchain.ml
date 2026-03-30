@@ -3,7 +3,7 @@ open Test_support
 let cases =
   [
     ( "resolves executables from PATH and absolute paths",
-      (fun () ->
+      fun () ->
         let shell_path =
           match Toolchain.resolve_executable_path "/bin/sh" with
           | Some path -> path
@@ -13,9 +13,9 @@ let cases =
           "absolute executable paths should round-trip";
         match Toolchain.resolve_executable_path "ocamlc" with
         | Some _ -> ()
-        | None -> fail "expected ocamlc to resolve from PATH")) ;
+        | None -> fail "expected ocamlc to resolve from PATH" );
     ( "prints a toolchain report without requiring a manifest",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-toolchain" (fun workspace ->
             let run = run_wadi ~cwd:workspace [ "toolchain" ] in
             assert_int_equal 0 run.status
@@ -33,22 +33,20 @@ let cases =
             assert_string_contains ~needle:"stdlib: " run.output
               "toolchain output should report the stdlib path";
             assert_string_contains ~needle:"package-roots:" run.output
-              "toolchain output should report ocamlfind package roots")) );
+              "toolchain output should report ocamlfind package roots") );
     ( "falls back to the bytecode backend when native compilation is unavailable",
-      (fun () ->
+      fun () ->
         with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
             match Toolchain.resolve_backend Toolchain.Auto with
             | Ok Toolchain.Bytecode -> ()
             | Ok backend ->
                 fail
-                  (Printf.sprintf
-                     "expected bytecode fallback but resolved %s"
+                  (Printf.sprintf "expected bytecode fallback but resolved %s"
                      (Toolchain.backend_name backend))
             | Error message ->
-                fail
-                  ("expected bytecode fallback but resolution failed: " ^ message)))) ;
+                fail ("expected bytecode fallback but resolution failed: " ^ message)) );
     ( "prints command-specific help for the toolchain subcommand",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-toolchain-help" (fun workspace ->
             let help = run_wadi ~cwd:workspace [ "toolchain"; "--help" ] in
             assert_true (help.status <> 0)
@@ -56,7 +54,9 @@ let cases =
             assert_string_contains ~needle:"wadi toolchain" help.output
               "toolchain help should include the toolchain signature";
             assert_string_not_contains
-              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [--verbose] [TARGET ...]"
-              help.output
-              "toolchain help should stay scoped to the requested command")) );
+              ~needle:
+                "wadi build [--workspace DIR] [--profile NAME] [--backend \
+                 auto|native|bytecode] [--locked | --warn-locked] [--keep-going] \
+                 [--verbose] [TARGET ...]"
+              help.output "toolchain help should stay scoped to the requested command") );
   ]

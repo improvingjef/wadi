@@ -5,19 +5,15 @@ let write_source workspace relative_path contents =
 
 let assert_one_file_exists paths message =
   if not (List.exists Fs.exists paths) then
-    fail
-      (Printf.sprintf "%s\nexpected one of:\n%s" message
-         (String.concat "\n" paths))
+    fail (Printf.sprintf "%s\nexpected one of:\n%s" message (String.concat "\n" paths))
 
 let cases =
   [
     ( "installs libraries, executables, and metadata into a prefix",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let prefix = Filename.concat workspace "_stage" in
-            let install =
-              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
-            in
+            let install = run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ] in
             assert_int_equal 0 install.status
               "install should stage the default installable targets";
             let installed_binary = Filename.concat prefix "bin/hello" in
@@ -31,12 +27,9 @@ let cases =
                 Filename.concat prefix "lib/greeting/libgreeting.cma";
               ]
               "install should stage a compiled library archive";
-            let metadata_path =
-              Filename.concat prefix "share/wadi/hello/install.json"
-            in
+            let metadata_path = Filename.concat prefix "share/wadi/hello/install.json" in
             assert_file_exists metadata_path;
-            assert_file_exists
-              (Filename.concat prefix "share/wadi/hello/wadi.toml");
+            assert_file_exists (Filename.concat prefix "share/wadi/hello/wadi.toml");
             let meta = Fs.read_file meta_path in
             assert_string_contains ~needle:"description = \"hello library greeting\"" meta
               "install should emit a findlib-friendly META description";
@@ -59,17 +52,15 @@ let cases =
             assert_int_equal 0 run.status
               "installed executables should remain runnable from the staged prefix";
             assert_string_equal "Hello, world!\n" run.output
-              "the staged executable should preserve program behavior")) );
+              "the staged executable should preserve program behavior") );
     ( "installs only the requested top-level targets",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let prefix = Filename.concat workspace "_exe-only" in
             let install =
-              run_wadi ~cwd:workspace
-                [ "install"; "--prefix"; prefix; "greeting" ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix; "greeting" ]
             in
-            assert_int_equal 0 install.status
-              "install should allow targeted staging";
+            assert_int_equal 0 install.status "install should allow targeted staging";
             assert_file_exists (Filename.concat prefix "lib/greeting/META");
             assert_true
               (not (Fs.exists (Filename.concat prefix "bin/hello")))
@@ -78,9 +69,9 @@ let cases =
               Fs.read_file (Filename.concat prefix "share/wadi/hello/install.json")
             in
             assert_string_not_contains ~needle:"\"path\": \"bin/hello\"" metadata
-              "install metadata should not list unrequested executables")) );
+              "install metadata should not list unrequested executables") );
     ( "stages internal library dependencies needed by requested targets",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-install-closure" (fun workspace ->
             write_manifest workspace
               {|
@@ -116,8 +107,7 @@ deps = ["greeting"]
             let metadata =
               Fs.read_file (Filename.concat prefix "share/wadi/workspace/install.json")
             in
-            assert_string_contains ~needle:"\"requested_targets\": [\"hello\"]"
-              metadata
+            assert_string_contains ~needle:"\"requested_targets\": [\"hello\"]" metadata
               "install metadata should record the explicit top-level install request";
             assert_string_contains ~needle:"\"selection\": \"requested\"" metadata
               "install metadata should preserve which artifacts were explicitly selected";
@@ -126,11 +116,12 @@ deps = ["greeting"]
             assert_string_contains ~needle:"\"selection\": \"dependency\"" metadata
               "install metadata should mark closure-added libraries as dependencies";
             assert_string_contains ~needle:"\"requested_by\": [\"hello\"]" metadata
-              "install metadata should record which top-level target pulled a dependency in";
+              "install metadata should record which top-level target pulled a dependency \
+               in";
             assert_string_not_contains ~needle:"\"name\": \"unused\"" metadata
-              "install metadata should omit unrelated internal libraries")) );
+              "install metadata should omit unrelated internal libraries") );
     ( "supports packaging-style staging with --destdir",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let destdir = Filename.concat workspace "_pkg" in
             let install =
@@ -151,14 +142,12 @@ deps = ["greeting"]
               "install metadata should preserve the logical install prefix";
             assert_string_contains
               ~needle:(Printf.sprintf "\"stage_root\": %S" (Fs.realpath staged_root))
-              metadata
-              "install metadata should record the realized staging root";
+              metadata "install metadata should record the realized staging root";
             assert_string_contains
               ~needle:(Printf.sprintf "\"destdir\": %S" (Fs.realpath destdir))
-              metadata
-              "install metadata should record the resolved destdir")) );
+              metadata "install metadata should record the resolved destdir") );
     ( "keeps relative prefixes relative when combined with --destdir",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let destdir = Filename.concat workspace "_pkg" in
             let stage_root = Filename.concat destdir "_stage" in
@@ -171,22 +160,23 @@ deps = ["greeting"]
             assert_file_exists (Filename.concat stage_root "bin/hello");
             assert_file_exists (Filename.concat stage_root "lib/greeting/META");
             let metadata =
-              Fs.read_file
-                (Filename.concat stage_root "share/wadi/hello/install.json")
+              Fs.read_file (Filename.concat stage_root "share/wadi/hello/install.json")
             in
             assert_string_contains ~needle:"\"prefix\": \"_stage\"" metadata
               "install metadata should preserve a relative logical prefix";
             assert_string_not_contains
-              ~needle:(Printf.sprintf "\"prefix\": %S"
-                         (Fs.realpath (Filename.concat workspace "_stage")))
+              ~needle:
+                (Printf.sprintf "\"prefix\": %S"
+                   (Fs.realpath (Filename.concat workspace "_stage")))
               metadata
-              "install metadata should not rewrite a relative prefix to the workspace absolute path";
+              "install metadata should not rewrite a relative prefix to the workspace \
+               absolute path";
             assert_string_contains
               ~needle:(Printf.sprintf "\"stage_root\": %S" (Fs.realpath stage_root))
-              metadata
-              "install metadata should record the realized relative stage root")) );
+              metadata "install metadata should record the realized relative stage root")
+    );
     ( "records findlib requires in staged META files",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-install-meta" (fun workspace ->
             write_manifest workspace
               {|
@@ -208,19 +198,19 @@ let contains_digit text =
             write_source workspace "facade/facade.ml"
               {|let contains_digit = Patterns.contains_digit|};
             let prefix = Filename.concat workspace "_stage" in
-            let install =
-              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
-            in
+            let install = run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ] in
             assert_int_equal 0 install.status
               "install should succeed before META requires are inspected";
-            let patterns_meta = Fs.read_file (Filename.concat prefix "lib/patterns/META") in
+            let patterns_meta =
+              Fs.read_file (Filename.concat prefix "lib/patterns/META")
+            in
             assert_string_contains ~needle:"requires = \"str\"" patterns_meta
               "package-backed libraries should export external requires";
             let facade_meta = Fs.read_file (Filename.concat prefix "lib/facade/META") in
             assert_string_contains ~needle:"requires = \"patterns\"" facade_meta
-              "dependent libraries should export internal library requires")) );
+              "dependent libraries should export internal library requires") );
     ( "installs public names for libraries and executables",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-install-public-names" (fun workspace ->
             write_manifest workspace
               {|
@@ -242,14 +232,10 @@ deps = ["facade"]
 public_name = "demo-cli"
 |};
             write_source workspace "lib/core.ml" {|let message = "public"|};
-            write_source workspace "facade/facade.ml"
-              {|let message = Core.message|};
-            write_source workspace "app/main.ml"
-              {|let () = print_endline Facade.message|};
+            write_source workspace "facade/facade.ml" {|let message = Core.message|};
+            write_source workspace "app/main.ml" {|let () = print_endline Facade.message|};
             let prefix = Filename.concat workspace "_stage" in
-            let install =
-              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
-            in
+            let install = run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ] in
             assert_int_equal 0 install.status
               "install should stage public names when present";
             assert_file_exists (Filename.concat prefix "lib/demo.core/META");
@@ -266,9 +252,9 @@ public_name = "demo-cli"
             assert_string_contains ~needle:"\"meta\": \"lib/demo.core/META\"" metadata
               "install metadata should point at the staged public library path";
             assert_string_contains ~needle:"\"path\": \"bin/demo-cli\"" metadata
-              "install metadata should point at the staged public executable path")) );
+              "install metadata should point at the staged public executable path") );
     ( "does not stage stale wrapper artifacts after wrapped mode flips",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-install-prune-wrapper" (fun workspace ->
             write_manifest workspace
               {|
@@ -277,11 +263,11 @@ dir = "lib"
 wrapped = true
 modules = ["greeting"]
 |};
-            write_source workspace "lib/greeting.ml"
-              {|let message = "wrapped"|};
+            write_source workspace "lib/greeting.ml" {|let message = "wrapped"|};
             let first_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 first_build.status
-              "the initial wrapped build should succeed before stale-wrapper pruning is exercised";
+              "the initial wrapped build should succeed before stale-wrapper pruning is \
+               exercised";
             let wrapper_cmi =
               Filename.concat (Layout.library_out_dir workspace "core") "core.cmi"
             in
@@ -294,19 +280,20 @@ modules = ["greeting"]
 |};
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_wadi ~cwd:workspace
-                [ "install"; "--prefix"; prefix; "core" ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix; "core" ]
             in
             assert_int_equal 0 install.status
               "install should rebuild and stage the library after wrapped mode changes";
-            assert_true (not (Fs.exists wrapper_cmi))
-              "the stale generated wrapper interface should be pruned from the build directory";
+            assert_true
+              (not (Fs.exists wrapper_cmi))
+              "the stale generated wrapper interface should be pruned from the build \
+               directory";
             assert_true
               (not (Fs.exists (Filename.concat prefix "lib/core/core.cmi")))
               "install should not stage stale wrapper artifacts after wrapped mode flips";
-            assert_file_exists (Filename.concat prefix "lib/core/greeting.cmi"))) );
+            assert_file_exists (Filename.concat prefix "lib/core/greeting.cmi")) );
     ( "reports member package paths in install summaries",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-install-package-paths" (fun workspace ->
             write_manifest workspace
               {|
@@ -332,34 +319,28 @@ deps = ["core"]
             write_source workspace "packages/app/app/main.ml"
               {|let () = print_endline Core.message|};
             let prefix = Filename.concat workspace "_stage" in
-            let install =
-              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
-            in
-            assert_int_equal 0 install.status
-              "member targets should install successfully";
-            assert_string_contains
-              ~needle:"Installed library core (packages/core) ->"
+            let install = run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ] in
+            assert_int_equal 0 install.status "member targets should install successfully";
+            assert_string_contains ~needle:"Installed library core (packages/core) ->"
               install.output
               "install summaries should surface member library package paths";
-            assert_string_contains
-              ~needle:"Installed executable demo (packages/app) ->"
+            assert_string_contains ~needle:"Installed executable demo (packages/app) ->"
               install.output
-              "install summaries should surface member executable package paths")) );
+              "install summaries should surface member executable package paths") );
     ( "rejects test targets for install",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-install-tests" (fun workspace ->
-            write_manifest workspace
-              {|
+            write_manifest workspace {|
 [test.suite]
 dir = "test"
 main = "main"
 |};
             write_source workspace "test/main.ml" {|let () = print_endline "suite"|};
             let install = run_wadi ~cwd:workspace [ "install"; "suite" ] in
-            assert_true (install.status <> 0)
-              "install should reject test-only targets";
+            assert_true (install.status <> 0) "install should reject test-only targets";
             assert_string_contains
-              ~needle:"target 'suite' is a test; wadi install only supports libraries and executables"
-              install.output
-              "install should report unsupported target kinds clearly")) );
+              ~needle:
+                "target 'suite' is a test; wadi install only supports libraries and \
+                 executables"
+              install.output "install should report unsupported target kinds clearly") );
   ]

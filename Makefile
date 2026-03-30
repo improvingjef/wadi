@@ -23,7 +23,7 @@ BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
 BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
-.PHONY: all test fuzz clean bootstrap-smoke release-artifacts release-manifests sync-generated release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
+.PHONY: all test fuzz fmt lint clean bootstrap-smoke release-artifacts release-manifests sync-generated release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
 
 define REFRESH_BOOTSTRAP_SEED_METADATA
 set -eu; \
@@ -81,6 +81,16 @@ fuzz: $(FUZZ_TARGETS)
 
 release-artifacts:
 	./scripts/generate_release_artifacts.sh
+
+fmt:
+	@echo "Formatting OCaml sources..."
+	@find src test fuzz -name '*.ml' | xargs ocamlformat -i
+	@echo "Done."
+
+lint:
+	@echo "Linting OCaml sources..."
+	@camelot src/*.ml
+	@echo "Done."
 
 release-manifests:
 	./scripts/generate_packaging_manifests.sh --source-archive-dir dist --asset-index-output dist/release-assets.json

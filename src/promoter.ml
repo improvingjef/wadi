@@ -1,6 +1,4 @@
-type promotion_status =
-  | Promoted
-  | Up_to_date
+type promotion_status = Promoted | Up_to_date
 
 type promoted_output = {
   target : Manifest.target;
@@ -16,22 +14,21 @@ let ( let* ) = Result.bind
 let source_like_promotion_error target action_name relative_path =
   Error
     (Printf.sprintf
-       "target '%s' action '%s' output '%s' looks like checked-in OCaml source; \
-        declare it under checked_in_sources = [...] if it is an intentional \
-        promoted snapshot"
+       "target '%s' action '%s' output '%s' looks like checked-in OCaml source; declare \
+        it under checked_in_sources = [...] if it is an intentional promoted snapshot"
        (Manifest.target_name target) action_name relative_path)
 
 let promote_output ~generated_path ~destination_path =
-  if Fs.exists destination_path
-     && Builder.digest_path destination_path = Builder.digest_path generated_path
+  if
+    Fs.exists destination_path
+    && Builder.digest_path destination_path = Builder.digest_path generated_path
   then Up_to_date
   else (
     if Fs.exists destination_path then Fs.remove_tree destination_path;
     Builder.copy_path ~src:generated_path ~dst:destination_path;
     Promoted)
 
-let promote_action_outputs ~workspace_root (target_actions : Actioner.target_actions)
-    =
+let promote_action_outputs ~workspace_root (target_actions : Actioner.target_actions) =
   let target = target_actions.target in
   let target_dir = Manifest.target_dir target in
   let rec pair_actions acc actions action_results =
@@ -44,11 +41,8 @@ let promote_action_outputs ~workspace_root (target_actions : Actioner.target_act
           | relative_path :: output_rest, generated_path :: path_rest ->
               if
                 Builder.is_source_path relative_path
-                && not
-                     (Manifest.action_output_is_checked_in_source action
-                        relative_path)
-              then
-                source_like_promotion_error target action.name relative_path
+                && not (Manifest.action_output_is_checked_in_source action relative_path)
+              then source_like_promotion_error target action.name relative_path
               else
                 let destination_path =
                   Filename.concat workspace_root
@@ -69,19 +63,15 @@ let promote_action_outputs ~workspace_root (target_actions : Actioner.target_act
           | [], _ :: _ | _ :: _, [] ->
               Error
                 (Printf.sprintf
-                   "internal error: action '%s' output planning drifted during \
-                    promotion"
+                   "internal error: action '%s' output planning drifted during promotion"
                    action.name)
         in
-        let* acc =
-          pair_outputs acc action.outputs action_result.Builder.output_paths
-        in
+        let* acc = pair_outputs acc action.outputs action_result.Builder.output_paths in
         pair_actions acc action_rest result_rest
     | [], _ :: _ | _ :: _, [] ->
         Error "internal error: action promotion target results drifted during execution"
   in
-  pair_actions [] target_actions.pipeline.Builder.actions
-    target_actions.action_results
+  pair_actions [] target_actions.pipeline.Builder.actions target_actions.action_results
 
 let promote ~workspace_root ~verbose ?profile ~requested_targets workspace =
   let workspace_root = Fs.realpath workspace_root in
@@ -94,10 +84,10 @@ let promote ~workspace_root ~verbose ?profile ~requested_targets workspace =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
     | (target_action : Actioner.target_actions) :: rest ->
-        if selected_names <> []
-           && not (Hashtbl.mem selected (Manifest.target_name target_action.target))
-        then
-          loop acc rest
+        if
+          selected_names <> []
+          && not (Hashtbl.mem selected (Manifest.target_name target_action.target))
+        then loop acc rest
         else
           let* promoted = promote_action_outputs ~workspace_root target_action in
           loop (List.rev_append promoted acc) rest
@@ -110,8 +100,8 @@ let render_promoted_output promoted =
     | Promoted -> "Promoted"
     | Up_to_date -> "Up to date promoted"
   in
-  Printf.sprintf "%s action %s output %s for %s %s -> %s" status
-    promoted.action_name promoted.relative_path
+  Printf.sprintf "%s action %s output %s for %s %s -> %s" status promoted.action_name
+    promoted.relative_path
     (Manifest.target_kind_name promoted.target)
     (Manifest.target_display_name promoted.target)
     promoted.destination_path

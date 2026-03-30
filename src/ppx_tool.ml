@@ -17,17 +17,12 @@ type plan = {
   command : string option;
 }
 
-type applied = {
-  plan : plan;
-  output : string;
-}
+type applied = { plan : plan; output : string }
 
 let ( let* ) = Result.bind
 
 let render_names names =
-  match names with
-  | [] -> "none"
-  | names -> String.concat ", " names
+  match names with [] -> "none" | names -> String.concat ", " names
 
 let describe_action_result (action_result : Builder.action_result) =
   let action_name =
@@ -61,8 +56,7 @@ let target_sources ~mode ~workspace_root ~out_dir target pipeline =
   let* () =
     match target with
     | Manifest.Library library ->
-        Builder.materialize_wrapped_library_source ~mode ~workspace_root ~out_dir
-          library
+        Builder.materialize_wrapped_library_source ~mode ~workspace_root ~out_dir library
     | Manifest.Executable _ | Manifest.Test _ -> Ok ()
   in
   match target with
@@ -81,15 +75,12 @@ let target_sources ~mode ~workspace_root ~out_dir target pipeline =
         (test.modules @ [ test.main ])
 
 let package_resolution_for_target ~session workspace target_name =
-  let* deps_report =
-    Deps.report_for_targets ~session workspace [ target_name ]
-  in
+  let* deps_report = Deps.report_for_targets ~session workspace [ target_name ] in
   match deps_report.targets with
   | [ target_report ] -> Ok target_report.package_resolution
   | [] ->
       Error
-        (Printf.sprintf
-           "internal error: dependency analysis returned no target for '%s'"
+        (Printf.sprintf "internal error: dependency analysis returned no target for '%s'"
            target_name)
   | _ ->
       Error
@@ -100,18 +91,16 @@ let package_resolution_for_target ~session workspace target_name =
 let include_dirs ~workspace_root ~profile workspace target out_dir =
   let target_index = Hashtbl.create (List.length workspace.Manifest.targets) in
   List.iter
-    (fun target ->
-      Hashtbl.replace target_index (Manifest.target_name target) target)
+    (fun target -> Hashtbl.replace target_index (Manifest.target_name target) target)
     workspace.Manifest.targets;
   out_dir
-  ::
-  List.filter_map
-    (fun dependency_name ->
-      match Hashtbl.find_opt target_index dependency_name with
-      | Some (Manifest.Library _ as dependency) ->
-          Some (Builder.target_out_dir ~profile workspace_root dependency)
-      | Some (Manifest.Executable _) | Some (Manifest.Test _) | None -> None)
-    (Manifest.target_deps target)
+  :: List.filter_map
+       (fun dependency_name ->
+         match Hashtbl.find_opt target_index dependency_name with
+         | Some (Manifest.Library _ as dependency) ->
+             Some (Builder.target_out_dir ~profile workspace_root dependency)
+         | Some (Manifest.Executable _) | Some (Manifest.Test _) | None -> None)
+       (Manifest.target_deps target)
 
 let build_context ~mode ~workspace_root ~verbose ~profile workspace target_name =
   let session = Toolchain.create_session () in
@@ -121,15 +110,11 @@ let build_context ~mode ~workspace_root ~verbose ~profile workspace target_name 
   let* package_resolution =
     package_resolution_for_target ~session workspace target_name
   in
-  let* pipeline =
-    Builder.resolve_pipeline ~workspace_root workspace ~profile target
-  in
+  let* pipeline = Builder.resolve_pipeline ~workspace_root workspace ~profile target in
   let* action_results =
     Builder.run_actions ~verbose ~mode ~workspace_root ~out_dir ~target ~pipeline
   in
-  let* sources =
-    target_sources ~mode ~workspace_root ~out_dir target pipeline
-  in
+  let* sources = target_sources ~mode ~workspace_root ~out_dir target pipeline in
   Ok
     {
       target;
@@ -156,29 +141,24 @@ let select_source (context : context) module_name =
           Error
             (Printf.sprintf "target %s does not define module '%s'"
                (Manifest.target_display_name context.target)
-               module_name) )
+               module_name))
 
 let prepare_source ~mode ~verbose ~workspace_root (context : context) source ~interface =
   let* prepared =
     Builder.prepare_source ~mode ~verbose ~workspace_root ~out_dir:context.out_dir
-      ~include_dirs:context.include_dirs
-      ~target_env:(context.pipeline.options.env)
+      ~include_dirs:context.include_dirs ~target_env:context.pipeline.options.env
       context.pipeline.preprocessors source
   in
   if interface then
     match prepared.mli_compile_path with
     | Some path -> Ok path
     | None ->
-        Error
-          (Printf.sprintf "module '%s' does not define an interface"
-             source.stem)
+        Error (Printf.sprintf "module '%s' does not define an interface" source.stem)
   else
     match prepared.ml_compile_path with
     | Some path -> Ok path
     | None ->
-        Error
-          (Printf.sprintf "module '%s' does not define an implementation"
-             source.stem)
+        Error (Printf.sprintf "module '%s' does not define an implementation" source.stem)
 
 let dump_output_path (context : context) ~interface source_path =
   let stem = Filename.basename source_path |> Filename.remove_extension in
@@ -200,11 +180,11 @@ let dump_args ~workspace_root context ~interface ~source_path =
       source_path;
     ]
 
-let plan ~workspace_root ~verbose ?(interface = false) ?module_name
-    ~profile workspace target_name =
+let plan ~workspace_root ~verbose ?(interface = false) ?module_name ~profile workspace
+    target_name =
   let* context =
-    build_context ~mode:Builder.Plan_only ~workspace_root ~verbose ~profile
-      workspace target_name
+    build_context ~mode:Builder.Plan_only ~workspace_root ~verbose ~profile workspace
+      target_name
   in
   let* selected_source = select_source context module_name in
   let* prepared_path =
@@ -225,29 +205,24 @@ let plan ~workspace_root ~verbose ?(interface = false) ?module_name
         let* invocation =
           Toolchain.compiler_invocation ~session Toolchain.Bytecode
             context.package_resolution
-            (dump_args ~workspace_root context ~interface
-               ~source_path:prepared_path)
+            (dump_args ~workspace_root context ~interface ~source_path:prepared_path)
         in
         Ok
-          (Some
-             (Toolchain.render_invocation
-                ~env:(context.pipeline.options.env)
-                invocation))
+          (Some (Toolchain.render_invocation ~env:context.pipeline.options.env invocation))
   in
   Ok { context; selected_source; interface; prepared_path; command }
 
-let apply ~workspace_root ~verbose ?(interface = false) ?output_path
-    ~profile workspace target_name module_name =
+let apply ~workspace_root ~verbose ?(interface = false) ?output_path ~profile workspace
+    target_name module_name =
   let* context =
-    build_context ~mode:Builder.Materialize ~workspace_root ~verbose ~profile
-      workspace target_name
+    build_context ~mode:Builder.Materialize ~workspace_root ~verbose ~profile workspace
+      target_name
   in
   let* selected_source =
     match select_source context (Some module_name) with
     | Ok (Some source) -> Ok source
     | Ok None ->
-        Error
-          "internal error: source selection returned none for a required module"
+        Error "internal error: source selection returned none for a required module"
     | Error _ as error -> error
   in
   let* prepared_path =
@@ -256,18 +231,18 @@ let apply ~workspace_root ~verbose ?(interface = false) ?output_path
   in
   let session = Toolchain.create_session () in
   let* invocation =
-    Toolchain.compiler_invocation ~session Toolchain.Bytecode
-      context.package_resolution
+    Toolchain.compiler_invocation ~session Toolchain.Bytecode context.package_resolution
       (dump_args ~workspace_root context ~interface ~source_path:prepared_path)
   in
   let outcome =
-    Process.run_capture ~verbose ~env:(context.pipeline.options.env)
-      invocation.prog invocation.args
+    Process.run_capture ~verbose ~env:context.pipeline.options.env invocation.prog
+      invocation.args
   in
   if outcome.status <> 0 then
     Error
       (Printf.sprintf "failed to dump transformed source for %s\n%s"
-         (Manifest.target_display_name context.target) outcome.output)
+         (Manifest.target_display_name context.target)
+         outcome.output)
   else
     let () =
       match output_path with
@@ -284,9 +259,7 @@ let apply ~workspace_root ~verbose ?(interface = false) ?output_path
             prepared_path = Some prepared_path;
             command =
               Some
-                (Toolchain.render_invocation
-                   ~env:(context.pipeline.options.env)
-                   invocation);
+                (Toolchain.render_invocation ~env:context.pipeline.options.env invocation);
           };
         output = outcome.output;
       }
@@ -308,9 +281,7 @@ let render_preprocessors ~workspace_root target_env preprocessors =
       "Preprocessors:"
       :: List.map
            (fun (tool : Manifest.command_tool) ->
-             "  "
-             ^ Builder.render_preprocessor_command ~workspace_root ~target_env
-                 tool)
+             "  " ^ Builder.render_preprocessor_command ~workspace_root ~target_env tool)
            preprocessors
 
 let render_ppx_tools ~workspace_root ppx_tools =
@@ -328,17 +299,17 @@ let render_ppx_tools ~workspace_root ppx_tools =
 let render_modules sources =
   "Modules:"
   ::
-  match sources with
+  (match sources with
   | [] -> [ "  none" ]
   | sources ->
       List.map
         (fun (source : Builder.source_descriptor) ->
           let shapes =
             (if source.has_ml then [ "ml" ] else [])
-            @ (if source.has_mli then [ "mli" ] else [])
+            @ if source.has_mli then [ "mli" ] else []
           in
           Printf.sprintf "  %s (%s)" source.stem (render_names shapes))
-        sources
+        sources)
 
 let render_actions action_results =
   match action_results with
@@ -350,7 +321,7 @@ let render_plan ~workspace_root (plan : plan) =
   let selection_lines =
     match (plan.selected_source, plan.prepared_path, plan.command) with
     | None, _, _ -> []
-    | Some source, prepared_path, command ->
+    | Some source, prepared_path, command -> (
         [
           (if plan.interface then "Selected-interface: " else "Selected-module: ")
           ^ source.stem;
@@ -361,7 +332,7 @@ let render_plan ~workspace_root (plan : plan) =
           | Some prepared_path -> [ "Prepared-source: " ^ prepared_path ]
           | None -> [])
         @
-        (match command with
+        match command with
         | Some command -> [ "Compiler-command: " ^ command ]
         | None -> [])
   in
@@ -374,13 +345,11 @@ let render_plan ~workspace_root (plan : plan) =
      ]
     @ render_packages plan.context.package_resolution
     @ render_actions plan.context.action_results
-    @ render_preprocessors ~workspace_root
-        (plan.context.pipeline.options.env)
+    @ render_preprocessors ~workspace_root plan.context.pipeline.options.env
         plan.context.pipeline.preprocessors
     @ render_ppx_tools ~workspace_root plan.context.pipeline.ppx_tools
     @ render_modules plan.context.sources
-    @ selection_lines
-    @ [ "" ])
+    @ selection_lines @ [ "" ])
 
 let render_applied_report output_path (applied : applied) =
   let source_label =

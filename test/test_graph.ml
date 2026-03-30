@@ -6,7 +6,7 @@ let write_source workspace relative_path contents =
 let cases =
   [
     ( "graphs target build order, package paths, and module order",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-graph-order" (fun workspace ->
             write_manifest workspace
               {|
@@ -49,17 +49,12 @@ deps = ["core"]
               "graph should report which targets were requested";
             assert_string_contains ~needle:"1. library shared\n" graph.output
               "graph should start with transitive libraries";
-            assert_string_contains
-              ~needle:"2. library core (packages/core)\n"
-              graph.output
-              "graph should surface member package paths for libraries";
-            assert_string_contains
-              ~needle:"3. executable demo (packages/app)\n"
-              graph.output
-              "graph should surface member package paths for executables";
+            assert_string_contains ~needle:"2. library core (packages/core)\n"
+              graph.output "graph should surface member package paths for libraries";
+            assert_string_contains ~needle:"3. executable demo (packages/app)\n"
+              graph.output "graph should surface member package paths for executables";
             assert_string_contains ~needle:"depends-on: shared\n" graph.output
               "graph should show direct workspace dependencies";
             assert_string_contains ~needle:"module-order: cli, main\n" graph.output
-              "graph should show runnable helper modules before the main module")) );
+              "graph should show runnable helper modules before the main module") );
   ]
-

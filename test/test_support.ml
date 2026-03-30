@@ -1,19 +1,15 @@
 type case = string * (unit -> unit)
 
 let fail message = raise (Failure message)
-
-let assert_true condition message =
-  if not condition then fail message
+let assert_true condition message = if not condition then fail message
 
 let assert_int_equal expected actual message =
   if expected <> actual then
-    fail
-      (Printf.sprintf "%s\nexpected: %d\nactual: %d" message expected actual)
+    fail (Printf.sprintf "%s\nexpected: %d\nactual: %d" message expected actual)
 
 let assert_string_equal expected actual message =
   if expected <> actual then
-    fail
-      (Printf.sprintf "%s\nexpected: %S\nactual: %S" message expected actual)
+    fail (Printf.sprintf "%s\nexpected: %S\nactual: %S" message expected actual)
 
 let assert_string_contains ~needle haystack message =
   let needle_length = String.length needle in
@@ -25,8 +21,7 @@ let assert_string_contains ~needle haystack message =
   in
   if not (loop 0) then
     fail
-      (Printf.sprintf "%s\nmissing substring: %S\nhaystack:\n%s" message needle
-         haystack)
+      (Printf.sprintf "%s\nmissing substring: %S\nhaystack:\n%s" message needle haystack)
 
 let assert_string_not_contains ~needle haystack message =
   let needle_length = String.length needle in
@@ -38,8 +33,8 @@ let assert_string_not_contains ~needle haystack message =
   in
   if loop 0 then
     fail
-      (Printf.sprintf "%s\nunexpected substring: %S\nhaystack:\n%s" message
-         needle haystack)
+      (Printf.sprintf "%s\nunexpected substring: %S\nhaystack:\n%s" message needle
+         haystack)
 
 let assert_file_exists path =
   assert_true (Fs.exists path) (Printf.sprintf "expected file to exist: %s" path)
@@ -97,19 +92,12 @@ let with_fixture name f =
       Fs.copy_tree ~src:(fixture_root name) ~dst:path;
       f path)
 
-let wadi_bin () =
-  try Sys.getenv "WADI_BIN" with
-  | Not_found -> fail "WADI_BIN is not set"
-
+let wadi_bin () = try Sys.getenv "WADI_BIN" with Not_found -> fail "WADI_BIN is not set"
 let run_wadi ~cwd args = Process.run_capture ~cwd (wadi_bin ()) args
-
 let run_binary path args = Process.run_capture path args
-
-let manifest_path workspace =
-  Filename.concat workspace Manifest.default_filename
+let manifest_path workspace = Filename.concat workspace Manifest.default_filename
 
 let write_workspace_file workspace relative_path contents =
   Fs.write_file (Filename.concat workspace relative_path) contents
 
-let write_manifest workspace contents =
-  Fs.write_file (manifest_path workspace) contents
+let write_manifest workspace contents = Fs.write_file (manifest_path workspace) contents

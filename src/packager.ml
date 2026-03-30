@@ -3,9 +3,7 @@ type archive_input =
   | Source_archive_dir of string
   | Reuse_source_archive_dir of string
 
-type source_archive_mode =
-  | Tracked
-  | Worktree
+type source_archive_mode = Tracked | Worktree
 
 type options = {
   root_dir : string;
@@ -29,20 +27,15 @@ type asset = {
 }
 
 let ( let* ) = Result.bind
-
-let double_quote text =
-  "\"" ^ String.escaped text ^ "\""
+let double_quote text = "\"" ^ String.escaped text ^ "\""
 
 let sha256_for_file path =
   let command =
     Process.run_capture "sh"
       [
         "-c";
-        "if command -v sha256sum >/dev/null 2>&1; then \
-         sha256sum \"$1\" | awk '{print $1}'; \
-         else \
-         shasum -a 256 \"$1\" | awk '{print $1}'; \
-         fi";
+        "if command -v sha256sum >/dev/null 2>&1; then sha256sum \"$1\" | awk '{print \
+         $1}'; else shasum -a 256 \"$1\" | awk '{print $1}'; fi";
         "sh";
         path;
       ]
@@ -60,13 +53,10 @@ let render_opam (metadata : Release_metadata.t) =
       "\"\"\"";
       Printf.sprintf "maintainer: [%s]"
         (double_quote
-           (Printf.sprintf "%s <%s>" metadata.maintainer_name
-              metadata.maintainer_email));
+           (Printf.sprintf "%s <%s>" metadata.maintainer_name metadata.maintainer_email));
       Printf.sprintf "authors: [%s]" (double_quote metadata.authors);
-      Printf.sprintf "homepage: [%s]"
-        (double_quote metadata.repository_url);
-      Printf.sprintf "bug-reports: %s"
-        (double_quote metadata.bug_reports_url);
+      Printf.sprintf "homepage: [%s]" (double_quote metadata.repository_url);
+      Printf.sprintf "bug-reports: %s" (double_quote metadata.bug_reports_url);
       Printf.sprintf "dev-repo: %s" (double_quote metadata.dev_repo);
       Printf.sprintf "license: %s" (double_quote metadata.license);
       "depends: [";
@@ -82,7 +72,7 @@ let render_opam (metadata : Release_metadata.t) =
       "    \"--package-root\"";
       "    \"package\"";
       "    \"--binary\"";
-      (Printf.sprintf "    %S" ("_bootstrap/bin/" ^ metadata.package_name));
+      Printf.sprintf "    %S" ("_bootstrap/bin/" ^ metadata.package_name);
       "    \"--prefix\"";
       "    prefix";
       "  ]";
@@ -96,8 +86,7 @@ let render_formula (metadata : Release_metadata.t) ~source_sha256 =
       Printf.sprintf "class %s < Formula" metadata.formula_class;
       Printf.sprintf "  desc %S" metadata.synopsis;
       Printf.sprintf "  homepage %S" metadata.repository_url;
-      Printf.sprintf "  url %S"
-        (Release_metadata.source_archive_url metadata);
+      Printf.sprintf "  url %S" (Release_metadata.source_archive_url metadata);
       Printf.sprintf "  sha256 %S" source_sha256;
       Printf.sprintf "  license %S" metadata.license;
       "";
@@ -108,14 +97,12 @@ let render_formula (metadata : Release_metadata.t) ~source_sha256 =
       "    system \"make\", \"release-artifacts\"";
       "    system \"./scripts/install_release_tree.sh\",";
       "      \"--package-root\", \"package\",";
-      (Printf.sprintf "      \"--binary\", %S,"
-         ("_bootstrap/bin/" ^ metadata.package_name));
+      Printf.sprintf "      \"--binary\", %S," ("_bootstrap/bin/" ^ metadata.package_name);
       "      \"--prefix\", prefix";
       "  end";
       "";
       "  test do";
-      (Printf.sprintf "    output = shell_output(\"#{bin}/%s docs\")"
-         metadata.package_name);
+      Printf.sprintf "    output = shell_output(\"#{bin}/%s docs\")" metadata.package_name;
       "    assert_match \"Wadi CLI\", output";
       "  end";
       "end";
@@ -128,17 +115,14 @@ let create_temp_dir prefix =
   Unix.mkdir path 0o755;
   path
 
-let source_archive_mode_flag = function
-  | Tracked -> "tracked"
-  | Worktree -> "worktree"
+let source_archive_mode_flag = function Tracked -> "tracked" | Worktree -> "worktree"
 
 let parse_source_archive_mode = function
   | "tracked" -> Ok Tracked
   | "worktree" -> Ok Worktree
   | value ->
       Error
-        (Printf.sprintf
-           "unknown source archive mode %S; expected tracked or worktree"
+        (Printf.sprintf "unknown source archive mode %S; expected tracked or worktree"
            value)
 
 let build_source_archive ~root_dir ~output_dir ~source_archive_mode
@@ -155,41 +139,33 @@ let build_source_archive ~root_dir ~output_dir ~source_archive_mode
       ]
   in
   if command.status <> 0 then
-    Error
-      ("failed to build source archive under " ^ output_dir ^ "\n"
-     ^ command.output)
+    Error ("failed to build source archive under " ^ output_dir ^ "\n" ^ command.output)
   else
     let archive_path =
       Filename.concat output_dir (Release_metadata.source_archive_name metadata)
     in
     if Fs.exists archive_path then Ok archive_path
-    else
-      Error
-        ("source archive was not produced at expected path: " ^ archive_path)
+    else Error ("source archive was not produced at expected path: " ^ archive_path)
 
-let resolve_source_archive ~root_dir ~source_archive_mode
-    (metadata : Release_metadata.t) = function
+let resolve_source_archive ~root_dir ~source_archive_mode (metadata : Release_metadata.t)
+    = function
   | Some (Source_archive path) ->
-      if Fs.exists path then Ok path
-      else Error ("source archive not found: " ^ path)
+      if Fs.exists path then Ok path else Error ("source archive not found: " ^ path)
   | Some (Reuse_source_archive_dir dir) ->
-      let path =
-        Filename.concat dir (Release_metadata.source_archive_name metadata)
-      in
+      let path = Filename.concat dir (Release_metadata.source_archive_name metadata) in
       if Fs.exists path then Ok path
       else Error ("reusable source archive not found: " ^ path)
   | Some (Source_archive_dir dir) ->
       Fs.ensure_dir dir;
-      build_source_archive ~root_dir ~output_dir:dir ~source_archive_mode
-        metadata
+      build_source_archive ~root_dir ~output_dir:dir ~source_archive_mode metadata
   | None ->
       let temp_dir = create_temp_dir "wadi-release-manifests" in
       Fun.protect
         ~finally:(fun () -> Fs.remove_tree temp_dir)
         (fun () ->
           match
-            build_source_archive ~root_dir ~output_dir:temp_dir
-              ~source_archive_mode metadata
+            build_source_archive ~root_dir ~output_dir:temp_dir ~source_archive_mode
+              metadata
           with
           | Ok archive_path ->
               let retained =
@@ -210,11 +186,8 @@ let tar_gz_files dir =
     |> List.map (Filename.concat dir)
 
 let checksum_inputs ~source_archive ~output_dir ~opam_output ~formula_output =
-  let archives =
-    String_util.dedup_preserve (source_archive :: tar_gz_files output_dir)
-  in
-  archives
-  @ List.filter Fs.exists [ opam_output; formula_output ]
+  let archives = String_util.dedup_preserve (source_archive :: tar_gz_files output_dir) in
+  archives @ List.filter Fs.exists [ opam_output; formula_output ]
 
 let render_checksums paths =
   let rec loop acc = function
@@ -245,8 +218,7 @@ let classify_archive_name (metadata : Release_metadata.t) archive_name =
       | _ -> ("archive", None, None)
     else ("archive", None, None)
 
-let asset_of_path (metadata : Release_metadata.t) ~kind ~os_name ~arch_name
-    path =
+let asset_of_path (metadata : Release_metadata.t) ~kind ~os_name ~arch_name path =
   let* sha256 = sha256_for_file path in
   let name = Filename.basename path in
   let size_bytes = (Unix.stat path).Unix.st_size in
@@ -261,19 +233,18 @@ let asset_of_path (metadata : Release_metadata.t) ~kind ~os_name ~arch_name
       size_bytes;
     }
 
-let collect_assets (metadata : Release_metadata.t) ~source_archive ~output_dir ~opam_output
-    ~formula_output ~checksums_output =
+let collect_assets (metadata : Release_metadata.t) ~source_archive ~output_dir
+    ~opam_output ~formula_output ~checksums_output =
   let seen = Hashtbl.create 16 in
   let append_unique path acc =
     let name = Filename.basename path in
-    if not (Fs.exists path) || Hashtbl.mem seen name then Ok acc
+    if (not (Fs.exists path)) || Hashtbl.mem seen name then Ok acc
     else (
       Hashtbl.add seen name ();
       let kind, os_name, arch_name =
         if String_util.ends_with ~suffix:".tar.gz" name then
           classify_archive_name metadata name
-        else if name = Filename.basename opam_output then
-          ("opam_metadata", None, None)
+        else if name = Filename.basename opam_output then ("opam_metadata", None, None)
         else if name = Filename.basename formula_output then
           ("homebrew_formula", None, None)
         else ("checksums", None, None)
@@ -288,42 +259,32 @@ let collect_assets (metadata : Release_metadata.t) ~source_archive ~output_dir ~
         append_many acc rest
   in
   append_many []
-    (source_archive :: tar_gz_files output_dir
-   @ [ opam_output; formula_output ]
-   @
-   match checksums_output with
-   | Some path -> [ path ]
-   | None -> [])
+    ((source_archive :: tar_gz_files output_dir)
+    @ [ opam_output; formula_output ]
+    @ match checksums_output with Some path -> [ path ] | None -> [])
 
 let render_asset_index (metadata : Release_metadata.t) assets =
   let render_asset asset =
     let os_lines =
       match asset.os_name with
-      | Some value ->
-          [ Printf.sprintf "      \"os\": %s," (double_quote value) ]
+      | Some value -> [ Printf.sprintf "      \"os\": %s," (double_quote value) ]
       | None -> []
     in
     let arch_lines =
       match asset.arch_name with
-      | Some value ->
-          [ Printf.sprintf "      \"arch\": %s," (double_quote value) ]
+      | Some value -> [ Printf.sprintf "      \"arch\": %s," (double_quote value) ]
       | None -> []
     in
     String.concat "\n"
       ([
          "    {";
-         Printf.sprintf "      \"name\": %s,"
-           (double_quote asset.name);
-         Printf.sprintf "      \"kind\": %s,"
-           (double_quote asset.kind);
+         Printf.sprintf "      \"name\": %s," (double_quote asset.name);
+         Printf.sprintf "      \"kind\": %s," (double_quote asset.kind);
        ]
-      @ os_lines
-      @ arch_lines
+      @ os_lines @ arch_lines
       @ [
-          Printf.sprintf "      \"url\": %s,"
-            (double_quote asset.url);
-          Printf.sprintf "      \"sha256\": %s,"
-            (double_quote asset.sha256);
+          Printf.sprintf "      \"url\": %s," (double_quote asset.url);
+          Printf.sprintf "      \"sha256\": %s," (double_quote asset.sha256);
           Printf.sprintf "      \"size_bytes\": %d" asset.size_bytes;
           "    }";
         ])
@@ -331,16 +292,14 @@ let render_asset_index (metadata : Release_metadata.t) assets =
   let rendered_assets =
     assets |> List.map render_asset
     |> List.mapi (fun index rendered ->
-           if index = List.length assets - 1 then rendered else rendered ^ ",")
+        if index = List.length assets - 1 then rendered else rendered ^ ",")
   in
   String.concat "\n"
     [
       "{";
       "  \"schema_version\": 1,";
-      Printf.sprintf "  \"package\": %s,"
-        (double_quote metadata.package_name);
-      Printf.sprintf "  \"version\": %s,"
-        (double_quote metadata.release_version);
+      Printf.sprintf "  \"package\": %s," (double_quote metadata.package_name);
+      Printf.sprintf "  \"version\": %s," (double_quote metadata.release_version);
       Printf.sprintf "  \"tag\": %s,"
         (double_quote (Release_metadata.release_tag metadata));
       Printf.sprintf "  \"base_url\": %s,"
@@ -353,8 +312,7 @@ let render_asset_index (metadata : Release_metadata.t) assets =
     ]
 
 let default_formula_output output_dir (metadata : Release_metadata.t) =
-  Filename.concat output_dir
-    (Filename.concat "Formula" (metadata.package_name ^ ".rb"))
+  Filename.concat output_dir (Filename.concat "Formula" (metadata.package_name ^ ".rb"))
 
 let default_opam_output output_dir (metadata : Release_metadata.t) =
   Filename.concat output_dir (metadata.package_name ^ ".opam")
@@ -373,8 +331,7 @@ let run (options : options) =
   in
   let* source_archive =
     resolve_source_archive ~root_dir:options.root_dir
-      ~source_archive_mode:options.source_archive_mode metadata
-      options.archive_input
+      ~source_archive_mode:options.source_archive_mode metadata options.archive_input
   in
   Fs.ensure_dir options.output_dir;
   Fs.write_file opam_output (render_opam metadata);
@@ -385,8 +342,8 @@ let run (options : options) =
     | None -> Ok ()
     | Some path ->
         let checksum_paths =
-          checksum_inputs ~source_archive ~output_dir:options.output_dir
-            ~opam_output ~formula_output
+          checksum_inputs ~source_archive ~output_dir:options.output_dir ~opam_output
+            ~formula_output
         in
         let archive_count =
           List.length
@@ -407,8 +364,7 @@ let run (options : options) =
   | Some path ->
       let* assets =
         collect_assets metadata ~source_archive ~output_dir:options.output_dir
-          ~opam_output ~formula_output
-          ~checksums_output:options.checksums_output
+          ~opam_output ~formula_output ~checksums_output:options.checksums_output
       in
       Fs.write_file path (render_asset_index metadata assets);
       Ok ()

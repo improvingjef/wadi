@@ -6,7 +6,7 @@ let write_source workspace relative_path contents =
 let cases =
   [
     ( "benchmarks executable targets and prints a timing summary",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-bench-text" (fun workspace ->
             write_manifest workspace
               {|
@@ -21,19 +21,17 @@ main = "beta"
             write_source workspace "app/alpha.ml" {|let () = ()|};
             write_source workspace "app/beta.ml" {|let () = ()|};
             let bench =
-              run_wadi ~cwd:workspace
-                [ "bench"; "--warmup"; "0"; "--iterations"; "2" ]
+              run_wadi ~cwd:workspace [ "bench"; "--warmup"; "0"; "--iterations"; "2" ]
             in
-            assert_int_equal 0 bench.status
-              "bench should run all executables by default";
+            assert_int_equal 0 bench.status "bench should run all executables by default";
             assert_string_contains ~needle:"Benchmark alpha ->" bench.output
               "bench text output should include the first executable";
             assert_string_contains ~needle:"Benchmark beta ->" bench.output
               "bench text output should include the second executable";
             assert_string_contains ~needle:"iterations: 2" bench.output
-              "bench text output should report the measured iteration count")) );
+              "bench text output should report the measured iteration count") );
     ( "emits machine-readable JSON benchmark summaries",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let bench =
               run_wadi ~cwd:workspace
@@ -46,9 +44,9 @@ main = "beta"
             assert_string_contains ~needle:"\"target\": \"hello\"" bench.output
               "bench JSON should record the benchmark target name";
             assert_string_contains ~needle:"\"iterations\": 2" bench.output
-              "bench JSON should record the measured iteration count")) );
+              "bench JSON should record the measured iteration count") );
     ( "benchmarks declared [bench.*] entries with custom argv and metadata by default",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-bench-declared" (fun workspace ->
             write_manifest workspace
               {|
@@ -77,17 +75,16 @@ let () =
               "bench output should use the declared bench name";
             assert_string_contains ~needle:"  executable: demo\n" bench.output
               "bench output should report the underlying executable";
-            assert_string_contains ~needle:"  description: quick path\n"
-              bench.output
+            assert_string_contains ~needle:"  description: quick path\n" bench.output
               "bench output should report bench metadata";
             assert_string_contains ~needle:"  argv: --bench\n" bench.output
               "bench output should report configured argv";
             assert_string_contains ~needle:"  warmup: 0\n" bench.output
               "bench output should honor declared warmup counts";
             assert_string_contains ~needle:"  iterations: 2\n" bench.output
-              "bench output should honor declared iteration counts")) );
+              "bench output should honor declared iteration counts") );
     ( "lets command-line warmup and iteration flags override declared bench defaults",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-bench-override" (fun workspace ->
             write_manifest workspace
               {|
@@ -115,34 +112,29 @@ let () =
             assert_string_contains ~needle:"  warmup: 1\n" bench.output
               "bench output should reflect the explicit warmup count";
             assert_string_contains ~needle:"  iterations: 3\n" bench.output
-              "bench output should reflect the explicit iteration count")) );
+              "bench output should reflect the explicit iteration count") );
     ( "rejects non-executable targets for bench",
-      (fun () ->
+      fun () ->
         with_fixture "hello" (fun workspace ->
             let bench = run_wadi ~cwd:workspace [ "bench"; "greeting" ] in
-            assert_true (bench.status <> 0)
-              "bench should reject library targets";
-            assert_string_contains
-              ~needle:"wadi bench only supports executables"
-              bench.output
-              "bench should explain that only executables can be benchmarked")) );
+            assert_true (bench.status <> 0) "bench should reject library targets";
+            assert_string_contains ~needle:"wadi bench only supports executables"
+              bench.output "bench should explain that only executables can be benchmarked")
+    );
     ( "reports failing benchmark executables directly",
-      (fun () ->
+      fun () ->
         with_temp_dir "wadi-bench-failure" (fun workspace ->
-            write_manifest workspace
-              {|
+            write_manifest workspace {|
 [executable.crash]
 dir = "app"
 main = "main"
 |};
-            write_source workspace "app/main.ml"
-              {|let () = prerr_endline "boom"; exit 3|};
+            write_source workspace "app/main.ml" {|let () = prerr_endline "boom"; exit 3|};
             let bench = run_wadi ~cwd:workspace [ "bench"; "crash" ] in
             assert_true (bench.status <> 0)
               "bench should fail when a benchmark executable exits non-zero";
-            assert_string_contains ~needle:"benchmark command failed"
-              bench.output
+            assert_string_contains ~needle:"benchmark command failed" bench.output
               "bench should surface the failing command";
             assert_string_contains ~needle:"boom" bench.output
-              "bench should preserve benchmark stderr for diagnosis")) );
+              "bench should preserve benchmark stderr for diagnosis") );
   ]
