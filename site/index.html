@@ -607,7 +607,7 @@ footer .footer-logo {
 
 <!-- NAV -->
 <nav>
-  <a href="#" class="logo"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="palm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c96a"/><stop offset="100%" stop-color="#c4813a"/></linearGradient></defs><path fill="url(#palm-grad)" d="M34 60 C34 60 33 42 31 34 C30 30 28 26 27 24 C24 22 16 20 6 22 C12 18 20 17 26 20 C22 16 14 8 4 6 C14 6 22 12 27 20 C25 14 20 6 16 2 C22 6 26 14 28 22 C32 16 40 8 50 8 C42 12 34 18 30 24 C34 18 42 12 52 14 C44 16 34 22 30 26 C36 20 44 16 54 18 C46 20 36 24 31 28 C32 30 34 42 35 52 L36 60 C36 60 40 62 42 62 C38 63 30 63 26 62 C28 62 32 60 34 60Z"/></svg>Wadi</a>
+  <a href="index.html" class="logo"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="palm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c96a"/><stop offset="100%" stop-color="#c4813a"/></linearGradient></defs><path fill="url(#palm-grad)" d="M34 60 C34 60 33 42 31 34 C30 30 28 26 27 24 C24 22 16 20 6 22 C12 18 20 17 26 20 C22 16 14 8 4 6 C14 6 22 12 27 20 C25 14 20 6 16 2 C22 6 26 14 28 22 C32 16 40 8 50 8 C42 12 34 18 30 24 C34 18 42 12 52 14 C44 16 34 22 30 26 C36 20 44 16 54 18 C46 20 36 24 31 28 C32 30 34 42 35 52 L36 60 C36 60 40 62 42 62 C38 63 30 63 26 62 C28 62 32 60 34 60Z"/></svg>Wadi</a>
   <div class="nav-links">
     <a href="#problem">Why</a>
     <a href="#commands">Commands</a>
@@ -663,7 +663,7 @@ footer .footer-logo {
     <div class="problem-card">
       <span class="icon">&#9686;</span>
       <h3>Focused Command Set</h3>
-      <p>29 commands, each doing one thing well. Easy to learn, easy to remember, easy to compose.</p>
+      <p>31 commands, each doing one thing well. Easy to learn, easy to remember, easy to compose.</p>
     </div>
     <div class="problem-card">
       <span class="icon">&#9656;</span>
@@ -744,7 +744,7 @@ footer .footer-logo {
 <!-- COMMANDS -->
 <section id="commands">
   <p class="section-label">The Toolkit</p>
-  <h2>29 commands. <span>Zero confusion.</span></h2>
+  <h2>31 commands. <span>Zero confusion.</span></h2>
   <p class="section-desc">Each command does one thing and does it well. Here are the ones you'll reach for most. Composable through stable files and exit codes. No hidden state, no global caches, no magic.</p>
 
   <div class="commands-grid">
@@ -812,6 +812,16 @@ footer .footer-logo {
       <div class="cmd-name">wadi migrate</div>
       <div class="cmd-sig">[--output PATH] [--stdout] [--force]</div>
       <p class="cmd-desc">Scan dune files and generate a first-pass wadi.toml with review comments for anything that needs attention.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi format</div>
+      <div class="cmd-sig">[--workspace DIR] [--check] [TARGET ...]</div>
+      <p class="cmd-desc">Auto-format OCaml source files via ocamlformat. Use <code>--check</code> to verify formatting without writing changes&mdash;perfect for CI gates.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi lint</div>
+      <div class="cmd-sig">[--workspace DIR] [--profile NAME] [TARGET ...]</div>
+      <p class="cmd-desc">Run strict compiler warnings across your workspace. Surfaces issues that normal builds miss by enabling a stricter warning set.</p>
     </div>
   </div>
 
@@ -899,7 +909,7 @@ footer .footer-logo {
       <tr>
         <td>Subcommands</td>
         <td class="dune-col">60+ subcommands</td>
-        <td class="wadi-col">29 focused tools</td>
+        <td class="wadi-col">31 focused tools</td>
       </tr>
       <tr>
         <td>Package handling</td>
@@ -1052,11 +1062,46 @@ footer .footer-logo {
   </div>
 </section>
 
+<div class="sand-divider"></div>
+
+<!-- DESIGN CHOICES -->
+<section id="design-choices">
+  <p class="section-label">Design Choices</p>
+  <h2>Intentional <span>trade-offs</span></h2>
+  <p class="section-desc">Wadi makes deliberate choices that differ from other build systems. Here's what they are and why.</p>
+
+  <div class="features-list">
+    <div class="feature">
+      <h3>Globally Unique Target Names</h3>
+      <p>Target names must be unique across the entire workspace, not scoped per directory. This eliminates ambiguity in dependency references and CLI commands&mdash;when you say <code>wadi build foo</code>, there's exactly one thing it can mean.</p>
+    </div>
+    <div class="feature">
+      <h3>Shared Library/Executable Namespace</h3>
+      <p>Libraries and executables share the same naming namespace. You cannot have a library and an executable both called <code>core</code>. This keeps dependency resolution simple and prevents confusing shadowing scenarios.</p>
+    </div>
+    <div class="feature">
+      <h3>Explicit Executable Sources</h3>
+      <p>Executables only compile their declared <code>main</code> module and explicit <code>modules</code> list. They do not implicitly inherit other source files from their directory. This avoids surprises where stray <code>.ml</code> files silently join the build.</p>
+    </div>
+    <div class="feature">
+      <h3>Actions for Menhir/ocamllex</h3>
+      <p>Parser and lexer generators require explicit action definitions rather than built-in magic. This keeps the core build model simple and uniform. First-class menhir and ocamllex support is in progress.</p>
+    </div>
+    <div class="feature">
+      <h3>Flat Modules by Default</h3>
+      <p>Library modules are flat (unwrapped) by default&mdash;each module is globally visible by its file name. Set <code>wrapped = true</code> on a library to generate a namespace wrapper module when you want a clean public API boundary.</p>
+    </div>
+  </div>
+</section>
+
+<div class="sand-divider"></div>
+
 <!-- FOOTER -->
 <footer>
   <span class="footer-logo">Wadi</span>
   <p>A build system for people who chose OCaml because they value clarity.</p>
   <p style="margin-top: .75rem; color: #3a3528;">Built from first principles. No compromises.</p>
+  <p style="margin-top: 1rem;"><a href="https://github.com/jef/oasis" style="color: #8a7a66;">GitHub</a></p>
 </footer>
 
 </body>
