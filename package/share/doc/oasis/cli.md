@@ -100,7 +100,7 @@ Poll the workspace and rerun a selected oasis subtool whenever inputs change.
 
 Usage:
 
-`oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] SUBTOOL [ARG ...]`
+`oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -108,12 +108,16 @@ Options:
 - `--debounce-ms COUNT`: Wait COUNT milliseconds after the first detected change before rerunning the watched subtool.
 - `--max-runs COUNT`: Exit after COUNT watched executions instead of running until interrupted.
 - `--keep-going`: Keep watching after a failed run instead of exiting with the first non-zero status.
+- `--include GLOB`: Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant source trees.
+- `--ignore GLOB`: Ignore paths matching GLOB in addition to the built-in .git, _oasis, and _bootstrap exclusions.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `oasis watch build`
 - `oasis watch test unit`
 - `oasis watch --keep-going --max-runs 2 build hello`
+- `oasis watch --include 'lib/**' --include 'app/**' run demo`
+- `oasis watch --ignore 'vendor/**' build`
 - `oasis watch run demo -- --port 8080`
 
 ## action

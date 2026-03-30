@@ -35,6 +35,8 @@ type watch_options = {
   debounce_ms : int;
   max_runs : int option;
   keep_going : bool;
+  include_globs : string list;
+  ignore_globs : string list;
   command_name : string option;
   command_args : string list;
 }
@@ -413,6 +415,22 @@ let keep_going_option =
       "Keep watching after a failed run instead of exiting with the first non-zero status.";
   }
 
+let include_glob_option =
+  {
+    usage = "--include GLOB";
+    flags = [ "--include" ];
+    description =
+      "Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant source trees.";
+  }
+
+let ignore_glob_option =
+  {
+    usage = "--ignore GLOB";
+    flags = [ "--ignore" ];
+    description =
+      "Ignore paths matching GLOB in addition to the built-in .git, _oasis, and _bootstrap exclusions.";
+  }
+
 let dir_option =
   {
     usage = "--dir DIR";
@@ -633,12 +651,14 @@ let watch_doc =
     summary =
       "Poll the workspace and rerun a selected oasis subtool whenever inputs change.";
     signature =
-      "oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] SUBTOOL [ARG ...]";
+      "oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]";
     examples =
       [
         "oasis watch build";
         "oasis watch test unit";
         "oasis watch --keep-going --max-runs 2 build hello";
+        "oasis watch --include 'lib/**' --include 'app/**' run demo";
+        "oasis watch --ignore 'vendor/**' build";
         "oasis watch run demo -- --port 8080";
       ];
     options =
@@ -648,6 +668,8 @@ let watch_doc =
         debounce_ms_option;
         max_runs_option;
         keep_going_option;
+        include_glob_option;
+        ignore_glob_option;
         help_option;
       ];
     completion_words = [];
@@ -1688,11 +1710,24 @@ let parse_watch_args (args : string list) : (watch_options, string) result =
     | "--max-runs" :: [] -> Error "--max-runs requires an integer"
     | "--keep-going" :: rest ->
         loop { options with keep_going = true } rest
+    | "--include" :: glob :: rest ->
+        loop { options with include_globs = glob :: options.include_globs } rest
+    | "--include" :: [] -> Error "--include requires a glob"
+    | "--ignore" :: glob :: rest ->
+        loop { options with ignore_globs = glob :: options.ignore_globs } rest
+    | "--ignore" :: [] -> Error "--ignore requires a glob"
     | "--help" :: _ -> Error (command_usage watch_doc)
     | option :: _ when String_util.starts_with ~prefix:"-" option ->
         Error (Printf.sprintf "unknown option '%s'" option)
     | command_name :: rest ->
-        Ok { options with command_name = Some command_name; command_args = rest }
+        Ok
+          {
+            options with
+            command_name = Some command_name;
+            command_args = rest;
+            include_globs = List.rev options.include_globs;
+            ignore_globs = List.rev options.ignore_globs;
+          }
   in
   let* options =
     loop
@@ -1702,6 +1737,8 @@ let parse_watch_args (args : string list) : (watch_options, string) result =
         debounce_ms = 100;
         max_runs = None;
         keep_going = false;
+        include_globs = [];
+        ignore_globs = [];
         command_name = None;
         command_args = [];
       }
@@ -2278,7 +2315,14 @@ let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
   | "--output" | "--script" | "--warmup" | "--iterations" | "--dir"
   | "--name" | "--member" | "--library" | "--executable" | "--source"
-  | "--poll-ms" | "--debounce-ms" | "--max-runs" ->
+  | "--git" | "--url" | "--ref" | "--checksum" | "--poll-ms"
+  | "--debounce-ms" | "--max-runs" | "--include" | "--ignore" ->
+      true
+  | _ -> false
+
+let watch_option_expects_value = function
+  | "--workspace" | "--poll-ms" | "--debounce-ms" | "--max-runs"
+  | "--include" | "--ignore" ->
       true
   | _ -> false
 
@@ -2392,40 +2436,85 @@ let filter_completion_candidates ~current candidates =
   |> List.filter (fun candidate ->
          current = "" || String_util.starts_with ~prefix:current candidate.value)
 
-let completion_response workspace ~previous ~current =
+let completion_candidates_response ~current candidates =
+  Completion_candidates (filter_completion_candidates ~current candidates)
+
+let root_command_candidates () = List.map (fun doc -> candidate doc.name) command_docs
+
+let rec watch_subtool_tokens = function
+  | [] -> None
+  | "--workspace" :: _ :: rest
+  | "--poll-ms" :: _ :: rest
+  | "--debounce-ms" :: _ :: rest
+  | "--max-runs" :: _ :: rest
+  | "--include" :: _ :: rest
+  | "--ignore" :: _ :: rest ->
+      watch_subtool_tokens rest
+  | "--keep-going" :: rest | "--help" :: rest -> watch_subtool_tokens rest
+  | option :: [] when watch_option_expects_value option -> None
+  | option :: _ when String_util.starts_with ~prefix:"-" option -> None
+  | command_name :: rest -> Some (command_name, rest)
+
+let render_value_completion ?workspace ~current option_name =
+  match value_completion_response ?workspace option_name with
+  | Complete_directories -> Complete_directories
+  | Complete_files -> Complete_files
+  | Completion_candidates candidates ->
+      completion_candidates_response ~current candidates
+
+let watch_command_candidates () =
+  List.filter_map
+    (fun (doc : command_doc) ->
+      if doc.name = "watch" then None else Some (candidate doc.name))
+    command_docs
+
+let rec completion_response workspace ~previous ~current =
   match previous with
-  | [] ->
-      Completion_candidates
-        (filter_completion_candidates ~current
-           (List.map (fun doc -> candidate doc.name) command_docs))
-  | command_name :: rest -> (
+  | [] -> completion_candidates_response ~current (root_command_candidates ())
+  | "watch" :: rest -> watch_completion_response workspace ~rest ~current
+  | command_name :: rest ->
+      default_completion_response workspace command_name rest ~current
+
+and watch_completion_response workspace ~rest ~current =
+  match watch_subtool_tokens rest with
+  | Some ("watch", _) -> Completion_candidates []
+  | Some (command_name, inner_rest) -> (
       match find_command_doc command_name with
-      | None ->
-          Completion_candidates
-            (filter_completion_candidates ~current
-               (List.map (fun doc -> candidate doc.name) command_docs))
-      | Some doc when List.mem "--" rest -> Completion_candidates []
-      | Some doc -> (
-          match List.rev previous with
-          | option_name :: _ when option_expects_value option_name -> (
-              match value_completion_response ?workspace option_name with
-              | Complete_directories -> Complete_directories
-              | Complete_files -> Complete_files
-              | Completion_candidates candidates ->
-                  Completion_candidates
-                    (filter_completion_candidates ~current candidates))
-          | _ ->
-              let flags = command_flag_words doc in
-              let candidates =
-                if String_util.starts_with ~prefix:"-" current then
-                  List.map (fun flag -> candidate flag) flags
-                else
-                  positional_completion_candidates ?workspace:workspace
-                    command_name rest
-                  @ List.map (fun flag -> candidate flag) flags
-              in
-              Completion_candidates
-                (filter_completion_candidates ~current candidates)))
+      | None -> Completion_candidates []
+      | Some _ ->
+          completion_response workspace ~previous:(command_name :: inner_rest)
+            ~current)
+  | None -> (
+      match List.rev rest with
+      | option_name :: _ when watch_option_expects_value option_name ->
+          render_value_completion ?workspace ~current option_name
+      | _ ->
+          let flags = command_flag_words watch_doc in
+          let candidates =
+            if String_util.starts_with ~prefix:"-" current then
+              List.map (fun flag -> candidate flag) flags
+            else watch_command_candidates () @ List.map (fun flag -> candidate flag) flags
+          in
+          completion_candidates_response ~current candidates)
+
+and default_completion_response workspace command_name rest ~current =
+  match find_command_doc command_name with
+  | None -> completion_candidates_response ~current (root_command_candidates ())
+  | Some doc when List.mem "--" rest -> Completion_candidates []
+  | Some doc -> (
+      match List.rev rest with
+      | option_name :: _ when option_expects_value option_name ->
+          render_value_completion ?workspace ~current option_name
+      | _ ->
+          let flags = command_flag_words doc in
+          let candidates =
+            if String_util.starts_with ~prefix:"-" current then
+              List.map (fun flag -> candidate flag) flags
+            else
+              positional_completion_candidates ?workspace command_name rest
+              @ List.map (fun flag -> candidate flag) flags
+          in
+          completion_candidates_response ~current candidates)
 
 let executable_targets (workspace : Manifest.workspace) : Manifest.executable list =
   List.filter_map
@@ -2598,6 +2687,8 @@ let run_watch (options : watch_options) =
                     debounce_ms = options.debounce_ms;
                     max_runs = options.max_runs;
                     keep_going = options.keep_going;
+                    include_globs = options.include_globs;
+                    ignore_globs = options.ignore_globs;
                     command_name;
                     command_args = options.command_args;
                   }

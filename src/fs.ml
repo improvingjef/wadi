@@ -2,6 +2,14 @@ let exists path = Sys.file_exists path
 
 let is_directory path = exists path && Sys.is_directory path
 
+let is_executable_file path =
+  exists path
+  &&
+  match Unix.stat path with
+  | { Unix.st_kind = Unix.S_REG; st_perm; _ } -> st_perm land 0o111 <> 0
+  | _ -> false
+  | exception Unix.Unix_error _ -> false
+
 type materialize_strategy =
   | Clone_copy
   | Reflink_copy
@@ -12,6 +20,26 @@ let materialize_strategy : materialize_strategy option ref = ref None
 let realpath path =
   try Unix.realpath path with
   | Unix.Unix_error _ -> path
+
+let resolve_executable path =
+  let absolute_path path =
+    if Filename.is_relative path then Filename.concat (Sys.getcwd ()) path
+    else path
+  in
+  if String.contains path '/' then realpath (absolute_path path)
+  else
+    match Sys.getenv_opt "PATH" with
+    | None -> path
+    | Some search_path -> (
+        match
+          search_path |> String.split_on_char ':'
+          |> List.filter_map (fun dir ->
+                 let candidate = Filename.concat dir path in
+                 if is_executable_file candidate then Some (realpath candidate)
+                 else None)
+        with
+        | resolved :: _ -> resolved
+        | [] -> path)
 
 let read_lines path =
   let channel = open_in path in

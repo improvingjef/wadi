@@ -412,7 +412,7 @@ actions = ["generate"]
               ~needle:"oasis doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]"
               run.output "top-level usage should include the doctor command";
             assert_string_contains
-              ~needle:"oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] SUBTOOL [ARG ...]"
+              ~needle:"oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]"
               run.output "top-level usage should include the watch command";
             assert_string_contains
               ~needle:"oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
@@ -579,6 +579,14 @@ actions = ["generate"]
               ~needle:"- `--keep-going`: Keep watching after a failed run instead of exiting with the first non-zero status."
               docs.output
               "docs output should include watch failure handling documentation";
+            assert_string_contains
+              ~needle:"- `--include GLOB`: Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant source trees."
+              docs.output
+              "docs output should include watch include-glob documentation";
+            assert_string_contains
+              ~needle:"- `--ignore GLOB`: Ignore paths matching GLOB in addition to the built-in .git, _oasis, and _bootstrap exclusions."
+              docs.output
+              "docs output should include watch ignore-glob documentation";
             assert_string_contains
               ~needle:"- `oasis env action core`"
               docs.output
@@ -856,6 +864,85 @@ main = "main"
             assert_string_not_contains ~needle:"candidate\tunit\n"
               install_targets.output
               "env install completion should not include tests")) );
+    ( "delegates watch completion to the selected subtool",
+      (fun () ->
+        with_temp_dir "oasis-cli-watch-completion" (fun workspace ->
+            write_manifest workspace
+              {|
+[defaults]
+profile = "release"
+
+[profile.dev]
+
+[library.core]
+dir = "lib"
+modules = ["core"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+
+[test.unit]
+dir = "test"
+main = "main"
+|};
+            write_source workspace "lib/core.ml" {|let value = "core"|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            write_source workspace "test/main.ml" {|let () = print_endline "unit"|};
+            let build_targets =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; ""; "--"; "watch"; "build" ]
+            in
+            assert_int_equal 0 build_targets.status
+              "watch build completion should query successfully";
+            assert_string_contains ~needle:"candidate\tcore\n" build_targets.output
+              "watch build completion should suggest library targets";
+            assert_string_contains ~needle:"candidate\tdemo\n" build_targets.output
+              "watch build completion should suggest executable targets";
+            assert_string_contains ~needle:"candidate\tunit\n" build_targets.output
+              "watch build completion should suggest test targets";
+            let run_targets =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; ""; "--"; "watch"; "run" ]
+            in
+            assert_int_equal 0 run_targets.status
+              "watch run completion should query successfully";
+            assert_string_contains ~needle:"candidate\tdemo\n" run_targets.output
+              "watch run completion should suggest executable targets";
+            assert_string_not_contains ~needle:"candidate\tcore\n" run_targets.output
+              "watch run completion should not suggest libraries";
+            let subtool_flags =
+              run_oasis ~cwd:workspace
+                [ "completion"; "--query"; "--current"; "--"; "--"; "watch"; "build" ]
+            in
+            assert_int_equal 0 subtool_flags.status
+              "watch subtool flag completion should query successfully";
+            assert_string_contains ~needle:"candidate\t--profile\n"
+              subtool_flags.output
+              "watch build completion should expose delegated build flags";
+            assert_string_contains ~needle:"candidate\t--backend\n"
+              subtool_flags.output
+              "watch build completion should include backend selection";
+            let profile_values =
+              run_oasis ~cwd:workspace
+                [
+                  "completion";
+                  "--query";
+                  "--current";
+                  "";
+                  "--";
+                  "watch";
+                  "build";
+                  "--profile";
+                ]
+            in
+            assert_int_equal 0 profile_values.status
+              "watch subtool value completion should query successfully";
+            assert_string_contains ~needle:"candidate\trelease\n"
+              profile_values.output
+              "watch build completion should delegate profile values";
+            assert_string_contains ~needle:"candidate\tdev\n" profile_values.output
+              "watch build completion should include additional profiles")) );
     ( "returns versioned directory and file completion protocol headers for path flags",
       (fun () ->
         with_temp_dir "oasis-cli-path-query" (fun workspace ->

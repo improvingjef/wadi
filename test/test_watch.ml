@@ -9,11 +9,20 @@ let write_executable workspace relative_path contents =
   Unix.chmod path 0o755;
   path
 
-let spawn_delayed_write workspace relative_path contents =
+let spawn_delayed_write ?(delay_s = 1) workspace relative_path contents =
+  let script_name =
+    "rewrite-"
+    ^
+    (relative_path |> String.map (function '/' | '.' -> '_' | ch -> ch))
+    ^ "-"
+    ^ string_of_int delay_s
+    ^ ".sh"
+  in
   let script_path =
-    write_executable workspace "rewrite.sh"
+    write_executable workspace script_name
       (Printf.sprintf
-         "#!/bin/sh\nsleep 1\ncat <<'EOF' > %s\n%s\nEOF\n"
+         "#!/bin/sh\nsleep %d\ncat <<'EOF' > %s\n%s\nEOF\n"
+         delay_s
          (Filename.quote (Filename.concat workspace relative_path))
          contents)
   in
@@ -131,4 +140,92 @@ main = "main"
               ~needle:"watch cannot watch itself; choose another subtool"
               watch.output
               "watch should explain the recursive-command rejection")) );
+    ( "ignores matching paths before rerunning",
+      (fun () ->
+        with_temp_dir "oasis-watch-ignore" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "first"|};
+            write_source workspace "docs/notes.txt" "notes\n";
+            let ignored_change =
+              spawn_delayed_write ~delay_s:1 workspace "docs/notes.txt"
+                "updated notes\n"
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "app/main.ml"
+                {|let () = print_endline "second"|}
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--ignore";
+                  "docs/**";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] ignored_change);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should still complete successfully when ignored files change first";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "watch should rerun once a non-ignored file changes";
+            assert_string_contains ~needle:"second\n" watch.output
+              "watch should wait for the relevant source change before rerunning")) );
+    ( "can restrict watch inputs to included globs",
+      (fun () ->
+        with_temp_dir "oasis-watch-include" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline "first"|};
+            write_source workspace "README.md" "readme\n";
+            let unrelated_change =
+              spawn_delayed_write ~delay_s:1 workspace "README.md"
+                "updated readme\n"
+            in
+            let relevant_change =
+              spawn_delayed_write ~delay_s:3 workspace "app/main.ml"
+                {|let () = print_endline "second"|}
+            in
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--include";
+                  "app/**";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "2";
+                  "run";
+                  "demo";
+                ]
+            in
+            ignore (Unix.waitpid [] unrelated_change);
+            ignore (Unix.waitpid [] relevant_change);
+            assert_int_equal 0 watch.status
+              "watch should rerun successfully when the included tree changes";
+            assert_string_contains ~needle:"Watch-run 2: run demo" watch.output
+              "watch should rerun after an included path changes";
+            assert_string_contains ~needle:"second\n" watch.output
+              "watch should ignore changes outside the included glob set")) );
   ]

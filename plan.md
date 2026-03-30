@@ -156,6 +156,9 @@
 147. [x] Implement `oasis status` so users can see current rebuilt/regenerated/reused target state across a workspace without compiling.
 148. [x] Implement `oasis doctor` so manifest, graph, toolchain, package, and lock health can be checked in one command with machine-readable output.
 149. [x] Implement `oasis watch` as a portable polling subtool so edit-run loops stop being bespoke shell glue around `oasis build`, `run`, or `test`.
-150. [ ] Delegate subtool-aware completion through `oasis watch` so `oasis watch build <TAB>` and similar workflows stay as discoverable as the underlying command.
-151. [ ] Add configurable ignore/include globs to `oasis watch` so large repositories can trim noisy non-input trees without editing the hard-coded watch roots.
-152. [ ] Teach `oasis doctor` or a sibling maintenance subtool to report generated-asset drift for `docs/cli.md`, packaged completions, and release metadata before packaging tests fail.
+150. [x] Delegate subtool-aware completion through `oasis watch` so `oasis watch build <TAB>` and similar workflows stay as discoverable as the underlying command.
+151. [x] Add configurable ignore/include globs to `oasis watch` so large repositories can trim noisy non-input trees without editing the hard-coded watch roots.
+152. [x] Teach `oasis doctor` or a sibling maintenance subtool to report generated-asset drift for `docs/cli.md`, packaged completions, and release metadata before packaging tests fail.
+153. [x] Resolve the live `oasis` executable through `PATH` when `watch` or maintenance checks reinvoke the current binary so installed workflows do not assume a cwd-relative `argv[0]`.
+154. [ ] Let workspaces persist watch include/ignore globs in manifest or ignore-file form so teams stop repeating long `oasis watch --include ... --ignore ...` command lines.
+155. [ ] Detect and explain conflicting inner `--workspace` flags under `oasis watch` so the polled tree and delegated subtool cannot silently point at different repositories.

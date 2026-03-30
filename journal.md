@@ -178,3 +178,10 @@
 - A `doctor` command is most useful when it degrades lock issues to warnings by default but can still turn them fatal on demand. Diagnosis and enforcement are the same data with different exit semantics.
 - Portable watch mode does not need platform-specific filesystem APIs to be useful. A polling snapshot is good enough as long as it ignores build artifacts, preserves child exit semantics, and can keep going after failures when the user asks.
 - The packaging tests were right to fail as soon as the command table changed. If a single new subtool invalidates the CLI docs and Homebrew checksum, that is evidence that generated release assets are part of the feature surface, not downstream chores.
+
+## 2026-03-29
+
+- `oasis watch` only feels like a wrapper, not a second-class subtool, once completion delegates straight back into the selected inner command. Reusing the existing completion engine beats cloning target/flag logic into a watch-specific branch.
+- Polling snapshots can support include/ignore globs without trusting directory mtimes as invalidation signals. Recording directories as structural markers while filtering files by glob keeps unrelated tree churn from triggering reruns.
+- Maintenance drift checks should execute the same release-generation scripts the repo already ships, not a hand-maintained reimplementation. The useful signal is whether regenerated docs/completions/metadata byte-match the committed artifacts.
+- Reinvoking the current binary through `Sys.executable_name` is not reliable when the command came from `PATH`. Self-hosted commands like `watch` and generator-backed `doctor` checks need an explicit executable resolver instead of assuming `argv[0]` is cwd-relative.
