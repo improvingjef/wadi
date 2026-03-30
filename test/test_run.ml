@@ -453,6 +453,13 @@ actions = ["generate"]
             assert_string_contains
               ~needle:"oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the install command";
+            assert_string_contains
+              ~needle:"oasis release-artifacts [--output-dir DIR]"
+              run.output
+              "top-level usage should include the release-artifacts command";
+            assert_string_contains
+              ~needle:"oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]"
+              run.output "top-level usage should include the package command";
             assert_string_contains ~needle:"oasis docs" run.output
               "top-level usage should include the docs command";
             assert_string_contains
@@ -525,6 +532,10 @@ actions = ["generate"]
               "docs output should include the env command";
             assert_string_contains ~needle:"## install" docs.output
               "docs output should include the install command";
+            assert_string_contains ~needle:"## release-artifacts" docs.output
+              "docs output should include the release-artifacts command";
+            assert_string_contains ~needle:"## package" docs.output
+              "docs output should include the package command";
             assert_string_contains ~needle:"## promote" docs.output
               "docs output should include the promote command";
             assert_string_contains ~needle:"## migrate" docs.output
@@ -567,6 +578,14 @@ actions = ["generate"]
               ~needle:"- `--output PATH`: Write the transformed source to PATH instead of stdout."
               docs.output
               "docs output should include the ppx output description";
+            assert_string_contains
+              ~needle:"- `--output-dir DIR`: Write generated files under DIR instead of the current directory."
+              docs.output
+              "docs output should include the release/package output-dir description";
+            assert_string_contains
+              ~needle:"- `--asset-index-output PATH`: Write a machine-readable release asset index with names, URLs, sizes, and checksums."
+              docs.output
+              "docs output should include the package asset-index description";
             assert_string_contains
               ~needle:"- `--stdout`: Print the generated output instead of writing a file."
               docs.output

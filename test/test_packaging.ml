@@ -7,7 +7,24 @@ let copy_tracked_repo ~src_root ~dst_root ?(extra_paths = []) () =
   let listed = Process.run_capture ~cwd:src_root "git" [ "ls-files" ] in
   assert_int_equal 0 listed.status
     ("git ls-files should succeed before copying a tracked repo\n" ^ listed.output);
-  let paths = nonempty_lines listed.output @ extra_paths |> String_util.dedup_preserve in
+  let untracked_worktree_sources =
+    Process.run_capture ~cwd:src_root "git"
+      [
+        "ls-files";
+        "--others";
+        "--exclude-standard";
+        "--";
+        "src";
+        "test";
+      ]
+  in
+  assert_int_equal 0 untracked_worktree_sources.status
+    ( "git ls-files --others should succeed before copying a tracked repo\n"
+    ^ untracked_worktree_sources.output );
+  let paths =
+    nonempty_lines listed.output @ nonempty_lines untracked_worktree_sources.output
+    @ extra_paths |> String_util.dedup_preserve
+  in
   List.iter
     (fun relative_path ->
       let src = Filename.concat src_root relative_path in
@@ -165,6 +182,161 @@ let cases =
                   (Fs.read_file
                      (Filename.concat prefix "share/doc/oasis/cli.md"))
                   "the installed doc copy should come from the installed binary"))) );
+    ( "release-artifacts renders docs and packaged completions from the live binary",
+      (fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-release-command" (fun output_dir ->
+            let generated =
+              run_oasis ~cwd:repo_root
+                [ "release-artifacts"; "--output-dir"; output_dir ]
+            in
+            assert_int_equal 0 generated.status
+              "release-artifacts should render successfully";
+            let docs = run_oasis ~cwd:repo_root [ "docs" ] in
+            let bash_completion =
+              run_oasis ~cwd:repo_root [ "completion"; "bash" ]
+            in
+            let zsh_completion =
+              run_oasis ~cwd:repo_root [ "completion"; "zsh" ]
+            in
+            let fish_completion =
+              run_oasis ~cwd:repo_root [ "completion"; "fish" ]
+            in
+            assert_int_equal 0 docs.status
+              "docs should render successfully before comparing release artifacts";
+            assert_int_equal 0 bash_completion.status
+              "bash completion should render successfully before comparing release artifacts";
+            assert_int_equal 0 zsh_completion.status
+              "zsh completion should render successfully before comparing release artifacts";
+            assert_int_equal 0 fish_completion.status
+              "fish completion should render successfully before comparing release artifacts";
+            assert_string_equal docs.output
+              (Fs.read_file (Filename.concat output_dir "docs/cli.md"))
+              "release-artifacts should write the live CLI docs";
+            assert_string_equal bash_completion.output
+              (Fs.read_file (Filename.concat output_dir "completions/oasis.bash"))
+              "release-artifacts should write the live bash completion";
+            assert_string_equal zsh_completion.output
+              (Fs.read_file (Filename.concat output_dir "completions/_oasis"))
+              "release-artifacts should write the live zsh completion";
+            assert_string_equal fish_completion.output
+              (Fs.read_file (Filename.concat output_dir "completions/oasis.fish"))
+              "release-artifacts should write the live fish completion";
+            assert_string_equal docs.output
+              (Fs.read_file
+                 (Filename.concat output_dir "package/share/doc/oasis/cli.md"))
+              "release-artifacts should package the rendered docs";
+            assert_string_equal bash_completion.output
+              (Fs.read_file
+                 (Filename.concat output_dir
+                    "package/share/bash-completion/completions/oasis"))
+              "release-artifacts should package the bash completion";
+            assert_string_equal zsh_completion.output
+              (Fs.read_file
+                 (Filename.concat output_dir
+                    "package/share/zsh/site-functions/_oasis"))
+              "release-artifacts should package the zsh completion";
+            assert_string_equal fish_completion.output
+              (Fs.read_file
+                 (Filename.concat output_dir
+                    "package/share/fish/vendor_completions.d/oasis.fish"))
+              "release-artifacts should package the fish completion")) );
+    ( "package renders packaging manifests, checksums, and an asset index",
+      (fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-command" (fun workspace ->
+            let output_dir = Filename.concat workspace "out" in
+            let archive_dir = Filename.concat workspace "dist" in
+            let checksums_output = Filename.concat output_dir "SHA256SUMS" in
+            let asset_index_output =
+              Filename.concat output_dir (release_asset_index_name ~cwd:repo_root)
+            in
+            let generated =
+              run_oasis ~cwd:repo_root
+                [
+                  "package";
+                  "--output-dir";
+                  output_dir;
+                  "--source-archive-dir";
+                  archive_dir;
+                  "--checksums-output";
+                  checksums_output;
+                  "--asset-index-output";
+                  asset_index_output;
+                ]
+            in
+            assert_int_equal 0 generated.status
+              "package should render packaging metadata successfully";
+            let source_archive =
+              Filename.concat archive_dir "oasis-0.1.0-source.tar.gz"
+            in
+            let opam_output = Filename.concat output_dir "oasis.opam" in
+            let formula_output = Filename.concat output_dir "Formula/oasis.rb" in
+            assert_file_exists source_archive;
+            assert_string_equal
+              (Fs.read_file opam_output)
+              (Fs.read_file (Filename.concat repo_root "oasis.opam"))
+              "package should render the committed opam metadata";
+            assert_string_equal
+              (Fs.read_file formula_output)
+              (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
+              "package should render the committed Homebrew formula";
+            let checksums = Fs.read_file checksums_output in
+            assert_string_contains
+              ~needle:
+                (sha256_for_file source_archive ^ "  " ^ source_archive)
+              checksums
+              "package should include the source archive in SHA256SUMS";
+            assert_string_contains
+              ~needle:(sha256_for_file opam_output ^ "  " ^ opam_output)
+              checksums
+              "package should include the rendered opam metadata in SHA256SUMS";
+            assert_string_contains
+              ~needle:(sha256_for_file formula_output ^ "  " ^ formula_output)
+              checksums
+              "package should include the rendered formula in SHA256SUMS";
+            let base_url = release_download_base_url ~cwd:repo_root in
+            let source_archive_entry =
+              render_asset_index_entry ~base_url
+                ~name:(Filename.basename source_archive)
+                ~kind:"source_archive"
+                ~sha256:(sha256_for_file source_archive)
+                ~size_bytes:(Unix.stat source_archive).Unix.st_size ()
+            in
+            let checksums_entry =
+              render_asset_index_entry ~base_url
+                ~name:(Filename.basename checksums_output)
+                ~kind:"checksums"
+                ~sha256:(sha256_for_file checksums_output)
+                ~size_bytes:(Unix.stat checksums_output).Unix.st_size ()
+            in
+            let asset_index = Fs.read_file asset_index_output in
+            assert_string_contains ~needle:"\"schema_version\": 1" asset_index
+              "package should write a machine-readable asset index";
+            assert_string_contains ~needle:source_archive_entry asset_index
+              "package should index the source archive";
+            assert_string_contains ~needle:checksums_entry asset_index
+              "package should index the generated checksum manifest")) );
+    ( "package rejects conflicting source-archive inputs",
+      (fun () ->
+        let repo_root = Sys.getcwd () in
+        let generated =
+          run_oasis ~cwd:repo_root
+            [
+              "package";
+              "--source-archive";
+              "dist/oasis-0.1.0-source.tar.gz";
+              "--source-archive-dir";
+              "dist";
+            ]
+        in
+        assert_true (generated.status <> 0)
+          "package should reject conflicting source-archive selectors";
+        assert_string_contains
+          ~needle:
+            "pass only one of --source-archive, --source-archive-dir, or --reuse-source-archive-dir"
+          generated.output
+          "package should explain the mutually exclusive archive selectors") );
     ( "generates packaging manifests from the canonical release metadata",
       fun () ->
         let repo_root = Sys.getcwd () in

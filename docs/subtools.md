@@ -50,6 +50,12 @@ exit codes rather than hidden global state.
 
 ### Discoverability
 
+- `oasis release-artifacts`: render `docs/cli.md`, top-level completion
+  scripts, and the packaged `package/share/...` install tree from the live
+  binary.
+- `oasis package`: derive `oasis.opam`, `Formula/oasis.rb`, `SHA256SUMS`, and
+  `release-assets.json` from canonical release metadata without scraping shell
+  scripts.
 - `oasis docs`: render markdown CLI reference from the live command table.
 - `oasis completion`: generate shell completion scripts from the live command
   table.

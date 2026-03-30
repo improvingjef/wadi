@@ -172,6 +172,17 @@ type install_options = {
   lock_policy : lock_policy;
 }
 
+type release_artifacts_options = { output_dir : string }
+
+type package_options = {
+  output_dir : string;
+  opam_output : string option;
+  formula_output : string option;
+  checksums_output : string option;
+  asset_index_output : string option;
+  archive_input : Packager.archive_input option;
+}
+
 type explain_options = {
   workspace_dir : string;
   targets : string list;
@@ -296,6 +307,13 @@ let destdir_option =
       "Prepend DIR to the resolved install prefix for packaging-style staging.";
   }
 
+let output_dir_option =
+  {
+    usage = "--output-dir DIR";
+    flags = [ "--output-dir" ];
+    description = "Write generated files under DIR instead of the current directory.";
+  }
+
 let output_option =
   {
     usage = "--output PATH";
@@ -315,6 +333,59 @@ let stdout_option =
     usage = "--stdout";
     flags = [ "--stdout" ];
     description = "Print the generated output instead of writing a file.";
+  }
+
+let opam_output_option =
+  {
+    usage = "--opam-output PATH";
+    flags = [ "--opam-output" ];
+    description = "Write the generated opam package metadata to PATH.";
+  }
+
+let formula_output_option =
+  {
+    usage = "--formula-output PATH";
+    flags = [ "--formula-output" ];
+    description = "Write the generated Homebrew formula to PATH.";
+  }
+
+let checksums_output_option =
+  {
+    usage = "--checksums-output PATH";
+    flags = [ "--checksums-output" ];
+    description = "Write SHA256SUMS-style checksum lines for generated release assets.";
+  }
+
+let asset_index_output_option =
+  {
+    usage = "--asset-index-output PATH";
+    flags = [ "--asset-index-output" ];
+    description =
+      "Write a machine-readable release asset index with names, URLs, sizes, and checksums.";
+  }
+
+let source_archive_option =
+  {
+    usage = "--source-archive PATH";
+    flags = [ "--source-archive" ];
+    description =
+      "Reuse an explicit source archive when rendering packaging metadata instead of rebuilding one.";
+  }
+
+let source_archive_dir_option =
+  {
+    usage = "--source-archive-dir DIR";
+    flags = [ "--source-archive-dir" ];
+    description =
+      "Refresh the canonical source archive into DIR before rendering packaging metadata.";
+  }
+
+let reuse_source_archive_dir_option =
+  {
+    usage = "--reuse-source-archive-dir DIR";
+    flags = [ "--reuse-source-archive-dir" ];
+    description =
+      "Reuse the canonical source archive already present in DIR without rebuilding it.";
   }
 
 let force_option =
@@ -1037,6 +1108,52 @@ let install_doc =
     watch_root_files = lock_flag_watch_root_files;
   }
 
+let release_artifacts_doc =
+  {
+    name = "release-artifacts";
+    summary =
+      "Render CLI docs, shell completions, and packaged install-tree payloads from the live binary.";
+    signature = "oasis release-artifacts [--output-dir DIR]";
+    examples =
+      [
+        "oasis release-artifacts";
+        "oasis release-artifacts --output-dir dist";
+      ];
+    options = [ output_dir_option; help_option ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
+let package_doc =
+  {
+    name = "package";
+    summary =
+      "Render opam, Homebrew, checksum, and release-asset metadata from canonical release facts.";
+    signature =
+      "oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]";
+    examples =
+      [
+        "oasis package";
+        "oasis package --output-dir dist";
+        "oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json";
+        "oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS";
+      ];
+    options =
+      [
+        output_dir_option;
+        opam_output_option;
+        formula_output_option;
+        checksums_output_option;
+        asset_index_output_option;
+        source_archive_option;
+        source_archive_dir_option;
+        reuse_source_archive_dir_option;
+        help_option;
+      ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
 let docs_doc =
   {
     name = "docs";
@@ -1152,6 +1269,8 @@ let command_docs =
     env_doc;
     repl_doc;
     install_doc;
+    release_artifacts_doc;
+    package_doc;
     docs_doc;
     completion_doc;
     toolchain_doc;
@@ -2218,6 +2337,83 @@ let parse_install_args (args : string list) : (install_options, string) result =
     }
     args
 
+let parse_release_artifacts_args args =
+  let rec loop output_dir = function
+    | [] -> Ok { output_dir }
+    | "--output-dir" :: dir :: rest -> loop dir rest
+    | "--output-dir" :: [] -> Error "--output-dir requires a directory"
+    | "--help" :: _ -> Error (command_usage release_artifacts_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ -> Error "release-artifacts does not accept positional arguments"
+  in
+  loop "." args
+
+let parse_package_args args =
+  let choose_archive_input current next =
+    match current with
+    | None -> Ok (Some next)
+    | Some _ ->
+        Error
+          "pass only one of --source-archive, --source-archive-dir, or --reuse-source-archive-dir"
+  in
+  let rec loop options = function
+    | [] -> Ok options
+    | "--output-dir" :: dir :: rest -> loop { options with output_dir = dir } rest
+    | "--output-dir" :: [] -> Error "--output-dir requires a directory"
+    | "--opam-output" :: path :: rest ->
+        loop { options with opam_output = Some path } rest
+    | "--opam-output" :: [] -> Error "--opam-output requires a path"
+    | "--formula-output" :: path :: rest ->
+        loop { options with formula_output = Some path } rest
+    | "--formula-output" :: [] -> Error "--formula-output requires a path"
+    | "--checksums-output" :: path :: rest ->
+        loop { options with checksums_output = Some path } rest
+    | "--checksums-output" :: [] -> Error "--checksums-output requires a path"
+    | "--asset-index-output" :: path :: rest ->
+        loop { options with asset_index_output = Some path } rest
+    | "--asset-index-output" :: [] -> Error "--asset-index-output requires a path"
+    | "--source-archive" :: path :: rest ->
+        let* archive_input =
+          choose_archive_input options.archive_input (Packager.Source_archive path)
+        in
+        loop { options with archive_input } rest
+    | "--source-archive" :: [] -> Error "--source-archive requires a path"
+    | "--source-archive-dir" :: dir :: rest ->
+        let* archive_input =
+          choose_archive_input options.archive_input
+            (Packager.Source_archive_dir dir)
+        in
+        loop { options with archive_input } rest
+    | "--source-archive-dir" :: [] ->
+        Error "--source-archive-dir requires a directory"
+    | "--reuse-source-archive-dir" :: dir :: rest ->
+        let* archive_input =
+          choose_archive_input options.archive_input
+            (Packager.Reuse_source_archive_dir dir)
+        in
+        loop { options with archive_input } rest
+    | "--reuse-source-archive-dir" :: [] ->
+        Error "--reuse-source-archive-dir requires a directory"
+    | "--help" :: _ -> Error (command_usage package_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ -> Error "package does not accept positional arguments"
+  in
+  let* options =
+    loop
+      {
+        output_dir = ".";
+        opam_output = None;
+        formula_output = None;
+        checksums_output = None;
+        asset_index_output = None;
+        archive_input = None;
+      }
+      args
+  in
+  Ok options
+
 let parse_explain_args (args : string list) : (explain_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : explain_options) = function
@@ -2347,10 +2543,13 @@ let find_command_doc name =
 
 let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
-  | "--output" | "--script" | "--warmup" | "--iterations" | "--dir"
-  | "--name" | "--member" | "--library" | "--executable" | "--source"
-  | "--git" | "--url" | "--ref" | "--checksum" | "--poll-ms"
-  | "--debounce-ms" | "--max-runs" | "--include" | "--ignore" ->
+  | "--output" | "--output-dir" | "--opam-output" | "--formula-output"
+  | "--checksums-output" | "--asset-index-output" | "--source-archive"
+  | "--source-archive-dir" | "--reuse-source-archive-dir" | "--script"
+  | "--warmup" | "--iterations" | "--dir" | "--name" | "--member"
+  | "--library" | "--executable" | "--source" | "--git" | "--url"
+  | "--ref" | "--checksum" | "--poll-ms" | "--debounce-ms" | "--max-runs"
+  | "--include" | "--ignore" ->
       true
   | _ -> false
 
@@ -2439,17 +2638,24 @@ let value_completion_candidates ?workspace = function
           List.map (fun word -> candidate word) (profile_names workspace)
       | None -> [])
   | "--backend" -> List.map (fun word -> candidate word) backend_completion_words
-  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--script"
-  | "--dir" | "--name" | "--member" | "--library" | "--executable"
-  | "--source" | "--git" | "--url" | "--ref" | "--checksum" ->
+  | "--workspace" | "--prefix" | "--destdir" | "--output" | "--output-dir"
+  | "--opam-output" | "--formula-output" | "--checksums-output"
+  | "--asset-index-output" | "--source-archive" | "--source-archive-dir"
+  | "--reuse-source-archive-dir" | "--script" | "--dir" | "--name"
+  | "--member" | "--library" | "--executable" | "--source" | "--git"
+  | "--url" | "--ref" | "--checksum" ->
       []
   | _ -> []
 
 let value_completion_response ?workspace = function
-  | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source" ->
+  | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source"
+  | "--output-dir" | "--source-archive-dir" | "--reuse-source-archive-dir" ->
       Complete_directories
   | "--member" -> Complete_directories
-  | "--output" | "--script" -> Complete_files
+  | "--output" | "--opam-output" | "--formula-output"
+  | "--checksums-output" | "--asset-index-output" | "--source-archive"
+  | "--script" ->
+      Complete_files
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
 
@@ -3074,6 +3280,40 @@ let run_install (options : install_options) =
           | Error message -> report_error message)
       | Error message -> report_error message)
 
+let run_release_artifacts (options : release_artifacts_options) =
+  let root_dir = Sys.getcwd () in
+  match Release_metadata.load_for_root ~root_dir () with
+  | Error message -> report_error message
+  | Ok metadata -> (
+      match
+        completion_script "bash",
+        completion_script "zsh",
+        completion_script "fish"
+      with
+      | Ok bash, Ok zsh, Ok fish ->
+          Release_artifacts.write ~output_dir:options.output_dir
+            ~package_name:metadata.package_name
+            ~docs:(render_markdown command_docs) ~bash ~zsh ~fish;
+          Exit_code 0
+      | Error message, _, _ | _, Error message, _ | _, _, Error message ->
+          report_error message)
+
+let run_package (options : package_options) =
+  match
+    Packager.run
+      {
+        root_dir = Sys.getcwd ();
+        output_dir = options.output_dir;
+        opam_output = options.opam_output;
+        formula_output = options.formula_output;
+        checksums_output = options.checksums_output;
+        asset_index_output = options.asset_index_output;
+        archive_input = options.archive_input;
+      }
+  with
+  | Ok () -> Exit_code 0
+  | Error message -> report_error message
+
 let run_docs (_options : docs_options) =
   print_string (render_markdown command_docs);
   Exit_code 0
@@ -3231,6 +3471,13 @@ let commands =
     Command { doc = env_doc; parse = parse_env_args; run = run_env };
     Command { doc = repl_doc; parse = parse_repl_args; run = run_repl };
     Command { doc = install_doc; parse = parse_install_args; run = run_install };
+    Command
+      {
+        doc = release_artifacts_doc;
+        parse = parse_release_artifacts_args;
+        run = run_release_artifacts;
+      };
+    Command { doc = package_doc; parse = parse_package_args; run = run_package };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
     Command
       { doc = completion_doc; parse = parse_completion_args; run = run_completion };

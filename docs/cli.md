@@ -425,6 +425,47 @@ Examples:
 - `oasis install --prefix _stage hello greeting`
 - `oasis install --prefix /usr/local --destdir _pkg hello`
 
+## release-artifacts
+
+Render CLI docs, shell completions, and packaged install-tree payloads from the live binary.
+
+Usage:
+
+`oasis release-artifacts [--output-dir DIR]`
+
+Options:
+- `--output-dir DIR`: Write generated files under DIR instead of the current directory.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis release-artifacts`
+- `oasis release-artifacts --output-dir dist`
+
+## package
+
+Render opam, Homebrew, checksum, and release-asset metadata from canonical release facts.
+
+Usage:
+
+`oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]`
+
+Options:
+- `--output-dir DIR`: Write generated files under DIR instead of the current directory.
+- `--opam-output PATH`: Write the generated opam package metadata to PATH.
+- `--formula-output PATH`: Write the generated Homebrew formula to PATH.
+- `--checksums-output PATH`: Write SHA256SUMS-style checksum lines for generated release assets.
+- `--asset-index-output PATH`: Write a machine-readable release asset index with names, URLs, sizes, and checksums.
+- `--source-archive PATH`: Reuse an explicit source archive when rendering packaging metadata instead of rebuilding one.
+- `--source-archive-dir DIR`: Refresh the canonical source archive into DIR before rendering packaging metadata.
+- `--reuse-source-archive-dir DIR`: Reuse the canonical source archive already present in DIR without rebuilding it.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis package`
+- `oasis package --output-dir dist`
+- `oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json`
+- `oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS`
+
 ## docs
 
 Render markdown CLI reference directly from the live command table.

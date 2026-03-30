@@ -209,3 +209,9 @@
 - Watch-specific filesystem requirements belong in the same command metadata as help text and completions. If lock awareness lives in a watcher-side `match command_name` branch, the next root-level input drift is already scheduled.
 - A flat `Watch-root-files` list is not enough once files have different semantics. Showing `reload+rerun`, `reload-only`, and `rerun-only` roles turns watch behavior from folklore into something a user can verify at startup.
 - Packaging checksum drift is the tax on tracked-source changes, including plan and journal edits. The formula refresh is not downstream housekeeping; it is part of closing the loop on a change set that ships source archives.
+
+## 2026-03-29
+
+- Release maintenance got noticeably less brittle once `release/metadata.sh` stayed a flat shell-compatible fact file and the OCaml CLI learned to parse it directly instead of re-encoding those constants in a second language.
+- Packaging checksum workflows are only as honest as their source-archive input set. If archive generation is `git ls-files`-driven, newly added files do not exist for the release pipeline until they are staged, which is worth treating as an explicit policy choice rather than accidental magic.
+- Clean-checkout packaging tests need a deliberate story for in-progress untracked source files. Simulating a repo by copying only tracked paths is correct for release bytes, but local development tests still need a narrow escape hatch or new modules disappear from the fixture before they ever reach git.
