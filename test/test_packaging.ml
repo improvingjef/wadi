@@ -154,6 +154,52 @@ let cases =
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
               "retained-archive manifest generation should match the committed Homebrew formula"));
+    ( "reuses an existing source archive directory without rebuilding it",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-manifests-reuse-dir" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let repo_archive_script =
+              Filename.concat repo_root "scripts/build_release_archives.sh"
+            in
+            let archive_script =
+              Filename.concat workspace "scripts/build_release_archives.sh"
+            in
+            let manifest_script =
+              Filename.concat workspace "scripts/generate_packaging_manifests.sh"
+            in
+            let archive_dir = Filename.concat workspace "dist" in
+            let output_dir = Filename.concat workspace "out" in
+            let archived =
+              Process.run_capture ~cwd:repo_root repo_archive_script
+                [ "--source-only"; "--output-dir"; archive_dir ]
+            in
+            assert_int_equal 0 archived.status
+              "source archive generation should succeed before reuse";
+            Fs.write_file archive_script
+              "#!/bin/sh\n\
+               echo should-not-run-build-release-archives >&2\n\
+               exit 19\n";
+            chmod_plus_x archive_script;
+            let generated =
+              Process.run_capture ~cwd:workspace manifest_script
+                [
+                  "--output-dir";
+                  output_dir;
+                  "--reuse-source-archive-dir";
+                  archive_dir;
+                ]
+            in
+            assert_int_equal 0 generated.status
+              "packaging manifest generation should reuse an existing retained archive";
+            assert_string_not_contains
+              ~needle:"should-not-run-build-release-archives"
+              generated.output
+              "manifest generation should not rebuild the source archive when the retained copy already exists";
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
+              (Fs.read_file (Filename.concat workspace "Formula/oasis.rb"))
+              "reused retained-archive manifest generation should still match the committed Homebrew formula"));
     ( "can reuse an explicit source archive when generating packaging manifests",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -191,6 +237,71 @@ let cases =
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
               "explicit-archive manifest generation should match the committed Homebrew formula"));
+    ( "can emit flat release assets and checksums from the packaging generator",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let manifest_script =
+          Filename.concat repo_root "scripts/generate_packaging_manifests.sh"
+        in
+        let archive_script =
+          Filename.concat repo_root "scripts/build_release_archives.sh"
+        in
+        with_temp_dir "oasis-packaging-release-assets" (fun output_dir ->
+            let source_run =
+              Process.run_capture ~cwd:repo_root archive_script
+                [ "--source-only"; "--output-dir"; output_dir ]
+            in
+            assert_int_equal 0 source_run.status
+              "source archive generation should succeed before release-asset packaging";
+            let binary_run =
+              Process.run_capture ~cwd:repo_root
+                ~env:[ ("OASIS_BIN", oasis_bin ()) ]
+                archive_script
+                [
+                  "--binary-only";
+                  "--output-dir";
+                  output_dir;
+                  "--binary";
+                  oasis_bin ();
+                  "--os";
+                  "linux";
+                  "--arch";
+                  "x86_64";
+                ]
+            in
+            assert_int_equal 0 binary_run.status
+              "binary archive generation should succeed before release-asset packaging";
+            let generated =
+              Process.run_capture ~cwd:repo_root manifest_script
+                [
+                  "--output-dir";
+                  output_dir;
+                  "--reuse-source-archive-dir";
+                  output_dir;
+                  "--formula-output";
+                  Filename.concat output_dir "oasis.rb";
+                  "--checksums-output";
+                  Filename.concat output_dir "SHA256SUMS";
+                ]
+            in
+            assert_int_equal 0 generated.status
+              "packaging manifest generation should emit flat release assets";
+            assert_file_exists (Filename.concat output_dir "oasis.opam");
+            assert_file_exists (Filename.concat output_dir "oasis.rb");
+            assert_file_exists (Filename.concat output_dir "SHA256SUMS");
+            assert_string_equal
+              (Fs.read_file (Filename.concat output_dir "oasis.rb"))
+              (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
+              "flat release-asset manifest generation should match the committed Homebrew formula";
+            let checksums = Fs.read_file (Filename.concat output_dir "SHA256SUMS") in
+            assert_string_contains
+              ~needle:(Filename.concat output_dir "oasis-0.1.0-source.tar.gz")
+              checksums
+              "release checksum output should include the source archive";
+            assert_string_contains
+              ~needle:(Filename.concat output_dir "oasis-0.1.0-x86_64-linux.tar.gz")
+              checksums
+              "release checksum output should include downloaded binary archives"));
     ( "release-manifests refreshes a local source archive alongside packaging manifests",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -644,16 +755,20 @@ let cases =
           Fs.read_file
             (Filename.concat repo_root ".github/workflows/release.yml")
         in
-        assert_string_contains ~needle:". release/metadata.sh" workflow
-          "the release workflow should load the canonical release metadata";
         assert_string_contains
           ~needle:"./scripts/build_release_archives.sh --source-only --output-dir dist"
           workflow
           "the release workflow should publish a deterministic source archive";
         assert_string_contains
-          ~needle:"./scripts/render_homebrew_formula.sh"
+          ~needle:"./scripts/generate_packaging_manifests.sh"
           workflow
-          "the release workflow should render the Homebrew formula from the source archive";
+          "the release workflow should render packaging manifests through the shared generator";
+        assert_string_contains ~needle:"--reuse-source-archive-dir dist" workflow
+          "the release workflow should reuse the downloaded source archive through the packaging generator";
+        assert_string_contains ~needle:"--formula-output dist/oasis.rb" workflow
+          "the release workflow should emit a flat Homebrew formula asset for GitHub releases";
+        assert_string_contains ~needle:"--checksums-output dist/SHA256SUMS" workflow
+          "the release workflow should generate archive checksums through the shared packaging generator";
         assert_string_contains
           ~needle:"./scripts/update_homebrew_tap.sh"
           workflow
@@ -662,6 +777,8 @@ let cases =
           ~needle:"bash scripts/build_release_archives.sh"
           workflow
           "the release workflow should execute archive scripts directly instead of forcing bash";
+        assert_string_not_contains ~needle:"sha256sum dist/*.tar.gz" workflow
+          "the release workflow should not maintain a second checksum path outside the packaging generator";
         assert_string_contains
           ~needle:"repository: ${{ steps.metadata.outputs.tap_repo }}"
           workflow

@@ -104,14 +104,13 @@ jobs:
 
       - name: Render packaging manifests
         run: |
-          . release/metadata.sh
-          ./scripts/render_oasis_opam.sh > dist/oasis.opam
-          ./scripts/render_homebrew_formula.sh \
-            --source-archive "dist/$(oasis_release_source_archive_name)" \
-            > dist/oasis.rb
+          ./scripts/generate_packaging_manifests.sh \
+            --output-dir dist \
+            --reuse-source-archive-dir dist \
+            --formula-output dist/oasis.rb \
+            --checksums-output dist/SHA256SUMS
           diff -u oasis.opam dist/oasis.opam
           diff -u Formula/oasis.rb dist/oasis.rb
-          sha256sum dist/*.tar.gz > dist/SHA256SUMS
 
       - uses: softprops/action-gh-release@v2
         with:
