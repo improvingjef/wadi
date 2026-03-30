@@ -1,3 +1,9 @@
+type root_file = {
+  relative_path : string;
+  reload_policy : bool;
+  select_for_rerun : bool;
+}
+
 type options = {
   workspace_root : string;
   poll_ms : int;
@@ -8,12 +14,7 @@ type options = {
   command_args : string list;
   cli_include_globs : string list;
   cli_ignore_globs : string list;
-}
-
-type root_file = {
-  relative_path : string;
-  reload_policy : bool;
-  select_for_rerun : bool;
+  command_root_files : root_file list;
 }
 
 type compiled_options = {
@@ -36,8 +37,7 @@ let ignore_file_name = ".oasiswatchignore"
 
 let manifest_relative_path = Manifest.default_filename
 
-let lock_relative_path workspace_root =
-  Locker.default_lock_path workspace_root |> Filename.basename
+let lock_relative_path = Locker.default_lock_filename
 
 type policy = {
   include_globs_text : string list;
@@ -147,41 +147,28 @@ let ignore_root_file =
     select_for_rerun = false;
   }
 
-let command_uses_lock_file command_name command_args =
-  let has_lock_flag =
-    List.exists
-      (fun arg -> arg = "--locked" || arg = "--warn-locked")
-      command_args
-  in
-  match command_name with
-  | "doctor" -> true
-  | "build" | "install" -> has_lock_flag
-  | _ -> false
+let lock_root_file =
+  {
+    relative_path = lock_relative_path;
+    reload_policy = false;
+    select_for_rerun = true;
+  }
 
-let root_files workspace_root command_name command_args =
-  let base = [ manifest_root_file; ignore_root_file ] in
-  let extra =
-    if command_uses_lock_file command_name command_args then
-      [
-        {
-          relative_path = lock_relative_path workspace_root;
-          reload_policy = false;
-          select_for_rerun = true;
-        };
-      ]
-    else []
-  in
-  let all = base @ extra in
-  let seen = Hashtbl.create (List.length all) in
+let dedup_root_files root_files =
+  let seen = Hashtbl.create (List.length root_files) in
   List.filter
     (fun root_file ->
       if Hashtbl.mem seen root_file.relative_path then false
       else (
         Hashtbl.add seen root_file.relative_path ();
         true))
-    all
+    root_files
 
 let compile_options (options : options) =
+  let root_files =
+    dedup_root_files
+      (manifest_root_file :: ignore_root_file :: options.command_root_files)
+  in
   {
     workspace_root = options.workspace_root;
     poll_ms = options.poll_ms;
@@ -193,8 +180,7 @@ let compile_options (options : options) =
     executable_path = Fs.resolve_executable Sys.executable_name;
     cli_include_globs = options.cli_include_globs;
     cli_ignore_globs = options.cli_ignore_globs;
-    root_files =
-      root_files options.workspace_root options.command_name options.command_args;
+    root_files;
   }
 
 let parse_ignore_file_line line =
@@ -317,6 +303,20 @@ let render_policy policy =
 let render_root_files options =
   options.root_files
   |> List.map (fun root_file -> root_file.relative_path)
+  |> render_globs "<none>"
+
+let render_root_file_role root_file =
+  match (root_file.reload_policy, root_file.select_for_rerun) with
+  | true, true -> "reload+rerun"
+  | true, false -> "reload-only"
+  | false, true -> "rerun-only"
+  | false, false -> "ignored"
+
+let render_root_file_roles options =
+  options.root_files
+  |> List.map (fun root_file ->
+         Printf.sprintf "%s=%s" root_file.relative_path
+           (render_root_file_role root_file))
   |> render_globs "<none>"
 
 let policy_changed previous next =
@@ -454,6 +454,9 @@ let run options =
     (Printf.sprintf "Watch-config: %s" (render_policy state.policy));
   print_endline
     (Printf.sprintf "Watch-root-files: %s" (render_root_files options));
+  print_endline
+    (Printf.sprintf "Watch-root-file-roles: %s"
+       (render_root_file_roles options));
   let rec loop run_index state =
     let status = execute_run options run_index in
     let state =

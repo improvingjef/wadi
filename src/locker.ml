@@ -124,8 +124,10 @@ let create ~workspace_root workspace requested_targets =
       targets;
     }
 
+let default_lock_filename = "oasis.lock"
+
 let default_lock_path workspace_root =
-  Filename.concat workspace_root "oasis.lock"
+  Filename.concat workspace_root default_lock_filename
 
 let json_error path index message =
   Error (Printf.sprintf "%s:%d: %s" path index message)

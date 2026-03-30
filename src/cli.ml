@@ -233,6 +233,7 @@ type command_doc = {
   examples : string list;
   options : option_doc list;
   completion_words : string list;
+  watch_root_files : string list -> Watch.root_file list;
 }
 
 type command =
@@ -567,6 +568,15 @@ let completion_candidate_line ?hint value =
         ]
   | None -> String.concat "\t" [ "candidate"; sanitize_completion_field value ]
 
+let no_watch_root_files _ = []
+
+let lock_flag_watch_root_files args =
+  if List.exists (fun arg -> arg = "--locked" || arg = "--warn-locked") args then
+    [ Watch.lock_root_file ]
+  else []
+
+let always_watch_lock_root_file _ = [ Watch.lock_root_file ]
+
 let build_doc =
   {
     name = "build";
@@ -591,6 +601,7 @@ let build_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = lock_flag_watch_root_files;
   }
 
 let status_doc =
@@ -616,6 +627,7 @@ let status_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let doctor_doc =
@@ -643,6 +655,7 @@ let doctor_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = always_watch_lock_root_file;
   }
 
 let watch_doc =
@@ -673,6 +686,7 @@ let watch_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let init_doc =
@@ -701,6 +715,7 @@ let init_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let action_doc =
@@ -719,6 +734,7 @@ let action_doc =
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let ppx_doc =
@@ -747,6 +763,7 @@ let ppx_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let run_doc =
@@ -764,6 +781,7 @@ let run_doc =
       ];
     options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let test_doc =
@@ -781,6 +799,7 @@ let test_doc =
       ];
     options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let bench_doc =
@@ -809,6 +828,7 @@ let bench_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let clean_doc =
@@ -825,6 +845,7 @@ let clean_doc =
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let promote_doc =
@@ -842,6 +863,7 @@ let promote_doc =
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let graph_doc =
@@ -858,6 +880,7 @@ let graph_doc =
       ];
     options = [ workspace_option; profile_option; backend_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let deps_doc =
@@ -873,6 +896,7 @@ let deps_doc =
       ];
     options = [ workspace_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let lock_doc =
@@ -891,6 +915,7 @@ let lock_doc =
       ];
     options = [ workspace_option; output_option; stdout_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let vendor_doc =
@@ -920,6 +945,7 @@ let vendor_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let env_doc =
@@ -949,6 +975,7 @@ let env_doc =
         help_option;
       ];
     completion_words = [ "build"; "action"; "run"; "test"; "bench"; "install" ];
+    watch_root_files = no_watch_root_files;
   }
 
 let repl_doc =
@@ -977,6 +1004,7 @@ let repl_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let install_doc =
@@ -1006,6 +1034,7 @@ let install_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = lock_flag_watch_root_files;
   }
 
 let docs_doc =
@@ -1016,6 +1045,7 @@ let docs_doc =
     examples = [ "oasis docs" ];
     options = [ help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let completion_doc =
@@ -1026,6 +1056,7 @@ let completion_doc =
     examples = [ "oasis completion bash"; "oasis completion zsh"; "oasis completion fish" ];
     options = [ workspace_option; help_option ];
     completion_words = [ "bash"; "zsh"; "fish" ];
+    watch_root_files = no_watch_root_files;
   }
 
 let toolchain_doc =
@@ -1036,6 +1067,7 @@ let toolchain_doc =
     examples = [ "oasis toolchain" ];
     options = [ help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let explain_doc =
@@ -1063,6 +1095,7 @@ let explain_doc =
         help_option;
       ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let migrate_doc =
@@ -1081,6 +1114,7 @@ let migrate_doc =
     options =
       [ workspace_option; output_option; stdout_option; force_option; help_option ];
     completion_words = [];
+    watch_root_files = no_watch_root_files;
   }
 
 let render_usage docs =
@@ -2685,7 +2719,7 @@ let run_watch (options : watch_options) =
     if not (Fs.exists manifest_path) then
       report_error (Printf.sprintf "manifest not found: %s" manifest_path)
     else (
-      let start_watch command_name =
+      let start_watch command_name command_root_files =
         match
           Watch.run
             {
@@ -2698,6 +2732,7 @@ let run_watch (options : watch_options) =
               cli_ignore_globs = options.ignore_globs;
               command_name;
               command_args = options.command_args;
+              command_root_files;
             }
         with
         | Ok status -> Forward_status status
@@ -2712,7 +2747,7 @@ let run_watch (options : watch_options) =
           | None ->
               report_error
                 (Printf.sprintf "unknown subtool '%s' for watch" command_name)
-          | Some _ -> (
+          | Some doc -> (
               match watch_inner_workspace_dir options.command_args with
               | Some inner_workspace_dir ->
                   let inner_workspace_root =
@@ -2727,7 +2762,10 @@ let run_watch (options : watch_options) =
                          inner_workspace_root workspace_root)
                   else
                     start_watch command_name
-              | None -> start_watch command_name)))
+                      (doc.watch_root_files options.command_args)
+              | None ->
+                  start_watch command_name
+                    (doc.watch_root_files options.command_args))))
 
 let run_init (options : init_options) =
   match
@@ -2897,7 +2935,8 @@ let run_lock (options : lock_options) =
             let output_path =
               match options.output_path with
               | Some path -> path
-              | None -> Filename.concat options.workspace_dir "oasis.lock"
+              | None ->
+                  Filename.concat options.workspace_dir Locker.default_lock_filename
             in
             if Fs.is_directory output_path then
               report_error (Printf.sprintf "output path is a directory: %s" output_path)

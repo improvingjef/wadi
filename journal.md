@@ -203,3 +203,9 @@
 - `oasis.lock` is not just another source file and not quite a watch-policy file either. The watcher needed an explicit split between “reload policy when this changes” and “rerun the delegated subtool when this changes,” or lockfile edits would either disappear behind include globs or inherit the wrong semantics from `.oasiswatchignore`.
 - Narrow watch include globs are only trustworthy if command-critical root files bypass them on purpose. A user who says “watch `app/**`” still expects `oasis watch build --locked` or `oasis watch doctor` to notice that the root lock snapshot changed.
 - Printing the watched root-file set up front is worth the noise. Hidden watch inputs are exactly the kind of build-tool magic that turns a legitimate optimization into superstition.
+
+## 2026-03-29
+
+- Watch-specific filesystem requirements belong in the same command metadata as help text and completions. If lock awareness lives in a watcher-side `match command_name` branch, the next root-level input drift is already scheduled.
+- A flat `Watch-root-files` list is not enough once files have different semantics. Showing `reload+rerun`, `reload-only`, and `rerun-only` roles turns watch behavior from folklore into something a user can verify at startup.
+- Packaging checksum drift is the tax on tracked-source changes, including plan and journal edits. The formula refresh is not downstream housekeeping; it is part of closing the loop on a change set that ships source archives.

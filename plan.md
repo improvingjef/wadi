@@ -168,4 +168,6 @@
 159. [x] Decide which other root control files, especially `oasis.lock`, should bypass watch include-glob pruning so delegated subtools do not miss tool-relevant workspace edits.
 160. [x] Split `oasis watch` root-file handling into policy-reload versus rerun-trigger roles so files like `oasis.lock` can trigger delegated subtools without inheriting `.oasiswatchignore` semantics.
 161. [x] Surface the watched root-file set in `oasis watch` startup output and add black-box coverage for lock-aware `build`, `install`, and `doctor` reruns under narrow include globs.
-162. [ ] Drive watch root-file requirements from command metadata instead of hard-coded subtool-name checks so future workspace-root inputs stay aligned with CLI evolution.
+162. [x] Drive watch root-file requirements from command metadata instead of hard-coded subtool-name checks so future workspace-root inputs stay aligned with CLI evolution.
+163. [x] Surface watch root-file roles at startup so users can see which files reload watch policy versus only trigger delegated subtool reruns.
+164. [x] Add metadata-driven watch coverage that proves lock-aware commands opt into `oasis.lock` while ordinary builds keep the root-file set minimal.

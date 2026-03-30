@@ -241,6 +241,43 @@ include = ["app/**"]
             assert_string_contains ~needle:"lock validation failed against"
               watch.output
               "locked build reruns should validate the changed lock file")) );
+    ( "does not watch oasis.lock for an ordinary build",
+      (fun () ->
+        with_temp_dir "oasis-watch-build-unlocked" (fun workspace ->
+            write_demo_workspace
+              ~watch_block:{|
+[watch]
+include = ["app/**"]
+|}
+              workspace;
+            let watch =
+              run_oasis ~cwd:workspace
+                [
+                  "watch";
+                  "--poll-ms";
+                  "50";
+                  "--debounce-ms";
+                  "20";
+                  "--max-runs";
+                  "1";
+                  "build";
+                  "demo";
+                ]
+            in
+            assert_int_equal 0 watch.status
+              "watch should allow a non-locking build to run once successfully";
+            assert_string_contains
+              ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore"
+              watch.output
+              "ordinary builds should not add oasis.lock to the watched root-file set";
+            assert_string_not_contains
+              ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore, oasis.lock"
+              watch.output
+              "ordinary builds should not report oasis.lock as a watched root file";
+            assert_string_contains
+              ~needle:"Watch-root-file-roles: oasis.toml=reload+rerun, .oasiswatchignore=reload-only"
+              watch.output
+              "ordinary builds should report only manifest reload and ignore-file policy roles")) );
     ( "reruns install --warn-locked when oasis.lock changes outside included globs",
       (fun () ->
         with_temp_dir "oasis-watch-install-locked" (fun workspace ->
@@ -320,6 +357,10 @@ include = ["app/**"]
               ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore, oasis.lock"
               watch.output
               "watch should report lock-aware root files for doctor";
+            assert_string_contains
+              ~needle:"Watch-root-file-roles: oasis.toml=reload+rerun, .oasiswatchignore=reload-only, oasis.lock=rerun-only"
+              watch.output
+              "watch should explain which root files reload policy versus only trigger reruns";
             assert_string_contains ~needle:"Watch-run 2: doctor demo" watch.output
               "watch should rerun doctor when oasis.lock changes outside the include globs";
             assert_string_contains ~needle:"failed to read"
