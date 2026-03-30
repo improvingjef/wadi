@@ -12,6 +12,33 @@ type build_options = {
   lock_policy : lock_policy;
 }
 
+type status_options = {
+  workspace_dir : string;
+  targets : string list;
+  backend_request : Toolchain.backend_request;
+  profile : string option;
+  json : bool;
+}
+
+type doctor_options = {
+  workspace_dir : string;
+  targets : string list;
+  backend_request : Toolchain.backend_request;
+  profile : string option;
+  json : bool;
+  lock_policy : lock_policy;
+}
+
+type watch_options = {
+  workspace_dir : string;
+  poll_ms : int;
+  debounce_ms : int;
+  max_runs : int option;
+  keep_going : bool;
+  command_name : string option;
+  command_args : string list;
+}
+
 type init_options = {
   dir : string;
   member_path : string option;
@@ -355,6 +382,37 @@ let iterations_option =
     description = "Run each benchmark target COUNT measured times.";
   }
 
+let poll_ms_option =
+  {
+    usage = "--poll-ms COUNT";
+    flags = [ "--poll-ms" ];
+    description = "Poll the workspace for file changes every COUNT milliseconds.";
+  }
+
+let debounce_ms_option =
+  {
+    usage = "--debounce-ms COUNT";
+    flags = [ "--debounce-ms" ];
+    description =
+      "Wait COUNT milliseconds after the first detected change before rerunning the watched subtool.";
+  }
+
+let max_runs_option =
+  {
+    usage = "--max-runs COUNT";
+    flags = [ "--max-runs" ];
+    description =
+      "Exit after COUNT watched executions instead of running until interrupted.";
+  }
+
+let keep_going_option =
+  {
+    usage = "--keep-going";
+    flags = [ "--keep-going" ];
+    description =
+      "Keep watching after a failed run instead of exiting with the first non-zero status.";
+  }
+
 let dir_option =
   {
     usage = "--dir DIR";
@@ -512,6 +570,84 @@ let build_doc =
         locked_option;
         warn_locked_option;
         verbose_option;
+        help_option;
+      ];
+    completion_words = [];
+  }
+
+let status_doc =
+  {
+    name = "status";
+    summary =
+      "Summarize which targets are rebuilt, regenerated, or reused without compiling.";
+    signature =
+      "oasis status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]";
+    examples =
+      [
+        "oasis status";
+        "oasis status hello";
+        "oasis status --backend bytecode hello";
+        "oasis status --json --profile release";
+      ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        json_option;
+        help_option;
+      ];
+    completion_words = [];
+  }
+
+let doctor_doc =
+  {
+    name = "doctor";
+    summary =
+      "Validate workspace configuration, toolchain health, package resolution, and lock drift.";
+    signature =
+      "oasis doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]";
+    examples =
+      [
+        "oasis doctor";
+        "oasis doctor hello";
+        "oasis doctor --locked hello";
+        "oasis doctor --json --backend bytecode";
+      ];
+    options =
+      [
+        workspace_option;
+        profile_option;
+        backend_option;
+        json_option;
+        locked_option;
+        warn_locked_option;
+        help_option;
+      ];
+    completion_words = [];
+  }
+
+let watch_doc =
+  {
+    name = "watch";
+    summary =
+      "Poll the workspace and rerun a selected oasis subtool whenever inputs change.";
+    signature =
+      "oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] SUBTOOL [ARG ...]";
+    examples =
+      [
+        "oasis watch build";
+        "oasis watch test unit";
+        "oasis watch --keep-going --max-runs 2 build hello";
+        "oasis watch run demo -- --port 8080";
+      ];
+    options =
+      [
+        workspace_option;
+        poll_ms_option;
+        debounce_ms_option;
+        max_runs_option;
+        keep_going_option;
         help_option;
       ];
     completion_words = [];
@@ -943,6 +1079,9 @@ let command_docs =
   [
     init_doc;
     build_doc;
+    status_doc;
+    doctor_doc;
+    watch_doc;
     action_doc;
     ppx_doc;
     graph_doc;
@@ -1274,6 +1413,75 @@ let parse_build_args (args : string list) : (build_options, string) result =
     }
     args
 
+let parse_status_args (args : string list) : (status_options, string) result =
+  let* default_backend_request = default_backend_request () in
+  let rec loop (options : status_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
+    | "--json" :: rest -> loop { options with json = true } rest
+    | "--help" :: _ -> Error (command_usage status_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop
+    {
+      workspace_dir = ".";
+      targets = [];
+      backend_request = default_backend_request;
+      profile = None;
+      json = false;
+    }
+    args
+
+let parse_doctor_args (args : string list) : (doctor_options, string) result =
+  let* default_backend_request = default_backend_request () in
+  let rec loop (options : doctor_options) = function
+    | [] -> Ok { options with targets = List.rev options.targets }
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest ->
+        loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] ->
+        Error "--backend requires auto, native, or bytecode"
+    | "--json" :: rest -> loop { options with json = true } rest
+    | "--locked" :: rest ->
+        let* lock_policy = choose_lock_policy options.lock_policy Require_locked in
+        loop { options with lock_policy } rest
+    | "--warn-locked" :: rest ->
+        let* lock_policy = choose_lock_policy options.lock_policy Warn_locked in
+        loop { options with lock_policy } rest
+    | "--help" :: _ -> Error (command_usage doctor_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | target :: rest -> loop { options with targets = target :: options.targets } rest
+  in
+  loop
+    {
+      workspace_dir = ".";
+      targets = [];
+      backend_request = default_backend_request;
+      profile = None;
+      json = false;
+      lock_policy = Ignore_lock;
+    }
+    args
+
 let parse_init_args (args : string list) : (init_options, string) result =
   let rec loop (options : init_options) = function
     | [] -> Ok options
@@ -1408,9 +1616,13 @@ let parse_count flag value =
   with
   | Failure _ -> Error (Printf.sprintf "%s requires an integer" flag)
 
+let parse_positive_count flag value =
+  let* parsed = parse_count flag value in
+  if parsed = 0 then Error (Printf.sprintf "%s requires a positive integer" flag)
+  else Ok parsed
+
 let parse_iterations value =
-  let* parsed = parse_count "--iterations" value in
-  if parsed = 0 then Error "--iterations requires a positive integer" else Ok parsed
+  parse_positive_count "--iterations" value
 
 let parse_bench_args (args : string list) : (bench_options, string) result =
   let* default_backend_request = default_backend_request () in
@@ -1455,6 +1667,49 @@ let parse_bench_args (args : string list) : (bench_options, string) result =
       iterations = None;
     }
     args
+
+let parse_watch_args (args : string list) : (watch_options, string) result =
+  let rec loop (options : watch_options) = function
+    | [] -> Ok options
+    | "--workspace" :: dir :: rest ->
+        loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--poll-ms" :: value :: rest ->
+        let* poll_ms = parse_positive_count "--poll-ms" value in
+        loop { options with poll_ms } rest
+    | "--poll-ms" :: [] -> Error "--poll-ms requires an integer"
+    | "--debounce-ms" :: value :: rest ->
+        let* debounce_ms = parse_count "--debounce-ms" value in
+        loop { options with debounce_ms } rest
+    | "--debounce-ms" :: [] -> Error "--debounce-ms requires an integer"
+    | "--max-runs" :: value :: rest ->
+        let* max_runs = parse_positive_count "--max-runs" value in
+        loop { options with max_runs = Some max_runs } rest
+    | "--max-runs" :: [] -> Error "--max-runs requires an integer"
+    | "--keep-going" :: rest ->
+        loop { options with keep_going = true } rest
+    | "--help" :: _ -> Error (command_usage watch_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | command_name :: rest ->
+        Ok { options with command_name = Some command_name; command_args = rest }
+  in
+  let* options =
+    loop
+      {
+        workspace_dir = ".";
+        poll_ms = 100;
+        debounce_ms = 100;
+        max_runs = None;
+        keep_going = false;
+        command_name = None;
+        command_args = [];
+      }
+      args
+  in
+  match options.command_name with
+  | Some _ -> Ok options
+  | None -> Error "watch requires a subtool name"
 
 let parse_clean_args (args : string list) : (clean_options, string) result =
   let rec loop (options : clean_options) = function
@@ -2022,7 +2277,8 @@ let find_command_doc name =
 let option_expects_value = function
   | "--workspace" | "--profile" | "--backend" | "--prefix" | "--destdir"
   | "--output" | "--script" | "--warmup" | "--iterations" | "--dir"
-  | "--name" | "--member" | "--library" | "--executable" | "--source" ->
+  | "--name" | "--member" | "--library" | "--executable" | "--source"
+  | "--poll-ms" | "--debounce-ms" | "--max-runs" ->
       true
   | _ -> false
 
@@ -2048,6 +2304,11 @@ let positional_completion_candidates ?workspace command_name rest =
   match workspace with
   | None -> (
       match command_name with
+      | "watch" when positional_argument_count rest = 0 ->
+          List.filter_map
+            (fun (doc : command_doc) ->
+              if doc.name = "watch" then None else Some (candidate doc.name))
+            command_docs
       | "completion" when positional_argument_count rest = 0 ->
           List.map (fun word -> candidate word) completion_doc.completion_words
       | "env" when positional_argument_count rest = 0 ->
@@ -2055,9 +2316,14 @@ let positional_completion_candidates ?workspace command_name rest =
       | _ -> [] )
   | Some workspace -> (
       match command_name with
-      | "build" | "action" | "clean" | "promote" | "graph" | "deps" | "lock"
-      | "explain" ->
+      | "build" | "status" | "doctor" | "action" | "clean" | "promote"
+      | "graph" | "deps" | "lock" | "explain" ->
           List.map target_candidate workspace.Manifest.targets
+      | "watch" when positional_argument_count rest = 0 ->
+          List.filter_map
+            (fun (doc : command_doc) ->
+              if doc.name = "watch" then None else Some (candidate doc.name))
+            command_docs
       | "ppx" ->
           if positional_argument_count rest = 0 then
             List.map target_candidate workspace.Manifest.targets
@@ -2263,6 +2529,80 @@ let run_build (options : build_options) =
           | Ok _ -> Exit_code 0
           | Error message -> report_error message)
       | Error message -> report_error message)
+
+let run_status_command (options : status_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Status.report ~workspace_root:options.workspace_dir
+          ~requested_targets:options.targets
+          ~backend_request:options.backend_request ?profile:options.profile
+          workspace
+      with
+      | Ok report ->
+          print_string
+            (if options.json then Status.render_json_report report
+             else Status.render_report report);
+          Exit_code 0
+      | Error message -> report_error message)
+
+let doctor_lock_policy = function
+  | Ignore_lock -> Doctor.Warn_locked
+  | Warn_locked -> Doctor.Warn_locked
+  | Require_locked -> Doctor.Require_locked
+
+let run_doctor (options : doctor_options) =
+  match load_workspace options.workspace_dir with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      match
+        Doctor.report ~workspace_root:options.workspace_dir
+          ~requested_targets:options.targets
+          ~backend_request:options.backend_request ?profile:options.profile
+          ~lock_policy:(doctor_lock_policy options.lock_policy)
+          workspace
+      with
+      | Ok report ->
+          print_string
+            (if options.json then Doctor.render_json_report report
+             else Doctor.render_report report);
+          Exit_code (if Doctor.has_failures report then 1 else 0)
+      | Error message -> report_error message)
+
+let run_watch (options : watch_options) =
+  let workspace_root = Fs.realpath options.workspace_dir in
+  if not (Fs.is_directory workspace_root) then
+    report_error
+      (Printf.sprintf "workspace directory does not exist: %s" options.workspace_dir)
+  else
+    let manifest_path = Filename.concat workspace_root Manifest.default_filename in
+    if not (Fs.exists manifest_path) then
+      report_error (Printf.sprintf "manifest not found: %s" manifest_path)
+    else
+      match options.command_name with
+      | None -> report_error "watch requires a subtool name"
+      | Some "watch" ->
+          report_error "watch cannot watch itself; choose another subtool"
+      | Some command_name -> (
+          match find_command_doc command_name with
+          | None ->
+              report_error
+                (Printf.sprintf "unknown subtool '%s' for watch" command_name)
+          | Some _ ->
+              let status =
+                Watch.run
+                  {
+                    Watch.workspace_root = workspace_root;
+                    poll_ms = options.poll_ms;
+                    debounce_ms = options.debounce_ms;
+                    max_runs = options.max_runs;
+                    keep_going = options.keep_going;
+                    command_name;
+                    command_args = options.command_args;
+                  }
+              in
+              Forward_status status)
 
 let run_init (options : init_options) =
   match
@@ -2709,6 +3049,10 @@ let commands =
   [
     Command { doc = init_doc; parse = parse_init_args; run = run_init };
     Command { doc = build_doc; parse = parse_build_args; run = run_build };
+    Command
+      { doc = status_doc; parse = parse_status_args; run = run_status_command };
+    Command { doc = doctor_doc; parse = parse_doctor_args; run = run_doctor };
+    Command { doc = watch_doc; parse = parse_watch_args; run = run_watch };
     Command { doc = action_doc; parse = parse_action_args; run = run_action_command };
     Command { doc = ppx_doc; parse = parse_ppx_args; run = run_ppx };
     Command { doc = graph_doc; parse = parse_graph_args; run = run_graph };

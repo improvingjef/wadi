@@ -13,12 +13,16 @@ exit codes rather than hidden global state.
 
 - `oasis build`: compile libraries, executables, and tests into predictable
   artifact roots.
+- `oasis status`: summarize which targets are currently rebuilt, regenerated,
+  or reused without compiling.
 - `oasis clean`: remove the whole workspace artifact tree or just the requested
   targets.
 - `oasis graph`: explain target and module dependency order.
 - `oasis explain`: show compiler invocations, include paths, and why a target
   was rebuilt. Persist a machine-readable `.oasis-explain.json` sibling for
   editors and CI.
+- `oasis watch`: poll the workspace and rerun a selected subtool when files
+  change, without baking watch mode into every other command.
 
 ### Execution
 
@@ -55,6 +59,8 @@ exit codes rather than hidden global state.
 
 - `oasis toolchain`: discover `ocamlc`, `ocamlopt`, standard libraries, and
   platform quirks behind one portable driver.
+- `oasis doctor`: validate manifest, target graph, toolchain, package
+  resolution, and lock drift in one checklist.
 - `oasis env`: print the environment a subtool would run under.
 - `oasis repl`: launch a workspace-aware OCaml toplevel.
 
@@ -75,6 +81,8 @@ exit codes rather than hidden global state.
 - `dune clean` maps to `oasis clean`.
 - `dune describe`, `dune rules`, and parts of `dune diagnostics` map to
   `oasis graph` and `oasis explain`.
+- `dune build -w`, `dune runtest -w`, and similar edit-run loops map to
+  `oasis watch`.
 - `dune external-lib-deps` maps to `oasis deps`.
 - `dune install` maps to `oasis install`.
 - `dune subst`, `dune promote`, and generated-file workflows map to

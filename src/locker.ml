@@ -504,7 +504,11 @@ let validate_current ~workspace_root workspace requested_targets =
   else
     let* snapshot =
       load_snapshot lock_path |> Result.map_error (fun message ->
-          Printf.sprintf "failed to read %s\n%s" lock_path message)
+          render_validation_error lock_path
+            [
+              "failed to read " ^ lock_path;
+              String.trim message;
+            ])
     in
     let* current = create ~workspace_root workspace requested_targets in
     let differences = ref [] in

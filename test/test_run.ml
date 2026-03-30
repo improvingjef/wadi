@@ -406,6 +406,15 @@ actions = ["generate"]
               ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the build command";
             assert_string_contains
+              ~needle:"oasis status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]"
+              run.output "top-level usage should include the status command";
+            assert_string_contains
+              ~needle:"oasis doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]"
+              run.output "top-level usage should include the doctor command";
+            assert_string_contains
+              ~needle:"oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] SUBTOOL [ARG ...]"
+              run.output "top-level usage should include the watch command";
+            assert_string_contains
               ~needle:"oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]"
               run.output "top-level usage should include the action command";
             assert_string_contains
@@ -494,6 +503,12 @@ actions = ["generate"]
               "docs output should start with the markdown title";
             assert_string_contains ~needle:"## init" docs.output
               "docs output should include the init command";
+            assert_string_contains ~needle:"## status" docs.output
+              "docs output should include the status command";
+            assert_string_contains ~needle:"## doctor" docs.output
+              "docs output should include the doctor command";
+            assert_string_contains ~needle:"## watch" docs.output
+              "docs output should include the watch command";
             assert_string_contains ~needle:"## graph" docs.output
               "docs output should include the graph command";
             assert_string_contains ~needle:"## action" docs.output
@@ -556,6 +571,14 @@ actions = ["generate"]
               ~needle:"- `--stdout`: Print the generated output instead of writing a file."
               docs.output
               "docs output should include the migrate stdout description";
+            assert_string_contains
+              ~needle:"- `--poll-ms COUNT`: Poll the workspace for file changes every COUNT milliseconds."
+              docs.output
+              "docs output should include watch poll interval documentation";
+            assert_string_contains
+              ~needle:"- `--keep-going`: Keep watching after a failed run instead of exiting with the first non-zero status."
+              docs.output
+              "docs output should include watch failure handling documentation";
             assert_string_contains
               ~needle:"- `oasis env action core`"
               docs.output

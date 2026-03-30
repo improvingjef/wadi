@@ -171,3 +171,10 @@
 - `--source-archive PATH` was only half-finished until checksum and asset-index generation respected archives that live outside `OUTPUT_DIR`. Reuse knobs that silently disappear from downstream metadata are just another flavor of build-tool dishonesty.
 - Publishing machine-readable release metadata is only useful if local maintenance paths exercise it too. Wiring `release-assets.json` through `make release-manifests` and `cut_release` keeps the release workflow from becoming a one-off branch of logic that nobody runs until tag day.
 - The Homebrew formula checksum remains a checksum of the whole tracked source tree. Any tracked edit that lands before a packaging refresh, including plan or journal updates, is enough to invalidate the formula and should be treated as normal packaging drift rather than a surprising failure mode.
+
+## 2026-03-29
+
+- `oasis status` only became worth adding once it reused `Builder.explain_current` instead of inventing a second planner. A summary command is trustworthy when it is just another renderer over the same build facts.
+- A `doctor` command is most useful when it degrades lock issues to warnings by default but can still turn them fatal on demand. Diagnosis and enforcement are the same data with different exit semantics.
+- Portable watch mode does not need platform-specific filesystem APIs to be useful. A polling snapshot is good enough as long as it ignores build artifacts, preserves child exit semantics, and can keep going after failures when the user asks.
+- The packaging tests were right to fail as soon as the command table changed. If a single new subtool invalidates the CLI docs and Homebrew checksum, that is evidence that generated release assets are part of the feature surface, not downstream chores.

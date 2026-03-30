@@ -50,6 +50,72 @@ Examples:
 - `oasis build --locked hello`
 - `oasis build --workspace examples/hello --profile release --verbose`
 
+## status
+
+Summarize which targets are rebuilt, regenerated, or reused without compiling.
+
+Usage:
+
+`oasis status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--json`: Print machine-readable JSON output instead of the text report.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis status`
+- `oasis status hello`
+- `oasis status --backend bytecode hello`
+- `oasis status --json --profile release`
+
+## doctor
+
+Validate workspace configuration, toolchain health, package resolution, and lock drift.
+
+Usage:
+
+`oasis doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--json`: Print machine-readable JSON output instead of the text report.
+- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
+- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis doctor`
+- `oasis doctor hello`
+- `oasis doctor --locked hello`
+- `oasis doctor --json --backend bytecode`
+
+## watch
+
+Poll the workspace and rerun a selected oasis subtool whenever inputs change.
+
+Usage:
+
+`oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] SUBTOOL [ARG ...]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--poll-ms COUNT`: Poll the workspace for file changes every COUNT milliseconds.
+- `--debounce-ms COUNT`: Wait COUNT milliseconds after the first detected change before rerunning the watched subtool.
+- `--max-runs COUNT`: Exit after COUNT watched executions instead of running until interrupted.
+- `--keep-going`: Keep watching after a failed run instead of exiting with the first non-zero status.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis watch build`
+- `oasis watch test unit`
+- `oasis watch --keep-going --max-runs 2 build hello`
+- `oasis watch run demo -- --port 8080`
+
 ## action
 
 Run declared generated-file actions for selected targets without compiling or linking.

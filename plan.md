@@ -153,3 +153,9 @@
 144. [x] Emit a machine-readable release asset index from the canonical packaging generator so downstream automation can discover filenames, URLs, and checksums without scraping workflow YAML or GitHub release pages.
 145. [x] Include explicit `--source-archive` inputs in generated checksum and asset-index metadata so packaging flows stay correct even when release archives live outside the primary output directory.
 146. [x] Publish and locally refresh `release-assets.json` from `make release-manifests`, `cut_release`, and the GitHub release workflow so the machine-readable release metadata path stays exercised end to end.
+147. [x] Implement `oasis status` so users can see current rebuilt/regenerated/reused target state across a workspace without compiling.
+148. [x] Implement `oasis doctor` so manifest, graph, toolchain, package, and lock health can be checked in one command with machine-readable output.
+149. [x] Implement `oasis watch` as a portable polling subtool so edit-run loops stop being bespoke shell glue around `oasis build`, `run`, or `test`.
+150. [ ] Delegate subtool-aware completion through `oasis watch` so `oasis watch build <TAB>` and similar workflows stay as discoverable as the underlying command.
+151. [ ] Add configurable ignore/include globs to `oasis watch` so large repositories can trim noisy non-input trees without editing the hard-coded watch roots.
+152. [ ] Teach `oasis doctor` or a sibling maintenance subtool to report generated-asset drift for `docs/cli.md`, packaged completions, and release metadata before packaging tests fail.
