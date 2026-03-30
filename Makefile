@@ -23,7 +23,7 @@ BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
 BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.generated.mk
 
-.PHONY: all test clean bootstrap-smoke release-artifacts release-manifests sync-generated release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
+.PHONY: all test fuzz clean bootstrap-smoke release-artifacts release-manifests sync-generated release-cut update-homebrew-tap benchmark-bootstrap refresh-bootstrap-seed-metadata FORCE
 
 define REFRESH_BOOTSTRAP_SEED_METADATA
 set -eu; \
@@ -64,6 +64,18 @@ bootstrap-smoke:
 
 test: bootstrap-smoke $(BIN_DIR)/wadi $(BIN_DIR)/test_runner
 	WADI_BIN=$(abspath $(BIN_DIR)/wadi) $(BIN_DIR)/test_runner
+
+FUZZ_TARGETS := $(BIN_DIR)/fuzz_manifest $(BIN_DIR)/fuzz_paths $(BIN_DIR)/fuzz_cli
+LIB_OBJS := $(patsubst %,$(OBJ_DIR)/%.cmx,string_util fs process toolchain manifest explain layout builder actioner cleaner promoter installer deps ppx_tool env_report graph vendor init locker migrate repl release_metadata release_artifacts packager bootstrap bench maintenance watch doctor status)
+
+$(BIN_DIR)/fuzz_%: fuzz/fuzz_%.ml $(LIB_OBJS) | $(BIN_DIR)
+	$(OCAMLFIND) $(OCAMLOPT) -package unix,crowbar -linkpkg $(OCAMLFLAGS) -I $(OBJ_DIR) $(LIB_OBJS) $< -o $@
+
+fuzz: $(FUZZ_TARGETS)
+	@echo "Running fuzzers in quickcheck mode..."
+	$(BIN_DIR)/fuzz_manifest
+	$(BIN_DIR)/fuzz_paths
+	WADI_BIN=$(abspath $(BIN_DIR)/wadi) $(BIN_DIR)/fuzz_cli
 
 release-artifacts:
 	./scripts/generate_release_artifacts.sh

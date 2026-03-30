@@ -1,0 +1,25 @@
+# Edge cases for the parser
+workspace = "edge\"cases"
+version = 1
+
+# Escaped strings
+[library.lib]
+dir = "src"
+modules = ["mod_with_underscore"]
+env = ["KEY=value with spaces", "EMPTY=", "MULTI=a=b=c"]
+compile_flags = ["-w", "-32", "-w", "+a-4-40-41-42-44-45-48-58-66-67-70"]
+sandbox = "workspace"
+
+# Duplicate deps should be caught
+[executable.app]
+dir = "bin"
+main = "main"
+deps = ["lib"]
+
+# Empty arrays
+[test.empty]
+dir = "test"
+main = "test_empty"
+deps = []
+packages = []
+compile_flags = []
