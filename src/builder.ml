@@ -25,6 +25,7 @@ type built_library_output = {
   out_dir : string;
   fingerprint : string;
   packages : string list;
+  transitive_include_dirs : string list;
 }
 
 type source_descriptor = {
@@ -1670,9 +1671,11 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
       library.name
   in
   let dependency_include_dirs =
-    List.map
-      (fun (output : built_library_output) -> output.out_dir)
-      dependency_outputs
+    String_util.dedup_preserve
+      (List.concat_map
+         (fun (output : built_library_output) ->
+           output.out_dir :: output.transitive_include_dirs)
+         dependency_outputs)
   in
   let include_dirs = out_dir :: dependency_include_dirs in
   let module_order_sources = List.concat_map prepared_source_files prepared_sources in
@@ -1789,6 +1792,15 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
     | Toolchain.Native, _ :: _ -> [ static_archive_path description.archive ]
     | Toolchain.Native, [] | Toolchain.Bytecode, _ -> [])
   in
+  let transitive_dep_dirs =
+    String_util.dedup_preserve
+      (List.concat_map
+         (fun dep_name ->
+           match Hashtbl.find_opt library_outputs dep_name with
+           | Some output -> output.out_dir :: output.transitive_include_dirs
+           | None -> [])
+         library.Manifest.deps)
+  in
   prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report
@@ -1799,6 +1811,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
         out_dir = description.out_dir;
         fingerprint = description.fingerprint;
         packages = description.effective_packages;
+        transitive_include_dirs = transitive_dep_dirs;
       };
     print_endline
       (Printf.sprintf
@@ -1838,6 +1851,7 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path
         out_dir = description.out_dir;
         fingerprint = description.fingerprint;
         packages = description.effective_packages;
+        transitive_include_dirs = transitive_dep_dirs;
       };
     print_endline
       (Printf.sprintf "Built library %s -> %s" display_name description.archive);
@@ -1970,11 +1984,15 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
     | Test_kind -> Layout.test_binary ~profile workspace_root runnable.name
   in
   let dependency_include_dirs =
-    List.map
-      (fun (output : built_library_output) -> output.out_dir)
-      dependency_outputs
+    String_util.dedup_preserve
+      (List.concat_map
+         (fun (output : built_library_output) ->
+           output.out_dir :: output.transitive_include_dirs)
+         dependency_outputs)
   in
-  let include_dirs = out_dir :: dependency_include_dirs in
+  (* Library include dirs come first so wrapped library wrapper modules
+     are found even when the executable main module shares the same name. *)
+  let include_dirs = dependency_include_dirs @ [ out_dir ] in
   let module_order_sources =
     List.concat_map prepared_source_files module_prepared_sources
   in
@@ -2242,12 +2260,22 @@ let explain_current ~workspace_root ?(requested_targets = [])
             ~verbose:false ~manifest_path ~backend_request ~backend
             ~compiler_version ~profile workspace library library_outputs
         in
+        let plan_dep_include_dirs =
+          String_util.dedup_preserve
+            (List.concat_map
+               (fun dep_name ->
+                 match Hashtbl.find_opt library_outputs dep_name with
+                 | Some output -> output.out_dir :: output.transitive_include_dirs
+                 | None -> [])
+               library.Manifest.deps)
+        in
         Hashtbl.replace library_outputs library.name
           {
             archive = description.archive;
             out_dir = description.out_dir;
             fingerprint = description.fingerprint;
             packages = description.effective_packages;
+            transitive_include_dirs = plan_dep_include_dirs;
           };
         Hashtbl.replace reports library.name
           {

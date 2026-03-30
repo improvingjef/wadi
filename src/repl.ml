@@ -172,12 +172,22 @@ let target_plan ~workspace_root ~verbose ~materialize_targets ?profile workspace
             ~backend ~compiler_version ~profile workspace library
             library_outputs
         in
+        let repl_dep_dirs =
+          String_util.dedup_preserve
+            (List.concat_map
+               (fun dep_name ->
+                 match Hashtbl.find_opt library_outputs dep_name with
+                 | Some output -> output.out_dir :: output.transitive_include_dirs
+                 | None -> [])
+               library.Manifest.deps)
+        in
         Hashtbl.replace library_outputs library.name
           {
             Builder.archive = description.archive;
             out_dir = description.out_dir;
             fingerprint = description.fingerprint;
             packages = description.effective_packages;
+            transitive_include_dirs = repl_dep_dirs;
           };
         if library.name = requested_name then
           let closure =
