@@ -104,6 +104,7 @@ type runnable_description = {
   include_dirs : string list;
   archive_files : string list;
   pipeline : resolved_pipeline;
+  stem_prefix : string;
 }
 
 let ( let* ) = Result.bind
@@ -1054,18 +1055,19 @@ let implementation_output_paths backend out_dir stem =
       ]
   | Toolchain.Bytecode -> [ Filename.concat out_dir (stem ^ ".cmo") ]
 
-let expected_prepared_source_outputs backend out_dir
+let expected_prepared_source_outputs ?(stem_prefix = "") backend out_dir
     (source : prepared_source) =
-  let cmi = Filename.concat out_dir (source.source.stem ^ ".cmi") in
+  let cmi = Filename.concat out_dir (stem_prefix ^ source.source.stem ^ ".cmi") in
   if source.source.has_ml then
-    cmi :: implementation_output_paths backend out_dir source.source.stem
+    cmi :: implementation_output_paths backend out_dir (stem_prefix ^ source.source.stem)
   else [ cmi ]
 
-let prepared_source_object_path backend out_dir (source : prepared_source) =
+let prepared_source_object_path ?(stem_prefix = "") backend out_dir
+    (source : prepared_source) =
   if source.source.has_ml then
     Some
       (Filename.concat out_dir
-         (source.source.stem ^ Toolchain.object_extension backend))
+         (stem_prefix ^ source.source.stem ^ Toolchain.object_extension backend))
   else None
 
 let ordered_prepared_sources source_table ordered_stems =
@@ -1106,22 +1108,24 @@ let ppx_args ~workspace_root (ppx_tools : Manifest.ppx_tool list) =
 let include_args include_dirs =
   List.concat_map (fun dir -> [ "-I"; dir ]) include_dirs
 
-let interface_compile_args ~workspace_root ~out_dir ~include_dirs ~compile_flags
-    ~(ppx_tools : Manifest.ppx_tool list) source mli_compile_path =
+let interface_compile_args ?(stem_prefix = "") ~workspace_root ~out_dir
+    ~include_dirs ~compile_flags ~(ppx_tools : Manifest.ppx_tool list) source
+    mli_compile_path =
   compile_flags @ ppx_args ~workspace_root ppx_tools
   @ [ "-c" ]
   @ include_args include_dirs
-  @ [ "-o"; Filename.concat out_dir (source.source.stem ^ ".cmi"); mli_compile_path ]
+  @ [ "-o"; Filename.concat out_dir (stem_prefix ^ source.source.stem ^ ".cmi"); mli_compile_path ]
 
-let implementation_compile_args ~workspace_root ~backend ~out_dir ~include_dirs
-    ~compile_flags ~(ppx_tools : Manifest.ppx_tool list) source ml_compile_path =
+let implementation_compile_args ?(stem_prefix = "") ~workspace_root ~backend
+    ~out_dir ~include_dirs ~compile_flags
+    ~(ppx_tools : Manifest.ppx_tool list) source ml_compile_path =
   compile_flags @ ppx_args ~workspace_root ppx_tools
   @ [ "-c" ]
   @ include_args include_dirs
   @
   [
     "-o";
-    Filename.concat out_dir (source.source.stem ^ Toolchain.object_extension backend);
+    Filename.concat out_dir (stem_prefix ^ source.source.stem ^ Toolchain.object_extension backend);
     ml_compile_path;
   ]
 
@@ -1158,8 +1162,8 @@ let dry_run_module_order_command ~session ~env ~package_resolution
        so declared module order is shown"
   else render_module_order_command ~session ~env ~package_resolution source_files
 
-let render_compile_commands ~session ~workspace_root ~backend ~out_dir
-    ~include_dirs ~package_resolution ~compile_flags
+let render_compile_commands ?(stem_prefix = "") ~session ~workspace_root
+    ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
     ~(ppx_tools : Manifest.ppx_tool list) ~env source_table ordered_stems =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
@@ -1177,8 +1181,9 @@ let render_compile_commands ~session ~workspace_root ~backend ~out_dir
           | Some mli_compile_path ->
               let* invocation =
                 Toolchain.compiler_invocation ~session backend package_resolution
-                  (interface_compile_args ~workspace_root ~out_dir ~include_dirs
-                     ~compile_flags ~ppx_tools source mli_compile_path)
+                  (interface_compile_args ~stem_prefix ~workspace_root ~out_dir
+                     ~include_dirs ~compile_flags ~ppx_tools source
+                     mli_compile_path)
               in
               Ok
                 [
@@ -1191,9 +1196,9 @@ let render_compile_commands ~session ~workspace_root ~backend ~out_dir
         | Some ml_compile_path ->
             let* invocation =
               Toolchain.compiler_invocation ~session backend package_resolution
-                (implementation_compile_args ~workspace_root ~backend ~out_dir
-                   ~include_dirs ~compile_flags ~ppx_tools source
-                   ml_compile_path)
+                (implementation_compile_args ~stem_prefix ~workspace_root
+                   ~backend ~out_dir ~include_dirs ~compile_flags ~ppx_tools
+                   source ml_compile_path)
             in
             loop
               (Printf.sprintf "compile %s.ml: %s" source.source.stem
@@ -1204,9 +1209,8 @@ let render_compile_commands ~session ~workspace_root ~backend ~out_dir
   in
   loop [] ordered_stems
 
-let compile_module ~session ~workspace_root ~verbose ~backend ~out_dir
-    ~include_dirs
-    ~package_resolution ~compile_flags
+let compile_module ?(stem_prefix = "") ~session ~workspace_root ~verbose
+    ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
     ~(ppx_tools : Manifest.ppx_tool list) ~env source =
   let* () =
     match source.mli_compile_path with
@@ -1214,8 +1218,8 @@ let compile_module ~session ~workspace_root ~verbose ~backend ~out_dir
         let* _ =
           Toolchain.ensure_success_compiler ~session ~env ~verbose backend
             package_resolution
-            (interface_compile_args ~workspace_root ~out_dir ~include_dirs
-               ~compile_flags ~ppx_tools source mli_compile_path)
+            (interface_compile_args ~stem_prefix ~workspace_root ~out_dir
+               ~include_dirs ~compile_flags ~ppx_tools source mli_compile_path)
         in
         Ok ()
     | None -> Ok ()
@@ -1226,18 +1230,18 @@ let compile_module ~session ~workspace_root ~verbose ~backend ~out_dir
       let* _ =
         Toolchain.ensure_success_compiler ~session ~env ~verbose backend
           package_resolution
-          (implementation_compile_args ~workspace_root ~backend ~out_dir
-             ~include_dirs ~compile_flags ~ppx_tools source ml_compile_path)
+          (implementation_compile_args ~stem_prefix ~workspace_root ~backend
+             ~out_dir ~include_dirs ~compile_flags ~ppx_tools source
+             ml_compile_path)
       in
       Ok
         (Some
            (Filename.concat out_dir
-              (source.source.stem ^ Toolchain.object_extension backend)))
+              (stem_prefix ^ source.source.stem ^ Toolchain.object_extension backend)))
 
-let compile_ordered_sources ~session ~workspace_root ~verbose ~backend ~out_dir
-    ~include_dirs ~package_resolution ~compile_flags
-    ~(ppx_tools : Manifest.ppx_tool list) ~env source_table
-    ordered_stems =
+let compile_ordered_sources ?(stem_prefix = "") ~session ~workspace_root
+    ~verbose ~backend ~out_dir ~include_dirs ~package_resolution ~compile_flags
+    ~(ppx_tools : Manifest.ppx_tool list) ~env source_table ordered_stems =
   let rec loop acc = function
     | [] -> Ok (List.rev acc)
     | stem :: rest ->
@@ -1250,9 +1254,9 @@ let compile_ordered_sources ~session ~workspace_root ~verbose ~backend ~out_dir
                    "internal error: missing prepared source for '%s'" stem)
         in
         let* object_file =
-          compile_module ~session ~workspace_root ~verbose ~backend ~out_dir
-            ~include_dirs ~package_resolution ~compile_flags ~ppx_tools ~env
-            source
+          compile_module ~stem_prefix ~session ~workspace_root ~verbose ~backend
+            ~out_dir ~include_dirs ~package_resolution ~compile_flags
+            ~ppx_tools ~env source
         in
         let acc =
           match object_file with
@@ -1887,6 +1891,19 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
                  dependency))
       runnable.Manifest.deps
   in
+  let wrapped_library_names =
+    List.filter_map
+      (function
+        | Manifest.Library lib when lib.Manifest.wrapped -> Some lib.Manifest.name
+        | _ -> None)
+      workspace.Manifest.targets
+  in
+  let all_exe_stems = runnable.Manifest.main :: runnable.Manifest.modules in
+  let stem_prefix =
+    if List.exists (fun stem -> List.mem stem wrapped_library_names) all_exe_stems
+    then "oasis__exe__"
+    else ""
+  in
   let effective_packages =
     String_util.dedup_preserve
       (runnable.packages
@@ -2008,8 +2025,8 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   in
   let source_table = ordered_source_table prepared_sources in
   let* compile_commands =
-    render_compile_commands ~session ~workspace_root ~backend ~out_dir
-      ~include_dirs ~package_resolution
+    render_compile_commands ~stem_prefix ~session ~workspace_root
+      ~backend ~out_dir ~include_dirs ~package_resolution
       ~compile_flags:(pipeline.options.compile_flags)
       ~ppx_tools:pipeline.ppx_tools ~env:(pipeline.options.env) source_table
       source_order
@@ -2017,12 +2034,12 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   let ordered_prepared = ordered_prepared_sources source_table source_order in
   let object_files =
     List.filter_map
-      (prepared_source_object_path backend out_dir)
+      (prepared_source_object_path ~stem_prefix backend out_dir)
       ordered_prepared
   in
   let expected_outputs =
     List.concat_map
-      (expected_prepared_source_outputs backend out_dir)
+      (expected_prepared_source_outputs ~stem_prefix backend out_dir)
       ordered_prepared
     @ [ binary ]
   in
@@ -2078,6 +2095,7 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
       include_dirs;
       archive_files;
       pipeline;
+      stem_prefix;
     }
 
 let build_runnable ~session ~workspace_root ~verbose ~manifest_path
@@ -2097,7 +2115,8 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
   in
   let expected_outputs =
     List.concat_map
-      (expected_prepared_source_outputs backend description.out_dir)
+      (expected_prepared_source_outputs ~stem_prefix:description.stem_prefix
+         backend description.out_dir)
       ordered_prepared
     @ [ description.binary ]
   in
@@ -2132,8 +2151,9 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path
   else (
     let () = Fs.ensure_dir description.out_dir in
     let* object_files =
-      compile_ordered_sources ~session ~workspace_root ~verbose ~backend
-        ~out_dir:description.out_dir ~include_dirs:description.include_dirs
+      compile_ordered_sources ~stem_prefix:description.stem_prefix ~session
+        ~workspace_root ~verbose ~backend ~out_dir:description.out_dir
+        ~include_dirs:description.include_dirs
         ~package_resolution:description.package_resolution
         ~compile_flags:(description.pipeline.options.compile_flags)
         ~ppx_tools:description.pipeline.ppx_tools
