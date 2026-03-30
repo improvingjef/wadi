@@ -1,6 +1,6 @@
 # Wadi
 
-I had Codex build this because of friction with Dune on a project. I'm new to OCaml and just vibing a new amazing programming language (haha). But the experience of working with dune was less pleasant than I preferred, so this is my offering back to the OCaml community for such a cool language. Claude made a pretty little website polished off a few items. I'm dogfooding this right now, and it seems pretty good, but caveat lector.
+I had Codex build this because of friction with Dune on a project. I'm new to OCaml and just vibing a new amazing programming language (haha). But the experience of working with dune was less pleasant than I preferred, so this is my offering back to the OCaml community for such a cool language. Claude made a pretty little website polished off a few items. I'm dogfooding this right now, and it seems pretty good, but caveat lector. This is how naive I am. I originally named it oasis. Eventually, I searched opam and realized I had a little problem, so wadi was born instead.
 
 A fast, transparent OCaml build system. One manifest, zero guesswork.
 
