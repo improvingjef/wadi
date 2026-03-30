@@ -16,6 +16,7 @@ let copy_tracked_repo ~src_root ~dst_root ?(extra_paths = []) () =
         "--";
         "src";
         "test";
+        "scripts";
       ]
   in
   assert_int_equal 0 untracked_worktree_sources.status
@@ -64,6 +65,7 @@ let run_make ~cwd goals =
         ("OCAMLOPT", "ocamlopt");
         ("OCAMLFIND", "ocamlfind");
         ("OCAMLFLAGS", "-g");
+        ("OASIS_BIN", oasis_bin ());
       ]
     "make" goals
 
@@ -317,6 +319,53 @@ let cases =
               "package should index the source archive";
             assert_string_contains ~needle:checksums_entry asset_index
               "package should index the generated checksum manifest")) );
+    ( "sync-generated refreshes bootstrap metadata and release artifacts from the live binary",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-sync-generated-command" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init"; "-q" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed before sync-generated\n" ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed before sync-generated\n" ^ add.output);
+            List.iter
+              (fun relative_path ->
+                let path = Filename.concat workspace relative_path in
+                if Fs.exists path then Sys.remove path)
+              [
+                "docs/cli.md";
+                "completions/oasis.bash";
+                "completions/_oasis";
+                "completions/oasis.fish";
+                "oasis.opam";
+                "Formula/oasis.rb";
+              ];
+            List.iter
+              (fun relative_path ->
+                let path = Filename.concat workspace relative_path in
+                if Fs.exists path then Fs.remove_tree path)
+              [ "package"; "_bootstrap"; "dist" ];
+            let synced = run_oasis ~cwd:workspace [ "sync-generated" ] in
+            assert_int_equal 0 synced.status
+              ("oasis sync-generated should succeed\n" ^ synced.output);
+            assert_file_exists
+              (Filename.concat workspace "_bootstrap/bootstrap.seed-metadata.mk");
+            assert_file_exists (Filename.concat workspace "docs/cli.md");
+            assert_file_exists (Filename.concat workspace "completions/oasis.bash");
+            assert_file_exists (Filename.concat workspace "completions/_oasis");
+            assert_file_exists (Filename.concat workspace "completions/oasis.fish");
+            assert_file_exists (Filename.concat workspace "oasis.opam");
+            assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists (Filename.concat workspace "dist/release-assets.json");
+            assert_file_exists
+              (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz");
+            assert_string_equal
+              (Fs.read_file (Filename.concat workspace "docs/cli.md"))
+              (Fs.read_file
+                 (Filename.concat workspace "package/share/doc/oasis/cli.md"))
+              "sync-generated should keep the packaged doc copy aligned with oasis docs"));
     ( "package rejects conflicting source-archive inputs",
       (fun () ->
         let repo_root = Sys.getcwd () in
@@ -440,7 +489,9 @@ let cases =
                exit 19\n";
             chmod_plus_x archive_script;
             let generated =
-              Process.run_capture ~cwd:workspace manifest_script
+              Process.run_capture ~cwd:workspace
+                ~env:[ ("OASIS_BIN", oasis_bin ()) ]
+                manifest_script
                 [
                   "--output-dir";
                   output_dir;
@@ -1015,6 +1066,40 @@ let cases =
               ("tap git log should succeed\n" ^ log.output);
             assert_string_contains ~needle:"oasis v0.1.0" log.output
               "the tap update flow should commit the rendered formula with the release tag in the message"));
+    ( "update-homebrew-tap updates a dedicated tap checkout from the CLI",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let formula = Fs.read_file (Filename.concat repo_root "Formula/oasis.rb") in
+        with_temp_dir "oasis-packaging-tap-command" (fun workspace ->
+            let tap_dir = Filename.concat workspace "homebrew-oasis" in
+            Fs.ensure_dir tap_dir;
+            let init = Process.run_capture ~cwd:tap_dir "git" [ "init" ] in
+            assert_int_equal 0 init.status
+              ("tap git init should succeed\n" ^ init.output);
+            let updated =
+              run_oasis ~cwd:repo_root
+                [
+                  "update-homebrew-tap";
+                  "--tap-dir";
+                  tap_dir;
+                  "--formula";
+                  Filename.concat repo_root "Formula/oasis.rb";
+                  "--commit";
+                ]
+            in
+            assert_int_equal 0 updated.status
+              ("oasis update-homebrew-tap should succeed\n" ^ updated.output);
+            assert_string_equal formula
+              (Fs.read_file (Filename.concat tap_dir "Formula/oasis.rb"))
+              "the CLI tap updater should copy the generated formula into the tap checkout";
+            let log =
+              Process.run_capture ~cwd:tap_dir "git"
+                [ "log"; "-1"; "--pretty=%s" ]
+            in
+            assert_int_equal 0 log.status
+              ("tap git log should succeed\n" ^ log.output);
+            assert_string_contains ~needle:"oasis v0.1.0" log.output
+              "the CLI tap updater should commit the rendered formula with the release tag in the message"));
     ( "clones the Homebrew tap from release metadata when no local checkout exists",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -1035,7 +1120,9 @@ let cases =
             in
             let tap_dir = Filename.concat workspace "homebrew-oasis" in
             let updated =
-              Process.run_capture ~cwd:workspace update_script
+              Process.run_capture ~cwd:workspace
+                ~env:[ ("OASIS_BIN", oasis_bin ()) ]
+                update_script
                 [ "--tap-dir"; tap_dir; "--formula"; Filename.concat workspace "Formula/oasis.rb"; "--commit" ]
             in
             assert_int_equal 0 updated.status
@@ -1095,7 +1182,9 @@ let cases =
               ("git commit should succeed in the release-cut sandbox\n"
              ^ commit.output);
             let cut =
-              Process.run_capture ~cwd:workspace cut_script
+              Process.run_capture ~cwd:workspace
+                ~env:[ ("OASIS_BIN", oasis_bin ()) ]
+                cut_script
                 [ "--version"; "0.1.1"; "--tag" ]
             in
             assert_int_equal 0 cut.status
@@ -1122,6 +1211,50 @@ let cases =
               (Filename.concat workspace "dist/oasis-0.1.1-source.tar.gz");
             assert_file_exists
               (Filename.concat workspace "dist/release-assets.json");
+            let tags =
+              Process.run_capture ~cwd:workspace "git" [ "tag"; "--list" ]
+            in
+            assert_int_equal 0 tags.status
+              ("git tag --list should succeed after release-cut\n" ^ tags.output);
+            assert_string_contains ~needle:"v0.1.1\n" tags.output
+              "release-cut should create the matching release tag when requested"));
+    ( "release-cut refreshes packaging metadata and tags the copied repo from the CLI",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        with_temp_dir "oasis-packaging-cut-command" (fun workspace ->
+            copy_tracked_repo ~src_root:repo_root ~dst_root:workspace ();
+            let init = Process.run_capture ~cwd:workspace "git" [ "init" ] in
+            assert_int_equal 0 init.status
+              ("git init should succeed in the release-cut sandbox\n" ^ init.output);
+            let add = Process.run_capture ~cwd:workspace "git" [ "add"; "." ] in
+            assert_int_equal 0 add.status
+              ("git add should succeed in the release-cut sandbox\n" ^ add.output);
+            let commit =
+              Process.run_capture ~cwd:workspace "git"
+                [
+                  "-c";
+                  "user.name=Test";
+                  "-c";
+                  "user.email=test@example.com";
+                  "commit";
+                  "-m";
+                  "initial";
+                ]
+            in
+            assert_int_equal 0 commit.status
+              ("git commit should succeed in the release-cut sandbox\n"
+             ^ commit.output);
+            let cut =
+              run_oasis ~cwd:workspace
+                [ "release-cut"; "--version"; "0.1.1"; "--tag" ]
+            in
+            assert_int_equal 0 cut.status
+              ("oasis release-cut should succeed\n" ^ cut.output);
+            assert_string_contains ~needle:"dist/oasis-0.1.1-source.tar.gz"
+              cut.output
+              "release-cut should report the refreshed local source archive";
+            assert_file_exists
+              (Filename.concat workspace "dist/oasis-0.1.1-source.tar.gz");
             let tags =
               Process.run_capture ~cwd:workspace "git" [ "tag"; "--list" ]
             in

@@ -174,6 +174,8 @@ type install_options = {
 
 type release_artifacts_options = { output_dir : string }
 
+type sync_generated_options = unit
+
 type package_options = {
   output_dir : string;
   opam_output : string option;
@@ -181,6 +183,19 @@ type package_options = {
   checksums_output : string option;
   asset_index_output : string option;
   archive_input : Packager.archive_input option;
+}
+
+type release_cut_options = {
+  version : string option;
+  tag : bool;
+}
+
+type update_homebrew_tap_options = {
+  tap_dir : string option;
+  formula_path : string option;
+  source_archive : string option;
+  commit : bool;
+  push : bool;
 }
 
 type explain_options = {
@@ -372,6 +387,13 @@ let source_archive_option =
       "Reuse an explicit source archive when rendering packaging metadata instead of rebuilding one.";
   }
 
+let formula_input_option =
+  {
+    usage = "--formula PATH";
+    flags = [ "--formula" ];
+    description = "Reuse an existing Homebrew formula file instead of rendering one.";
+  }
+
 let source_archive_dir_option =
   {
     usage = "--source-archive-dir DIR";
@@ -386,6 +408,41 @@ let reuse_source_archive_dir_option =
     flags = [ "--reuse-source-archive-dir" ];
     description =
       "Reuse the canonical source archive already present in DIR without rebuilding it.";
+  }
+
+let version_option =
+  {
+    usage = "--version X.Y.Z";
+    flags = [ "--version" ];
+    description = "Set the canonical release version to X.Y.Z before regenerating metadata.";
+  }
+
+let tag_option =
+  {
+    usage = "--tag";
+    flags = [ "--tag" ];
+    description = "Create the annotated git tag that matches the refreshed release version.";
+  }
+
+let tap_dir_option =
+  {
+    usage = "--tap-dir DIR";
+    flags = [ "--tap-dir" ];
+    description = "Update the Homebrew tap checkout rooted at DIR.";
+  }
+
+let commit_option =
+  {
+    usage = "--commit";
+    flags = [ "--commit" ];
+    description = "Commit the rendered Homebrew formula into the tap checkout.";
+  }
+
+let push_option =
+  {
+    usage = "--push";
+    flags = [ "--push" ];
+    description = "Push the Homebrew tap checkout after committing the rendered formula.";
   }
 
 let force_option =
@@ -1154,6 +1211,59 @@ let package_doc =
     watch_root_files = no_watch_root_files;
   }
 
+let sync_generated_doc =
+  {
+    name = "sync-generated";
+    summary =
+      "Refresh bootstrap seed metadata, CLI docs, shell completions, and packaging manifests together.";
+    signature = "oasis sync-generated";
+    examples = [ "oasis sync-generated" ];
+    options = [ help_option ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
+let release_cut_doc =
+  {
+    name = "release-cut";
+    summary =
+      "Bump the canonical release version, refresh packaging metadata, validate it, and optionally tag the repo.";
+    signature = "oasis release-cut --version X.Y.Z [--tag]";
+    examples =
+      [
+        "oasis release-cut --version 0.2.0";
+        "oasis release-cut --version 0.2.0 --tag";
+      ];
+    options = [ version_option; tag_option; help_option ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
+let update_homebrew_tap_doc =
+  {
+    name = "update-homebrew-tap";
+    summary =
+      "Clone or update the canonical Homebrew tap with the rendered oasis formula.";
+    signature =
+      "oasis update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]";
+    examples =
+      [
+        "oasis update-homebrew-tap --tap-dir ../homebrew-oasis --formula Formula/oasis.rb --commit";
+        "oasis update-homebrew-tap --tap-dir ../homebrew-oasis --source-archive dist/oasis-0.1.0-source.tar.gz --commit --push";
+      ];
+    options =
+      [
+        tap_dir_option;
+        formula_input_option;
+        source_archive_option;
+        commit_option;
+        push_option;
+        help_option;
+      ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
 let docs_doc =
   {
     name = "docs";
@@ -1271,6 +1381,9 @@ let command_docs =
     install_doc;
     release_artifacts_doc;
     package_doc;
+    sync_generated_doc;
+    release_cut_doc;
+    update_homebrew_tap_doc;
     docs_doc;
     completion_doc;
     toolchain_doc;
@@ -2414,6 +2527,57 @@ let parse_package_args args =
   in
   Ok options
 
+let parse_sync_generated_args args =
+  match args with
+  | [] -> Ok ()
+  | "--help" :: _ -> Error (command_usage sync_generated_doc)
+  | option :: _ when String_util.starts_with ~prefix:"-" option ->
+      Error (Printf.sprintf "unknown option '%s'" option)
+  | _ :: _ -> Error "sync-generated does not accept positional arguments"
+
+let parse_release_cut_args args =
+  let rec loop options = function
+    | [] -> Ok options
+    | "--version" :: version :: rest ->
+        loop { options with version = Some version } rest
+    | "--version" :: [] -> Error "--version requires a value"
+    | "--tag" :: rest -> loop { options with tag = true } rest
+    | "--help" :: _ -> Error (command_usage release_cut_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ -> Error "release-cut does not accept positional arguments"
+  in
+  loop { version = None; tag = false } args
+
+let parse_update_homebrew_tap_args args =
+  let rec loop options = function
+    | [] -> Ok options
+    | "--tap-dir" :: dir :: rest -> loop { options with tap_dir = Some dir } rest
+    | "--tap-dir" :: [] -> Error "--tap-dir requires a directory"
+    | "--formula" :: path :: rest ->
+        loop { options with formula_path = Some path } rest
+    | "--formula" :: [] -> Error "--formula requires a path"
+    | "--source-archive" :: path :: rest ->
+        loop { options with source_archive = Some path } rest
+    | "--source-archive" :: [] -> Error "--source-archive requires a path"
+    | "--commit" :: rest -> loop { options with commit = true } rest
+    | "--push" :: rest -> loop { options with push = true } rest
+    | "--help" :: _ -> Error (command_usage update_homebrew_tap_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ :: _ ->
+        Error "update-homebrew-tap does not accept positional arguments"
+  in
+  loop
+    {
+      tap_dir = None;
+      formula_path = None;
+      source_archive = None;
+      commit = false;
+      push = false;
+    }
+    args
+
 let parse_explain_args (args : string list) : (explain_options, string) result =
   let* default_backend_request = default_backend_request () in
   let rec loop (options : explain_options) = function
@@ -2549,7 +2713,7 @@ let option_expects_value = function
   | "--warmup" | "--iterations" | "--dir" | "--name" | "--member"
   | "--library" | "--executable" | "--source" | "--git" | "--url"
   | "--ref" | "--checksum" | "--poll-ms" | "--debounce-ms" | "--max-runs"
-  | "--include" | "--ignore" ->
+  | "--include" | "--ignore" | "--version" | "--tap-dir" | "--formula" ->
       true
   | _ -> false
 
@@ -2643,18 +2807,20 @@ let value_completion_candidates ?workspace = function
   | "--asset-index-output" | "--source-archive" | "--source-archive-dir"
   | "--reuse-source-archive-dir" | "--script" | "--dir" | "--name"
   | "--member" | "--library" | "--executable" | "--source" | "--git"
-  | "--url" | "--ref" | "--checksum" ->
+  | "--url" | "--ref" | "--checksum" | "--version" | "--tap-dir"
+  | "--formula" ->
       []
   | _ -> []
 
 let value_completion_response ?workspace = function
   | "--workspace" | "--prefix" | "--destdir" | "--dir" | "--source"
-  | "--output-dir" | "--source-archive-dir" | "--reuse-source-archive-dir" ->
+  | "--output-dir" | "--source-archive-dir" | "--reuse-source-archive-dir"
+  | "--tap-dir" ->
       Complete_directories
   | "--member" -> Complete_directories
   | "--output" | "--opam-output" | "--formula-output"
   | "--checksums-output" | "--asset-index-output" | "--source-archive"
-  | "--script" ->
+  | "--script" | "--formula" ->
       Complete_files
   | option_name ->
       Completion_candidates (value_completion_candidates ?workspace option_name)
@@ -3280,8 +3446,7 @@ let run_install (options : install_options) =
           | Error message -> report_error message)
       | Error message -> report_error message)
 
-let run_release_artifacts (options : release_artifacts_options) =
-  let root_dir = Sys.getcwd () in
+let generate_release_artifacts ~root_dir ~output_dir =
   match Release_metadata.load_for_root ~root_dir () with
   | Error message -> report_error message
   | Ok metadata -> (
@@ -3291,18 +3456,21 @@ let run_release_artifacts (options : release_artifacts_options) =
         completion_script "fish"
       with
       | Ok bash, Ok zsh, Ok fish ->
-          Release_artifacts.write ~output_dir:options.output_dir
+          Release_artifacts.write ~output_dir
             ~package_name:metadata.package_name
             ~docs:(render_markdown command_docs) ~bash ~zsh ~fish;
           Exit_code 0
       | Error message, _, _ | _, Error message, _ | _, _, Error message ->
           report_error message)
 
-let run_package (options : package_options) =
+let run_release_artifacts (options : release_artifacts_options) =
+  generate_release_artifacts ~root_dir:(Sys.getcwd ()) ~output_dir:options.output_dir
+
+let generate_package ~root_dir (options : package_options) =
   match
     Packager.run
       {
-        root_dir = Sys.getcwd ();
+        root_dir;
         output_dir = options.output_dir;
         opam_output = options.opam_output;
         formula_output = options.formula_output;
@@ -3313,6 +3481,70 @@ let run_package (options : package_options) =
   with
   | Ok () -> Exit_code 0
   | Error message -> report_error message
+
+let run_package (options : package_options) =
+  generate_package ~root_dir:(Sys.getcwd ()) options
+
+let run_sync_generated (_options : sync_generated_options) =
+  let root_dir = Sys.getcwd () in
+  match Maintenance.refresh_bootstrap_seed_metadata ~root_dir with
+  | Error message -> report_error message
+  | Ok _ -> (
+      match generate_release_artifacts ~root_dir ~output_dir:root_dir with
+      | Exit_code 0 -> (
+          match
+            generate_package ~root_dir
+              {
+                output_dir = root_dir;
+                opam_output = None;
+                formula_output = None;
+                checksums_output = None;
+                asset_index_output =
+                  Some
+                    (Filename.concat (Filename.concat root_dir "dist")
+                       "release-assets.json");
+                archive_input =
+                  Some
+                    (Packager.Source_archive_dir
+                       (Filename.concat root_dir "dist"));
+              }
+          with
+          | Exit_code 0 -> Exit_code 0
+          | other -> other)
+      | other -> other)
+
+let run_release_cut (options : release_cut_options) =
+  match options.version with
+  | None -> report_error "--version is required"
+  | Some version -> (
+      match
+        Maintenance.cut_release ~root_dir:(Sys.getcwd ()) ~version
+          ~create_tag:options.tag
+      with
+      | Ok message ->
+          print_endline message;
+          Exit_code 0
+      | Error message -> report_error message)
+
+let run_update_homebrew_tap (options : update_homebrew_tap_options) =
+  match options.tap_dir with
+  | None -> report_error "--tap-dir is required"
+  | Some tap_dir ->
+      let maintenance_options : Maintenance.update_homebrew_tap_options =
+        {
+          root_dir = Sys.getcwd ();
+          tap_dir;
+          formula_path = options.formula_path;
+          source_archive = options.source_archive;
+          do_commit = options.commit;
+          do_push = options.push;
+        }
+      in
+      (match Maintenance.update_homebrew_tap maintenance_options with
+      | Ok message ->
+          print_endline message;
+          Exit_code 0
+      | Error message -> report_error message)
 
 let run_docs (_options : docs_options) =
   print_string (render_markdown command_docs);
@@ -3478,6 +3710,24 @@ let commands =
         run = run_release_artifacts;
       };
     Command { doc = package_doc; parse = parse_package_args; run = run_package };
+    Command
+      {
+        doc = sync_generated_doc;
+        parse = parse_sync_generated_args;
+        run = run_sync_generated;
+      };
+    Command
+      {
+        doc = release_cut_doc;
+        parse = parse_release_cut_args;
+        run = run_release_cut;
+      };
+    Command
+      {
+        doc = update_homebrew_tap_doc;
+        parse = parse_update_homebrew_tap_args;
+        run = run_update_homebrew_tap;
+      };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
     Command
       { doc = completion_doc; parse = parse_completion_args; run = run_completion };

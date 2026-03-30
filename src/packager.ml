@@ -267,6 +267,18 @@ let collect_assets (metadata : Release_metadata.t) ~source_archive ~output_dir ~
 
 let render_asset_index (metadata : Release_metadata.t) assets =
   let render_asset asset =
+    let os_lines =
+      match asset.os_name with
+      | Some value ->
+          [ Printf.sprintf "      \"os\": %s," (double_quote value) ]
+      | None -> []
+    in
+    let arch_lines =
+      match asset.arch_name with
+      | Some value ->
+          [ Printf.sprintf "      \"arch\": %s," (double_quote value) ]
+      | None -> []
+    in
     String.concat "\n"
       ([
          "    {";
@@ -275,16 +287,8 @@ let render_asset_index (metadata : Release_metadata.t) assets =
          Printf.sprintf "      \"kind\": %s,"
            (double_quote asset.kind);
        ]
-      @
-      match asset.os_name with
-      | Some value ->
-          [ Printf.sprintf "      \"os\": %s," (double_quote value) ]
-      | None -> []
-      @
-      match asset.arch_name with
-      | Some value ->
-          [ Printf.sprintf "      \"arch\": %s," (double_quote value) ]
-      | None -> []
+      @ os_lines
+      @ arch_lines
       @ [
           Printf.sprintf "      \"url\": %s,"
             (double_quote asset.url);

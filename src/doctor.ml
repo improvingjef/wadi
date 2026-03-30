@@ -281,7 +281,9 @@ let generated_assets_check workspace_root =
                   Filename.concat output_dir "dist/release-assets.json"
                 in
                 let regenerated =
-                  Process.run_capture ~cwd:workspace_root "/bin/sh"
+                  Process.run_capture ~cwd:workspace_root
+                    ~env:[ ("OASIS_BIN", Fs.resolve_executable Sys.executable_name) ]
+                    "/bin/sh"
                     [
                       packaging_manifests_script;
                       "--output-dir";

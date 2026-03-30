@@ -460,6 +460,15 @@ actions = ["generate"]
             assert_string_contains
               ~needle:"oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]"
               run.output "top-level usage should include the package command";
+            assert_string_contains ~needle:"oasis sync-generated" run.output
+              "top-level usage should include the sync-generated command";
+            assert_string_contains
+              ~needle:"oasis release-cut --version X.Y.Z [--tag]"
+              run.output "top-level usage should include the release-cut command";
+            assert_string_contains
+              ~needle:"oasis update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]"
+              run.output
+              "top-level usage should include the update-homebrew-tap command";
             assert_string_contains ~needle:"oasis docs" run.output
               "top-level usage should include the docs command";
             assert_string_contains
@@ -536,6 +545,12 @@ actions = ["generate"]
               "docs output should include the release-artifacts command";
             assert_string_contains ~needle:"## package" docs.output
               "docs output should include the package command";
+            assert_string_contains ~needle:"## sync-generated" docs.output
+              "docs output should include the sync-generated command";
+            assert_string_contains ~needle:"## release-cut" docs.output
+              "docs output should include the release-cut command";
+            assert_string_contains ~needle:"## update-homebrew-tap" docs.output
+              "docs output should include the update-homebrew-tap command";
             assert_string_contains ~needle:"## promote" docs.output
               "docs output should include the promote command";
             assert_string_contains ~needle:"## migrate" docs.output
@@ -586,6 +601,14 @@ actions = ["generate"]
               ~needle:"- `--asset-index-output PATH`: Write a machine-readable release asset index with names, URLs, sizes, and checksums."
               docs.output
               "docs output should include the package asset-index description";
+            assert_string_contains
+              ~needle:"- `--tag`: Create the annotated git tag that matches the refreshed release version."
+              docs.output
+              "docs output should include the release-cut tag description";
+            assert_string_contains
+              ~needle:"- `--tap-dir DIR`: Update the Homebrew tap checkout rooted at DIR."
+              docs.output
+              "docs output should include the tap-dir description";
             assert_string_contains
               ~needle:"- `--stdout`: Print the generated output instead of writing a file."
               docs.output

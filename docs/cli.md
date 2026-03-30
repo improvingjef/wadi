@@ -466,6 +466,57 @@ Examples:
 - `oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json`
 - `oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS`
 
+## sync-generated
+
+Refresh bootstrap seed metadata, CLI docs, shell completions, and packaging manifests together.
+
+Usage:
+
+`oasis sync-generated`
+
+Options:
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis sync-generated`
+
+## release-cut
+
+Bump the canonical release version, refresh packaging metadata, validate it, and optionally tag the repo.
+
+Usage:
+
+`oasis release-cut --version X.Y.Z [--tag]`
+
+Options:
+- `--version X.Y.Z`: Set the canonical release version to X.Y.Z before regenerating metadata.
+- `--tag`: Create the annotated git tag that matches the refreshed release version.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis release-cut --version 0.2.0`
+- `oasis release-cut --version 0.2.0 --tag`
+
+## update-homebrew-tap
+
+Clone or update the canonical Homebrew tap with the rendered oasis formula.
+
+Usage:
+
+`oasis update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]`
+
+Options:
+- `--tap-dir DIR`: Update the Homebrew tap checkout rooted at DIR.
+- `--formula PATH`: Reuse an existing Homebrew formula file instead of rendering one.
+- `--source-archive PATH`: Reuse an explicit source archive when rendering packaging metadata instead of rebuilding one.
+- `--commit`: Commit the rendered Homebrew formula into the tap checkout.
+- `--push`: Push the Homebrew tap checkout after committing the rendered formula.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `oasis update-homebrew-tap --tap-dir ../homebrew-oasis --formula Formula/oasis.rb --commit`
+- `oasis update-homebrew-tap --tap-dir ../homebrew-oasis --source-archive dist/oasis-0.1.0-source.tar.gz --commit --push`
+
 ## docs
 
 Render markdown CLI reference directly from the live command table.

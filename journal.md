@@ -215,3 +215,10 @@
 - Release maintenance got noticeably less brittle once `release/metadata.sh` stayed a flat shell-compatible fact file and the OCaml CLI learned to parse it directly instead of re-encoding those constants in a second language.
 - Packaging checksum workflows are only as honest as their source-archive input set. If archive generation is `git ls-files`-driven, newly added files do not exist for the release pipeline until they are staged, which is worth treating as an explicit policy choice rather than accidental magic.
 - Clean-checkout packaging tests need a deliberate story for in-progress untracked source files. Simulating a repo by copying only tracked paths is correct for release bytes, but local development tests still need a narrow escape hatch or new modules disappear from the fixture before they ever reach git.
+
+## 2026-03-29
+
+- Maintenance only stops feeling like build-tool folklore once the CLI, shell wrappers, docs, completions, and Make targets all converge on the same subtools. A “compatibility script” is fine; a second implementation path is not.
+- Wrapping shell entrypoints around a first-class CLI immediately exposed one more honest seam: clean-checkout maintenance still needs a bootstrap story for finding `oasis` itself. If the wrapper has to be fed `OASIS_BIN` in tests, that friction belongs on the plan instead of hiding as test harness trivia.
+- The OCaml packaging path caught a real asset-index bug the shell script had been masking. Optional JSON fields need to be assembled as explicit lists, not interleaved through precedence-sensitive `match ... @ ...` expressions.
+- Homebrew formula drift is the checksum of the tracked tree, not just the code that “feels packaging-related.” New subtools, wrapper scripts, plan updates, and journal notes all invalidate the formula until `sync-generated` closes the loop again.

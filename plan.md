@@ -174,8 +174,9 @@
 165. [x] Add a shared OCaml release-metadata loader so maintenance subtools stop shell-sourcing `release/metadata.sh` just to render canonical package facts.
 166. [x] Implement `oasis release-artifacts` as a first-class subtool for CLI docs, shell completions, and packaged install-tree payloads.
 167. [x] Implement `oasis package` as a first-class subtool for `oasis.opam`, `Formula/oasis.rb`, `SHA256SUMS`, and `release-assets.json`.
-168. [ ] Implement `oasis sync-generated` as a first-class subtool that refreshes bootstrap seed metadata plus release/package artifacts in one command.
-169. [ ] Retarget maintenance scripts and Makefile entrypoints to delegate to the new subtools so there is one canonical implementation path.
+168. [x] Implement `oasis sync-generated` as a first-class subtool that refreshes bootstrap seed metadata plus release/package artifacts in one command.
+169. [x] Retarget maintenance scripts and Makefile entrypoints to delegate to the new subtools so there is one canonical implementation path.
 170. [x] Add black-box coverage for the new maintenance subtools and generated-output options so release upkeep stays testable without shell-script folklore.
-171. [ ] Move the remaining release-cut and Homebrew-tap maintenance flows behind first-class `oasis` subtools so packaging workflows stop bifurcating between CLI and shell helpers.
+171. [x] Move the remaining release-cut and Homebrew-tap maintenance flows behind first-class `oasis` subtools so packaging workflows stop bifurcating between CLI and shell helpers.
 172. [ ] Decide whether release archive generation should stay strictly `git ls-files`-based or grow an explicit worktree mode so packaging checksums stay predictable while new files are still unstaged.
+173. [ ] Let CLI-backed maintenance wrappers self-host from a clean checkout without requiring `OASIS_BIN`, a prebuilt `_bootstrap/bin/oasis`, or an installed global `oasis`, so `make release-manifests` stays friction-light even before the tool has been built once.
