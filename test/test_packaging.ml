@@ -128,6 +128,32 @@ let cases =
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
               "the committed Homebrew formula should be generated from the shared release metadata"));
+    ( "can write the generated opam file to an explicit output path",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let manifest_script =
+          Filename.concat repo_root "scripts/generate_packaging_manifests.sh"
+        in
+        with_temp_dir "oasis-packaging-opam-output" (fun workspace ->
+            let output_dir = Filename.concat workspace "out" in
+            let custom_opam = Filename.concat workspace "release/oasis-package.opam" in
+            let generated =
+              Process.run_capture ~cwd:repo_root manifest_script
+                [
+                  "--output-dir";
+                  output_dir;
+                  "--opam-output";
+                  custom_opam;
+                ]
+            in
+            assert_int_equal 0 generated.status
+              "packaging manifest generation should allow an explicit opam output path";
+            assert_true
+              (not (Fs.exists (Filename.concat output_dir "oasis.opam")))
+              "a custom opam output path should replace the default output location";
+            assert_string_equal (Fs.read_file custom_opam)
+              (Fs.read_file (Filename.concat repo_root "oasis.opam"))
+              "custom opam output should still render from the shared release metadata"));
     ( "can refresh a retained source archive while generating packaging manifests",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -301,7 +327,27 @@ let cases =
             assert_string_contains
               ~needle:(Filename.concat output_dir "oasis-0.1.0-x86_64-linux.tar.gz")
               checksums
-              "release checksum output should include downloaded binary archives"));
+              "release checksum output should include downloaded binary archives";
+            assert_string_contains
+              ~needle:(Filename.concat output_dir "oasis.opam")
+              checksums
+              "release checksum output should include the published opam metadata";
+            assert_string_contains
+              ~needle:(Filename.concat output_dir "oasis.rb")
+              checksums
+              "release checksum output should include the published formula metadata"));
+    ( "release workflow publishes the generated opam asset alongside checksums and formula",
+      fun () ->
+        let repo_root = Sys.getcwd () in
+        let workflow =
+          Fs.read_file (Filename.concat repo_root ".github/workflows/release.yml")
+        in
+        assert_string_contains ~needle:"--opam-output dist/oasis.opam" workflow
+          "release publishing should render the opam metadata into the release asset layout";
+        assert_string_contains ~needle:"diff -u oasis.opam dist/oasis.opam" workflow
+          "release publishing should verify the generated opam asset against the committed package metadata";
+        assert_string_contains ~needle:"dist/oasis.opam" workflow
+          "release publishing should upload the generated opam asset");
     ( "release-manifests refreshes a local source archive alongside packaging manifests",
       fun () ->
         let repo_root = Sys.getcwd () in

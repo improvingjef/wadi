@@ -8,6 +8,7 @@ OUTPUT_DIR=$ROOT_DIR
 SOURCE_ARCHIVE=
 SOURCE_ARCHIVE_DIR=
 REUSE_SOURCE_ARCHIVE_DIR=
+OPAM_OUTPUT=
 FORMULA_OUTPUT=
 CHECKSUMS_OUTPUT=
 TEMP_DIR=
@@ -15,7 +16,7 @@ TEMP_CHECKSUMS=
 
 usage() {
   cat <<'EOF'
-Usage: generate_packaging_manifests.sh [--output-dir DIR] [--formula-output PATH] [--checksums-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]
+Usage: generate_packaging_manifests.sh [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR]
 
 Render packaging manifests that are derived from the canonical release
 metadata, including oasis.opam and Formula/oasis.rb. Optionally reuse an
@@ -52,6 +53,14 @@ while [ "$#" -gt 0 ]; do
         exit 2
       fi
       OUTPUT_DIR=$2
+      shift 2
+      ;;
+    --opam-output)
+      if [ "$#" -lt 2 ]; then
+        echo "generate_packaging_manifests.sh: --opam-output requires a path" >&2
+        exit 2
+      fi
+      OPAM_OUTPUT=$2
       shift 2
       ;;
     --formula-output)
@@ -121,8 +130,13 @@ if [ -z "$FORMULA_OUTPUT" ]; then
   FORMULA_OUTPUT=$OUTPUT_DIR/Formula/oasis.rb
 fi
 
+if [ -z "$OPAM_OUTPUT" ]; then
+  OPAM_OUTPUT=$OUTPUT_DIR/oasis.opam
+fi
+
 mkdir -p "$OUTPUT_DIR"
-"$ROOT_DIR/scripts/render_oasis_opam.sh" >"$OUTPUT_DIR/oasis.opam"
+mkdir -p "$(dirname "$OPAM_OUTPUT")"
+"$ROOT_DIR/scripts/render_oasis_opam.sh" >"$OPAM_OUTPUT"
 if [ -n "$REUSE_SOURCE_ARCHIVE_DIR" ]; then
   SOURCE_ARCHIVE=$REUSE_SOURCE_ARCHIVE_DIR/$(oasis_release_source_archive_name)
   if [ ! -f "$SOURCE_ARCHIVE" ]; then
@@ -149,16 +163,24 @@ mkdir -p "$(dirname "$FORMULA_OUTPUT")"
   >"$FORMULA_OUTPUT"
 
 if [ -n "$CHECKSUMS_OUTPUT" ]; then
-  set -- "$OUTPUT_DIR"/*.tar.gz
-  if [ "$1" = "$OUTPUT_DIR/*.tar.gz" ] || [ ! -e "$1" ]; then
+  archive_list=$(mktemp "${TMPDIR:-/tmp}/oasis-release-archives.XXXXXX")
+  find "$OUTPUT_DIR" -maxdepth 1 -type f -name '*.tar.gz' | sort >"$archive_list"
+  if [ ! -s "$archive_list" ]; then
+    rm -f "$archive_list"
     echo "generate_packaging_manifests.sh: no release archives found under $OUTPUT_DIR for --checksums-output" >&2
     exit 1
   fi
   mkdir -p "$(dirname "$CHECKSUMS_OUTPUT")"
   TEMP_CHECKSUMS=$(mktemp "${TMPDIR:-/tmp}/oasis-release-checksums.XXXXXX")
   : >"$TEMP_CHECKSUMS"
-  for archive in "$@"; do
+  while IFS= read -r archive; do
     printf '%s  %s\n' "$(sha256_for_file "$archive")" "$archive" >>"$TEMP_CHECKSUMS"
+  done <"$archive_list"
+  rm -f "$archive_list"
+  for asset in "$OPAM_OUTPUT" "$FORMULA_OUTPUT"; do
+    if [ -f "$asset" ]; then
+      printf '%s  %s\n' "$(sha256_for_file "$asset")" "$asset" >>"$TEMP_CHECKSUMS"
+    fi
   done
   mv "$TEMP_CHECKSUMS" "$CHECKSUMS_OUTPUT"
   TEMP_CHECKSUMS=

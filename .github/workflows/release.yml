@@ -107,6 +107,7 @@ jobs:
           ./scripts/generate_packaging_manifests.sh \
             --output-dir dist \
             --reuse-source-archive-dir dist \
+            --opam-output dist/oasis.opam \
             --formula-output dist/oasis.rb \
             --checksums-output dist/SHA256SUMS
           diff -u oasis.opam dist/oasis.opam
@@ -117,6 +118,7 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/oasis.opam
             dist/oasis.rb
 
   homebrew_tap:

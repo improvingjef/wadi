@@ -147,4 +147,7 @@
 138. [x] Teach the GitHub release publish job to reuse `scripts/generate_packaging_manifests.sh` with the downloaded source archive, likely via a flat formula-output mode, so CI and local release maintenance converge on one packaging-manifest entrypoint.
 139. [x] Let `scripts/generate_packaging_manifests.sh --reuse-source-archive-dir DIR` consume an already-downloaded release source archive so publish jobs can package downloaded artifacts without regenerating them.
 140. [x] Let `scripts/generate_packaging_manifests.sh` emit flat release assets plus `SHA256SUMS` from one invocation so GitHub release packaging stops carrying ad hoc formula/checksum steps outside the shared generator.
-141. [ ] Publish the generated `oasis.opam` alongside GitHub release tarballs and `oasis.rb` so release consumers can fetch canonical package metadata without cloning the repo.
+141. [x] Publish the generated `oasis.opam` alongside GitHub release tarballs and `oasis.rb` so release consumers can fetch canonical package metadata without cloning the repo.
+142. [x] Let `scripts/generate_packaging_manifests.sh` write the rendered opam metadata to an explicit path so flat release layouts and other packagers do not have to accept the default `oasis.opam` location.
+143. [x] Include generated metadata assets like `oasis.opam` and `oasis.rb` in `SHA256SUMS` so published non-archive downloads carry the same integrity data as tarballs.
+144. [ ] Emit a machine-readable release asset index from the canonical packaging generator so downstream automation can discover filenames, URLs, and checksums without scraping workflow YAML or GitHub release pages.
