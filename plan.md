@@ -150,4 +150,6 @@
 141. [x] Publish the generated `oasis.opam` alongside GitHub release tarballs and `oasis.rb` so release consumers can fetch canonical package metadata without cloning the repo.
 142. [x] Let `scripts/generate_packaging_manifests.sh` write the rendered opam metadata to an explicit path so flat release layouts and other packagers do not have to accept the default `oasis.opam` location.
 143. [x] Include generated metadata assets like `oasis.opam` and `oasis.rb` in `SHA256SUMS` so published non-archive downloads carry the same integrity data as tarballs.
-144. [ ] Emit a machine-readable release asset index from the canonical packaging generator so downstream automation can discover filenames, URLs, and checksums without scraping workflow YAML or GitHub release pages.
+144. [x] Emit a machine-readable release asset index from the canonical packaging generator so downstream automation can discover filenames, URLs, and checksums without scraping workflow YAML or GitHub release pages.
+145. [x] Include explicit `--source-archive` inputs in generated checksum and asset-index metadata so packaging flows stay correct even when release archives live outside the primary output directory.
+146. [x] Publish and locally refresh `release-assets.json` from `make release-manifests`, `cut_release`, and the GitHub release workflow so the machine-readable release metadata path stays exercised end to end.

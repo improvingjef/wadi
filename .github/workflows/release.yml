@@ -109,7 +109,8 @@ jobs:
             --reuse-source-archive-dir dist \
             --opam-output dist/oasis.opam \
             --formula-output dist/oasis.rb \
-            --checksums-output dist/SHA256SUMS
+            --checksums-output dist/SHA256SUMS \
+            --asset-index-output dist/release-assets.json
           diff -u oasis.opam dist/oasis.opam
           diff -u Formula/oasis.rb dist/oasis.rb
 
@@ -118,6 +119,7 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/SHA256SUMS
+            dist/release-assets.json
             dist/oasis.opam
             dist/oasis.rb
 

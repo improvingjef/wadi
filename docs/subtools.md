@@ -44,6 +44,10 @@ exit codes rather than hidden global state.
 - `oasis docs`: render markdown CLI reference from the live command table.
 - `oasis completion`: generate shell completion scripts from the live command
   table.
+- `scripts/generate_packaging_manifests.sh`: derive `oasis.opam`,
+  `Formula/oasis.rb`, `SHA256SUMS`, and `release-assets.json` from canonical
+  release metadata so release automation consumes one asset generator instead of
+  scraping workflow state.
 - `oasis migrate`: scan `dune` and `dune-project` files and emit a reviewable
   `oasis.toml` starting point.
 

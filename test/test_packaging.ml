@@ -50,6 +50,66 @@ let run_make ~cwd goals =
       ]
     "make" goals
 
+let release_metadata_eval ~cwd expr =
+  let command =
+    Process.run_capture ~cwd "sh" [ "-c"; ". release/metadata.sh; " ^ expr ]
+  in
+  assert_int_equal 0 command.status
+    ("release metadata evaluation should succeed\n" ^ command.output);
+  String.trim command.output
+
+let release_download_base_url ~cwd =
+  release_metadata_eval ~cwd "oasis_release_download_base_url"
+
+let release_asset_index_name ~cwd =
+  release_metadata_eval ~cwd "oasis_release_asset_index_name"
+
+let sha256_for_file path =
+  let command =
+    Process.run_capture "sh"
+      [
+        "-c";
+        "if command -v sha256sum >/dev/null 2>&1; then \
+         sha256sum \"$1\" | awk '{print $1}'; \
+         else \
+         shasum -a 256 \"$1\" | awk '{print $1}'; \
+         fi";
+        "sh";
+        path;
+      ]
+  in
+  assert_int_equal 0 command.status
+    ("sha256 helper should succeed for " ^ path ^ "\n" ^ command.output);
+  String.trim command.output
+
+let render_asset_index_entry ~base_url ~name ~kind ?os ?arch ~sha256
+    ~size_bytes () =
+  let lines =
+    [
+      "    {";
+      Printf.sprintf "      \"name\": %S," name;
+      Printf.sprintf "      \"kind\": %S," kind;
+    ]
+  in
+  let lines =
+    match os with
+    | Some value -> lines @ [ Printf.sprintf "      \"os\": %S," value ]
+    | None -> lines
+  in
+  let lines =
+    match arch with
+    | Some value -> lines @ [ Printf.sprintf "      \"arch\": %S," value ]
+    | None -> lines
+  in
+  String.concat "\n"
+    (lines
+    @ [
+        Printf.sprintf "      \"url\": %S," (base_url ^ "/" ^ name);
+        Printf.sprintf "      \"sha256\": %S," sha256;
+        Printf.sprintf "      \"size_bytes\": %d" size_bytes;
+        "    }";
+      ])
+
 let cases =
   [
     ( "installs the staged release tree under a prefix",
@@ -251,6 +311,11 @@ let cases =
                   output_dir;
                   "--source-archive";
                   Filename.concat archive_dir "oasis-0.1.0-source.tar.gz";
+                  "--checksums-output";
+                  Filename.concat output_dir "SHA256SUMS";
+                  "--asset-index-output";
+                  Filename.concat output_dir
+                    (release_asset_index_name ~cwd:repo_root);
                 ]
             in
             assert_int_equal 0 generated.status
@@ -262,7 +327,28 @@ let cases =
             assert_string_equal
               (Fs.read_file (Filename.concat output_dir "Formula/oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
-              "explicit-archive manifest generation should match the committed Homebrew formula"));
+              "explicit-archive manifest generation should match the committed Homebrew formula";
+            let explicit_archive =
+              Filename.concat archive_dir "oasis-0.1.0-source.tar.gz"
+            in
+            let checksums = Fs.read_file (Filename.concat output_dir "SHA256SUMS") in
+            assert_string_contains ~needle:explicit_archive checksums
+              "explicit source archives should be included in checksum manifests even when they live outside the output dir";
+            let asset_index =
+              Fs.read_file
+                (Filename.concat output_dir
+                   (release_asset_index_name ~cwd:repo_root))
+            in
+            let base_url = release_download_base_url ~cwd:repo_root in
+            assert_string_contains
+              ~needle:
+                (render_asset_index_entry ~base_url
+                   ~name:(Filename.basename explicit_archive)
+                   ~kind:"source_archive"
+                   ~sha256:(sha256_for_file explicit_archive)
+                   ~size_bytes:(Unix.stat explicit_archive).Unix.st_size ())
+              asset_index
+              "explicit source archives should be represented in the asset index"));
     ( "can emit flat release assets and checksums from the packaging generator",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -308,6 +394,9 @@ let cases =
                   Filename.concat output_dir "oasis.rb";
                   "--checksums-output";
                   Filename.concat output_dir "SHA256SUMS";
+                  "--asset-index-output";
+                  Filename.concat output_dir
+                    (release_asset_index_name ~cwd:repo_root);
                 ]
             in
             assert_int_equal 0 generated.status
@@ -315,6 +404,11 @@ let cases =
             assert_file_exists (Filename.concat output_dir "oasis.opam");
             assert_file_exists (Filename.concat output_dir "oasis.rb");
             assert_file_exists (Filename.concat output_dir "SHA256SUMS");
+            let asset_index_path =
+              Filename.concat output_dir
+                (release_asset_index_name ~cwd:repo_root)
+            in
+            assert_file_exists asset_index_path;
             assert_string_equal
               (Fs.read_file (Filename.concat output_dir "oasis.rb"))
               (Fs.read_file (Filename.concat repo_root "Formula/oasis.rb"))
@@ -335,8 +429,68 @@ let cases =
             assert_string_contains
               ~needle:(Filename.concat output_dir "oasis.rb")
               checksums
-              "release checksum output should include the published formula metadata"));
-    ( "release workflow publishes the generated opam asset alongside checksums and formula",
+              "release checksum output should include the published formula metadata";
+            let base_url = release_download_base_url ~cwd:repo_root in
+            let asset_index = Fs.read_file asset_index_path in
+            assert_string_contains ~needle:"\"schema_version\": 1" asset_index
+              "release asset index should declare its schema version";
+            assert_string_not_contains ~needle:output_dir asset_index
+              "release asset index should not leak local build paths";
+            let source_archive =
+              Filename.concat output_dir "oasis-0.1.0-source.tar.gz"
+            in
+            let binary_archive =
+              Filename.concat output_dir "oasis-0.1.0-x86_64-linux.tar.gz"
+            in
+            let opam_asset = Filename.concat output_dir "oasis.opam" in
+            let formula_asset = Filename.concat output_dir "oasis.rb" in
+            let checksums_asset = Filename.concat output_dir "SHA256SUMS" in
+            assert_string_contains
+              ~needle:
+                (render_asset_index_entry ~base_url
+                   ~name:(Filename.basename source_archive)
+                   ~kind:"source_archive"
+                   ~sha256:(sha256_for_file source_archive)
+                   ~size_bytes:(Unix.stat source_archive).Unix.st_size ())
+              asset_index
+              "release asset index should describe the source archive";
+            assert_string_contains
+              ~needle:
+                (render_asset_index_entry ~base_url
+                   ~name:(Filename.basename binary_archive)
+                   ~kind:"binary_archive" ~os:"linux" ~arch:"x86_64"
+                   ~sha256:(sha256_for_file binary_archive)
+                   ~size_bytes:(Unix.stat binary_archive).Unix.st_size ())
+              asset_index
+              "release asset index should describe binary archives";
+            assert_string_contains
+              ~needle:
+                (render_asset_index_entry ~base_url
+                   ~name:(Filename.basename opam_asset)
+                   ~kind:"opam_metadata"
+                   ~sha256:(sha256_for_file opam_asset)
+                   ~size_bytes:(Unix.stat opam_asset).Unix.st_size ())
+              asset_index
+              "release asset index should describe the opam metadata asset";
+            assert_string_contains
+              ~needle:
+                (render_asset_index_entry ~base_url
+                   ~name:(Filename.basename formula_asset)
+                   ~kind:"homebrew_formula"
+                   ~sha256:(sha256_for_file formula_asset)
+                   ~size_bytes:(Unix.stat formula_asset).Unix.st_size ())
+              asset_index
+              "release asset index should describe the Homebrew formula asset";
+            assert_string_contains
+              ~needle:
+                (render_asset_index_entry ~base_url
+                   ~name:(Filename.basename checksums_asset)
+                   ~kind:"checksums"
+                   ~sha256:(sha256_for_file checksums_asset)
+                   ~size_bytes:(Unix.stat checksums_asset).Unix.st_size ())
+              asset_index
+              "release asset index should describe the checksum manifest"));
+    ( "release workflow publishes the generated asset index alongside checksums and metadata",
       fun () ->
         let repo_root = Sys.getcwd () in
         let workflow =
@@ -344,10 +498,15 @@ let cases =
         in
         assert_string_contains ~needle:"--opam-output dist/oasis.opam" workflow
           "release publishing should render the opam metadata into the release asset layout";
+        assert_string_contains
+          ~needle:"--asset-index-output dist/release-assets.json" workflow
+          "release publishing should render the release asset index into the release asset layout";
         assert_string_contains ~needle:"diff -u oasis.opam dist/oasis.opam" workflow
           "release publishing should verify the generated opam asset against the committed package metadata";
         assert_string_contains ~needle:"dist/oasis.opam" workflow
-          "release publishing should upload the generated opam asset");
+          "release publishing should upload the generated opam asset";
+        assert_string_contains ~needle:"dist/release-assets.json" workflow
+          "release publishing should upload the generated asset index");
     ( "release-manifests refreshes a local source archive alongside packaging manifests",
       fun () ->
         let repo_root = Sys.getcwd () in
@@ -374,6 +533,7 @@ let cases =
               "make release-manifests should not detour through bootstrap generation";
             assert_file_exists (Filename.concat workspace "oasis.opam");
             assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists (Filename.concat workspace "dist/release-assets.json");
             assert_file_exists
               (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz")));
     ( "sync-generated refreshes bootstrap metadata and release artifacts in one pass",
@@ -415,6 +575,7 @@ let cases =
             assert_file_exists (Filename.concat workspace "completions/oasis.fish");
             assert_file_exists (Filename.concat workspace "oasis.opam");
             assert_file_exists (Filename.concat workspace "Formula/oasis.rb");
+            assert_file_exists (Filename.concat workspace "dist/release-assets.json");
             assert_file_exists
               (Filename.concat workspace "dist/oasis-0.1.0-source.tar.gz");
             assert_file_exists
@@ -787,6 +948,8 @@ let cases =
               "release-cut should refresh the Homebrew formula from the new source archive";
             assert_file_exists
               (Filename.concat workspace "dist/oasis-0.1.1-source.tar.gz");
+            assert_file_exists
+              (Filename.concat workspace "dist/release-assets.json");
             let tags =
               Process.run_capture ~cwd:workspace "git" [ "tag"; "--list" ]
             in
@@ -816,6 +979,9 @@ let cases =
         assert_string_contains ~needle:"--checksums-output dist/SHA256SUMS" workflow
           "the release workflow should generate archive checksums through the shared packaging generator";
         assert_string_contains
+          ~needle:"--asset-index-output dist/release-assets.json" workflow
+          "the release workflow should generate a machine-readable asset index through the shared packaging generator";
+        assert_string_contains
           ~needle:"./scripts/update_homebrew_tap.sh"
           workflow
           "the release workflow should publish the rendered formula through the dedicated tap update flow";
@@ -830,5 +996,7 @@ let cases =
           workflow
           "the release workflow should check out the dedicated tap repository before pushing formula updates";
         assert_string_contains ~needle:"softprops/action-gh-release@v2" workflow
-          "the release workflow should publish the generated release assets");
+          "the release workflow should publish the generated release assets";
+        assert_string_contains ~needle:"dist/release-assets.json" workflow
+          "the release workflow should publish the machine-readable asset index");
   ]

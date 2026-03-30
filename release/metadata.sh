@@ -28,6 +28,10 @@ oasis_release_source_archive_name() {
   printf '%s-source.tar.gz\n' "$(oasis_release_source_dir_name)"
 }
 
+oasis_release_asset_index_name() {
+  printf 'release-assets.json\n'
+}
+
 oasis_release_binary_dir_name() {
   os_name=$1
   arch_name=$2
@@ -46,9 +50,14 @@ oasis_release_download_base_url() {
     "$(oasis_release_tag)"
 }
 
+oasis_release_asset_url() {
+  asset_name=$1
+  printf '%s/%s\n' "$(oasis_release_download_base_url)" "$asset_name"
+}
+
 oasis_release_archive_url() {
   archive_name=$1
-  printf '%s/%s\n' "$(oasis_release_download_base_url)" "$archive_name"
+  oasis_release_asset_url "$archive_name"
 }
 
 oasis_release_source_archive_url() {

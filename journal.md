@@ -164,3 +164,10 @@
 - Repo layout and release-asset layout are different concerns. A packaging generator that can target either `Formula/oasis.rb` or `dist/oasis.rb` from the same code path removes another small but recurring source of publishing drift.
 - If `oasis.opam` is going to be a first-class release asset, the packaging generator has to treat its path the same way it treats the formula path. Hard-wiring one metadata file to `OUTPUT_DIR/oasis.opam` while the other accepts an explicit destination is exactly the kind of asymmetric release plumbing that turns maintenance into guesswork.
 - Publishing extra metadata files without checksums is only half a release story. The moment `oasis.opam` and `oasis.rb` become downloadable assets, `SHA256SUMS` has to cover them too or the release integrity story silently bifurcates between archives and metadata.
+
+## 2026-03-29
+
+- A release asset index only earns its keep if it is generated from the same script that renders `oasis.opam`, `oasis.rb`, and `SHA256SUMS`. The minute the workflow writes a second metadata file by hand, release automation is back to scraping incidental state.
+- `--source-archive PATH` was only half-finished until checksum and asset-index generation respected archives that live outside `OUTPUT_DIR`. Reuse knobs that silently disappear from downstream metadata are just another flavor of build-tool dishonesty.
+- Publishing machine-readable release metadata is only useful if local maintenance paths exercise it too. Wiring `release-assets.json` through `make release-manifests` and `cut_release` keeps the release workflow from becoming a one-off branch of logic that nobody runs until tag day.
+- The Homebrew formula checksum remains a checksum of the whole tracked source tree. Any tracked edit that lands before a packaging refresh, including plan or journal updates, is enough to invalidate the formula and should be treated as normal packaging drift rather than a surprising failure mode.

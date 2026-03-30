@@ -69,12 +69,12 @@ release-artifacts: $(BIN_DIR)/oasis
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
 
 release-manifests:
-	./scripts/generate_packaging_manifests.sh --source-archive-dir dist
+	./scripts/generate_packaging_manifests.sh --source-archive-dir dist --asset-index-output dist/release-assets.json
 
 sync-generated: $(BIN_DIR)/oasis
 	$(MAKE) refresh-bootstrap-seed-metadata
 	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) ./scripts/generate_release_artifacts.sh
-	./scripts/generate_packaging_manifests.sh --source-archive-dir dist
+	./scripts/generate_packaging_manifests.sh --source-archive-dir dist --asset-index-output dist/release-assets.json
 
 release-cut:
 	@if [ -z "$(VERSION)" ]; then \
