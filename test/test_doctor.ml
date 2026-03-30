@@ -12,19 +12,19 @@ let write_executable workspace relative_path contents =
 let generated_release_artifacts =
   [
     ("docs/cli.md", "cli docs\n");
-    ("completions/oasis.bash", "bash completion\n");
-    ("completions/_oasis", "zsh completion\n");
-    ("completions/oasis.fish", "fish completion\n");
-    ("package/share/doc/oasis/cli.md", "cli docs\n");
-    ("package/share/bash-completion/completions/oasis", "bash completion\n");
-    ("package/share/zsh/site-functions/_oasis", "zsh completion\n");
-    ("package/share/fish/vendor_completions.d/oasis.fish", "fish completion\n");
+    ("completions/wadi.bash", "bash completion\n");
+    ("completions/_wadi", "zsh completion\n");
+    ("completions/wadi.fish", "fish completion\n");
+    ("package/share/doc/wadi/cli.md", "cli docs\n");
+    ("package/share/bash-completion/completions/wadi", "bash completion\n");
+    ("package/share/zsh/site-functions/_wadi", "zsh completion\n");
+    ("package/share/fish/vendor_completions.d/wadi.fish", "fish completion\n");
   ]
 
 let generated_release_metadata =
   [
-    ("oasis.opam", "opam metadata\n");
-    ("Formula/oasis.rb", "formula metadata\n");
+    ("wadi.opam", "opam metadata\n");
+    ("Formula/wadi.rb", "formula metadata\n");
     ("dist/release-assets.json", "{\"schema_version\":1}\n");
   ]
 
@@ -64,21 +64,21 @@ done
 mkdir -p \
   "$OUTPUT_DIR/docs" \
   "$OUTPUT_DIR/completions" \
-  "$OUTPUT_DIR/package/share/doc/oasis" \
+  "$OUTPUT_DIR/package/share/doc/wadi" \
   "$OUTPUT_DIR/package/share/bash-completion/completions" \
   "$OUTPUT_DIR/package/share/zsh/site-functions" \
   "$OUTPUT_DIR/package/share/fish/vendor_completions.d"
 printf 'cli docs\n' >"$OUTPUT_DIR/docs/cli.md"
-printf 'bash completion\n' >"$OUTPUT_DIR/completions/oasis.bash"
-printf 'zsh completion\n' >"$OUTPUT_DIR/completions/_oasis"
-printf 'fish completion\n' >"$OUTPUT_DIR/completions/oasis.fish"
-cp "$OUTPUT_DIR/docs/cli.md" "$OUTPUT_DIR/package/share/doc/oasis/cli.md"
-cp "$OUTPUT_DIR/completions/oasis.bash" \
-  "$OUTPUT_DIR/package/share/bash-completion/completions/oasis"
-cp "$OUTPUT_DIR/completions/_oasis" \
-  "$OUTPUT_DIR/package/share/zsh/site-functions/_oasis"
-cp "$OUTPUT_DIR/completions/oasis.fish" \
-  "$OUTPUT_DIR/package/share/fish/vendor_completions.d/oasis.fish"
+printf 'bash completion\n' >"$OUTPUT_DIR/completions/wadi.bash"
+printf 'zsh completion\n' >"$OUTPUT_DIR/completions/_wadi"
+printf 'fish completion\n' >"$OUTPUT_DIR/completions/wadi.fish"
+cp "$OUTPUT_DIR/docs/cli.md" "$OUTPUT_DIR/package/share/doc/wadi/cli.md"
+cp "$OUTPUT_DIR/completions/wadi.bash" \
+  "$OUTPUT_DIR/package/share/bash-completion/completions/wadi"
+cp "$OUTPUT_DIR/completions/_wadi" \
+  "$OUTPUT_DIR/package/share/zsh/site-functions/_wadi"
+cp "$OUTPUT_DIR/completions/wadi.fish" \
+  "$OUTPUT_DIR/package/share/fish/vendor_completions.d/wadi.fish"
 |});
   ignore
     (write_executable workspace "scripts/generate_packaging_manifests.sh"
@@ -113,8 +113,8 @@ if [ -n "$SOURCE_ARCHIVE_DIR" ]; then
   mkdir -p "$SOURCE_ARCHIVE_DIR"
   printf 'source archive\n' >"$SOURCE_ARCHIVE_DIR/source.tar.gz"
 fi
-printf 'opam metadata\n' >"$OUTPUT_DIR/oasis.opam"
-printf 'formula metadata\n' >"$OUTPUT_DIR/Formula/oasis.rb"
+printf 'opam metadata\n' >"$OUTPUT_DIR/wadi.opam"
+printf 'formula metadata\n' >"$OUTPUT_DIR/Formula/wadi.rb"
 if [ -n "$ASSET_INDEX_OUTPUT" ]; then
   mkdir -p "$(dirname "$ASSET_INDEX_OUTPUT")"
   printf '{"schema_version":1}\n' >"$ASSET_INDEX_OUTPUT"
@@ -126,10 +126,10 @@ let cases =
     ( "validates a healthy workspace and current lock snapshot",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before doctor checks a strict snapshot";
-            let doctor = run_oasis ~cwd:workspace [ "doctor"; "--locked" ] in
+            let doctor = run_wadi ~cwd:workspace [ "doctor"; "--locked" ] in
             assert_int_equal 0 doctor.status
               "doctor should pass for a healthy locked workspace";
             assert_string_contains ~needle:"manifest: pass" doctor.output
@@ -147,13 +147,13 @@ let cases =
               "doctor should summarize all successful checks")) );
     ( "reports missing external packages directly",
       (fun () ->
-        with_temp_dir "oasis-doctor-packages" (fun workspace ->
+        with_temp_dir "wadi-doctor-packages" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
-packages = ["definitely_missing_oasis_pkg"]
+packages = ["definitely_missing_wadi_pkg"]
 
 [executable.demo]
 dir = "app"
@@ -162,23 +162,23 @@ deps = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let value = "core"|};
             write_source workspace "app/main.ml" {|let () = print_endline Core.value|};
-            let doctor = run_oasis ~cwd:workspace [ "doctor"; "demo" ] in
+            let doctor = run_wadi ~cwd:workspace [ "doctor"; "demo" ] in
             assert_true (doctor.status <> 0)
               "doctor should fail when required packages cannot be resolved";
             assert_string_contains ~needle:"packages: fail" doctor.output
               "doctor should mark package resolution as failed";
             assert_string_contains
-              ~needle:"executable 'demo' requires package 'definitely_missing_oasis_pkg' is not available via ocamlfind"
+              ~needle:"executable 'demo' requires package 'definitely_missing_wadi_pkg' is not available via ocamlfind"
               doctor.output
               "doctor should keep the direct package-resolution error")) );
     ( "warns about stale lock data by default",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before simulating lock drift";
-            Fs.write_file (Filename.concat workspace "oasis.lock") "{}\n";
-            let doctor = run_oasis ~cwd:workspace [ "doctor" ] in
+            Fs.write_file (Filename.concat workspace "wadi.lock") "{}\n";
+            let doctor = run_wadi ~cwd:workspace [ "doctor" ] in
             assert_int_equal 0 doctor.status
               "doctor should warn about stale lock data by default";
             assert_string_contains ~needle:"lock: warn" doctor.output
@@ -190,27 +190,27 @@ deps = ["core"]
     ( "fails on stale lock data when --locked is requested",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before simulating a strict lock failure";
-            Fs.write_file (Filename.concat workspace "oasis.lock") "{}\n";
-            let doctor = run_oasis ~cwd:workspace [ "doctor"; "--locked" ] in
+            Fs.write_file (Filename.concat workspace "wadi.lock") "{}\n";
+            let doctor = run_wadi ~cwd:workspace [ "doctor"; "--locked" ] in
             assert_true (doctor.status <> 0)
               "doctor --locked should fail on stale or unreadable lock data";
             assert_string_contains ~needle:"lock: fail" doctor.output
               "doctor should upgrade lock drift to a failure with --locked";
             assert_string_contains
-              ~needle:"Refresh the snapshot with `oasis lock`."
+              ~needle:"Refresh the snapshot with `wadi lock`."
               doctor.output
               "doctor should keep the actionable lock refresh guidance")) );
     ( "passes generated-asset checks when committed outputs are current",
       (fun () ->
-        with_temp_dir "oasis-doctor-generated-assets-pass" (fun workspace ->
+        with_temp_dir "wadi-doctor-generated-assets-pass" (fun workspace ->
             setup_generated_asset_workspace workspace;
-            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before doctor checks generated assets";
-            let doctor = run_oasis ~cwd:workspace [ "doctor"; "--locked" ] in
+            let doctor = run_wadi ~cwd:workspace [ "doctor"; "--locked" ] in
             assert_int_equal 0 doctor.status
               "doctor should pass when generated assets are current";
             assert_string_contains ~needle:"generated-assets: pass" doctor.output
@@ -226,13 +226,13 @@ deps = ["core"]
               "doctor should include the generated-asset check in the passing summary")) );
     ( "warns when generated assets drift from their generators",
       (fun () ->
-        with_temp_dir "oasis-doctor-generated-assets-warn" (fun workspace ->
+        with_temp_dir "wadi-doctor-generated-assets-warn" (fun workspace ->
             setup_generated_asset_workspace workspace;
-            let lock = run_oasis ~cwd:workspace [ "lock" ] in
+            let lock = run_wadi ~cwd:workspace [ "lock" ] in
             assert_int_equal 0 lock.status
               "lock should succeed before doctor checks generated-asset drift";
             Fs.write_file (Filename.concat workspace "docs/cli.md") "drifted docs\n";
-            let doctor = run_oasis ~cwd:workspace [ "doctor"; "--locked" ] in
+            let doctor = run_wadi ~cwd:workspace [ "doctor"; "--locked" ] in
             assert_int_equal 0 doctor.status
               "doctor should warn, not fail, on generated-asset drift";
             assert_string_contains ~needle:"generated-assets: warn" doctor.output

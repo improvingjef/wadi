@@ -155,7 +155,7 @@ type profile_override = {
   line : int;
 }
 
-let default_filename = "oasis.toml"
+let default_filename = "wadi.toml"
 
 let default_profile_name = "default"
 

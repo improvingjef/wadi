@@ -1,13 +1,13 @@
 opam-version: "2.0"
 synopsis: "Dune-free OCaml workspace toolbox"
 description: """
-oasis is a Dune-free OCaml workspace tool with cohesive subtools for build, test, run, bench, migration, install, diagnostics, and bootstrap workflows.
+wadi is a Dune-free OCaml workspace tool with cohesive subtools for build, test, run, bench, migration, install, diagnostics, and bootstrap workflows.
 """
 maintainer: ["Jef Newsom <jef.newsom@gmail.com>"]
 authors: ["Jef Newsom"]
-homepage: ["https://github.com/jef/oasis"]
-bug-reports: "https://github.com/jef/oasis/issues"
-dev-repo: "git+https://github.com/jef/oasis.git"
+homepage: ["https://github.com/jef/wadi"]
+bug-reports: "https://github.com/jef/wadi/issues"
+dev-repo: "git+https://github.com/jef/wadi.git"
 license: "MIT"
 depends: [
   "ocaml" {>= "5.4.0"}
@@ -22,7 +22,7 @@ install: [
     "--package-root"
     "package"
     "--binary"
-    "_bootstrap/bin/oasis"
+    "_bootstrap/bin/wadi"
     "--prefix"
     prefix
   ]

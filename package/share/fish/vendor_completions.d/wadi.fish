@@ -1,4 +1,4 @@
-function __oasis_complete
+function __wadi_complete
   set -l previous (commandline -opc)
   if test (count $previous) -gt 0
     set previous $previous[2..-1]
@@ -6,7 +6,7 @@ function __oasis_complete
     set previous
   end
   set -l current (commandline -ct)
-  set -l response (oasis completion --query --describe --current "$current" -- $previous 2>/dev/null)
+  set -l response (wadi completion --query --describe --current "$current" -- $previous 2>/dev/null)
   set -l tab (printf '\t')
   if test (count $response) -eq 0
     return
@@ -15,7 +15,7 @@ function __oasis_complete
   if test (count $header) -lt 3
     return
   end
-  if test "$header[1]" != '__oasis_completion' -o "$header[2]" != '1'
+  if test "$header[1]" != '__wadi_completion' -o "$header[2]" != '1'
     return
   end
   if test "$header[3]" = directories
@@ -38,4 +38,4 @@ function __oasis_complete
     end
   end
 end
-complete -c oasis -f -a '(__oasis_complete)'
+complete -c wadi -f -a '(__wadi_complete)'

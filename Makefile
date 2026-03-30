@@ -3,13 +3,13 @@ OCAMLC ?= ocamlc
 OCAMLOPT ?= ocamlopt
 OCAMLFIND ?= ocamlfind
 OCAMLFLAGS ?= -g
-OASIS_BIN ?= $(BIN_DIR)/oasis
+WADI_BIN ?= $(BIN_DIR)/wadi
 
 BUILD_DIR := _bootstrap
 OBJ_DIR := $(BUILD_DIR)/obj
 SEED_OBJ_DIR := $(BUILD_DIR)/seed-obj
 BIN_DIR := $(BUILD_DIR)/bin
-BOOTSTRAP_MANIFEST := oasis.toml
+BOOTSTRAP_MANIFEST := wadi.toml
 BOOTSTRAP_METADATA_HELPER := scripts/render_bootstrap_mod_use.ml
 BOOTSTRAP_GENERATOR := scripts/bootstrap_seed_main.ml
 BOOTSTRAP_LEGACY_PLANNER := scripts/generate_bootstrap_makefile.ml
@@ -17,7 +17,7 @@ BOOTSTRAP_SHARED_OUTPUTS_HELPER := scripts/sync_bootstrap_shared_outputs.sh
 BOOTSTRAP_INTERNAL_COMMAND := __bootstrap_makefile
 BOOTSTRAP_SEED_METADATA := $(BUILD_DIR)/bootstrap.seed-metadata.mk
 BOOTSTRAP_SEED_ROOT := $(BUILD_DIR)/seed
-BOOTSTRAP_SEED_BIN := $(BIN_DIR)/oasis-seed
+BOOTSTRAP_SEED_BIN := $(BIN_DIR)/wadi-seed
 BOOTSTRAP_PROFILE ?=
 BOOTSTRAP_PROFILE_KEY := $(if $(strip $(BOOTSTRAP_PROFILE)),$(BOOTSTRAP_PROFILE),workspace-default)
 BOOTSTRAP_APP_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).app.generated.mk
@@ -28,8 +28,8 @@ BOOTSTRAP_FULL_MK := $(BUILD_DIR)/bootstrap.$(BOOTSTRAP_PROFILE_KEY).full.genera
 define REFRESH_BOOTSTRAP_SEED_METADATA
 set -eu; \
 tmp="$(BOOTSTRAP_SEED_METADATA).tmp"; \
-if [ -x "$(OASIS_BIN)" ]; then \
-	"$(OASIS_BIN)" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; \
+if [ -x "$(WADI_BIN)" ]; then \
+	"$(WADI_BIN)" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; \
 else \
 	if "$(OCAML)" "$(BOOTSTRAP_METADATA_HELPER)" --manifest "$(BOOTSTRAP_MANIFEST)" --format seed-metadata --seed-root "$(BOOTSTRAP_SEED_ROOT)" > "$$tmp"; then \
 		:; \
@@ -56,14 +56,14 @@ FORCE:
 $(BOOTSTRAP_SEED_METADATA): $(BOOTSTRAP_MANIFEST) $(BOOTSTRAP_METADATA_HELPER) $(BOOTSTRAP_GENERATOR) $(BOOTSTRAP_LEGACY_PLANNER) FORCE | $(BUILD_DIR)
 	@$(call REFRESH_BOOTSTRAP_SEED_METADATA)
 
-all: $(BIN_DIR)/oasis
+all: $(BIN_DIR)/wadi
 
 bootstrap-smoke:
 	rm -rf $(BUILD_DIR)
-	$(MAKE) $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
+	$(MAKE) $(BIN_DIR)/wadi $(BIN_DIR)/test_runner
 
-test: bootstrap-smoke $(BIN_DIR)/oasis $(BIN_DIR)/test_runner
-	OASIS_BIN=$(abspath $(BIN_DIR)/oasis) $(BIN_DIR)/test_runner
+test: bootstrap-smoke $(BIN_DIR)/wadi $(BIN_DIR)/test_runner
+	WADI_BIN=$(abspath $(BIN_DIR)/wadi) $(BIN_DIR)/test_runner
 
 release-artifacts:
 	./scripts/generate_release_artifacts.sh
@@ -72,7 +72,7 @@ release-manifests:
 	./scripts/generate_packaging_manifests.sh --source-archive-dir dist --asset-index-output dist/release-assets.json
 
 sync-generated:
-	./scripts/exec_oasis_subtool.sh sync-generated
+	./scripts/exec_wadi_subtool.sh sync-generated
 
 release-cut:
 	@if [ -z "$(VERSION)" ]; then \
@@ -83,7 +83,7 @@ release-cut:
 
 update-homebrew-tap:
 	@if [ -z "$(TAP_DIR)" ]; then \
-		echo "make update-homebrew-tap TAP_DIR=/path/to/homebrew-oasis [SOURCE_ARCHIVE=dist/archive.tar.gz | FORMULA=dist/oasis.rb] [COMMIT=1] [PUSH=1]" >&2; \
+		echo "make update-homebrew-tap TAP_DIR=/path/to/homebrew-wadi [SOURCE_ARCHIVE=dist/archive.tar.gz | FORMULA=dist/wadi.rb] [COMMIT=1] [PUSH=1]" >&2; \
 		exit 2; \
 	fi
 	./scripts/update_homebrew_tap.sh --tap-dir "$(TAP_DIR)" $(if $(SOURCE_ARCHIVE),--source-archive "$(SOURCE_ARCHIVE)",$(if $(FORMULA),--formula "$(FORMULA)",)) $(if $(COMMIT),--commit,) $(if $(PUSH),--push,)
@@ -118,7 +118,7 @@ BOOTSTRAP_MK := $(if $(BOOTSTRAP_NEEDS_FULL),$(BOOTSTRAP_FULL_MK),$(BOOTSTRAP_AP
 endif
 endif
 
-BOOTSTRAP_BACKEND ?= $(or $(OASIS_BACKEND),auto)
+BOOTSTRAP_BACKEND ?= $(or $(WADI_BACKEND),auto)
 BOOTSTRAP_NATIVE_OK := $(shell $(OCAMLOPT) -version >/dev/null 2>&1 && printf yes)
 BOOTSTRAP_BYTECODE_OK := $(shell $(OCAMLC) -version >/dev/null 2>&1 && printf yes)
 

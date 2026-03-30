@@ -8,9 +8,9 @@ type target_status = {
   reasons : string list;
 }
 
-let report_path out_dir = Filename.concat out_dir ".oasis-explain"
+let report_path out_dir = Filename.concat out_dir ".wadi-explain"
 
-let json_path out_dir = Filename.concat out_dir ".oasis-explain.json"
+let json_path out_dir = Filename.concat out_dir ".wadi-explain.json"
 
 let status_name = function
   | Rebuilt -> "rebuilt"

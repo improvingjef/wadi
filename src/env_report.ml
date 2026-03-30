@@ -113,12 +113,12 @@ let resolve_run_target workspace requested_target =
       | Some (Manifest.Library _) ->
           Error
             (Printf.sprintf
-               "target '%s' is a library; oasis env run only supports executables"
+               "target '%s' is a library; wadi env run only supports executables"
                name)
       | Some (Manifest.Test _) ->
           Error
             (Printf.sprintf
-               "target '%s' is a test; oasis env run only supports executables"
+               "target '%s' is a test; wadi env run only supports executables"
                name)
       | None -> Error (Printf.sprintf "unknown target '%s'" name))
   | None -> (
@@ -150,7 +150,7 @@ let resolve_test_targets workspace requested_targets =
           | Some target ->
               Error
                 (Printf.sprintf
-                   "target '%s' is %s '%s'; oasis env test only supports tests"
+                   "target '%s' is %s '%s'; wadi env test only supports tests"
                    name
                    (Manifest.target_kind_name target)
                    (Manifest.target_name target))
@@ -180,12 +180,12 @@ let resolve_bench_targets workspace requested_targets =
     | Some (Manifest.Library _) ->
         Error
           (Printf.sprintf
-             "bench '%s' points at library '%s'; oasis env bench requires executable targets"
+             "bench '%s' points at library '%s'; wadi env bench requires executable targets"
              bench.name bench.executable)
     | Some (Manifest.Test _) ->
         Error
           (Printf.sprintf
-             "bench '%s' points at test '%s'; oasis env bench requires executable targets"
+             "bench '%s' points at test '%s'; wadi env bench requires executable targets"
              bench.name bench.executable)
     | None ->
         Error
@@ -222,12 +222,12 @@ let resolve_bench_targets workspace requested_targets =
               | Some (Manifest.Library _) ->
                   Error
                     (Printf.sprintf
-                       "target '%s' is a library; oasis env bench only supports executables or [bench.*] declarations"
+                       "target '%s' is a library; wadi env bench only supports executables or [bench.*] declarations"
                        name)
               | Some (Manifest.Test _) ->
                   Error
                     (Printf.sprintf
-                       "target '%s' is a test; oasis env bench only supports executables or [bench.*] declarations"
+                       "target '%s' is a test; wadi env bench only supports executables or [bench.*] declarations"
                        name)
               | None -> Error (Printf.sprintf "unknown target '%s'" name)))
     in
@@ -252,7 +252,7 @@ let resolve_install_targets workspace requested_targets =
           | Some (Manifest.Test _) ->
               Error
                 (Printf.sprintf
-                   "target '%s' is a test; oasis env install only supports libraries and executables"
+                   "target '%s' is a test; wadi env install only supports libraries and executables"
                    name)
           | None -> Error (Printf.sprintf "unknown target '%s'" name))
     in

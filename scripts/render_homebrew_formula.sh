@@ -67,12 +67,12 @@ if [ -z "$SOURCE_SHA256" ]; then
 fi
 
 cat <<EOF
-class $OASIS_FORMULA_CLASS < Formula
-  desc "$OASIS_SYNOPSIS"
-  homepage "$OASIS_REPOSITORY_URL"
-  url "$(oasis_release_source_archive_url)"
+class $WADI_FORMULA_CLASS < Formula
+  desc "$WADI_SYNOPSIS"
+  homepage "$WADI_REPOSITORY_URL"
+  url "$(wadi_release_source_archive_url)"
   sha256 "$SOURCE_SHA256"
-  license "$OASIS_LICENSE"
+  license "$WADI_LICENSE"
 
   depends_on "ocaml"
   depends_on "ocaml-findlib"
@@ -81,13 +81,13 @@ class $OASIS_FORMULA_CLASS < Formula
     system "make", "release-artifacts"
     system "./scripts/install_release_tree.sh",
       "--package-root", "package",
-      "--binary", "_bootstrap/bin/oasis",
+      "--binary", "_bootstrap/bin/wadi",
       "--prefix", prefix
   end
 
   test do
-    output = shell_output("#{bin}/oasis docs")
-    assert_match "Oasis CLI", output
+    output = shell_output("#{bin}/wadi docs")
+    assert_match "Wadi CLI", output
   end
 end
 EOF

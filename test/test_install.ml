@@ -16,7 +16,7 @@ let cases =
         with_fixture "hello" (fun workspace ->
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
             in
             assert_int_equal 0 install.status
               "install should stage the default installable targets";
@@ -32,11 +32,11 @@ let cases =
               ]
               "install should stage a compiled library archive";
             let metadata_path =
-              Filename.concat prefix "share/oasis/hello/install.json"
+              Filename.concat prefix "share/wadi/hello/install.json"
             in
             assert_file_exists metadata_path;
             assert_file_exists
-              (Filename.concat prefix "share/oasis/hello/oasis.toml");
+              (Filename.concat prefix "share/wadi/hello/wadi.toml");
             let meta = Fs.read_file meta_path in
             assert_string_contains ~needle:"description = \"hello library greeting\"" meta
               "install should emit a findlib-friendly META description";
@@ -51,7 +51,7 @@ let cases =
               "install metadata should record library META paths";
             assert_string_contains ~needle:"\"path\": \"bin/hello\"" metadata
               "install metadata should record installed executables";
-            assert_string_contains ~needle:"\"share_dir\": \"share/oasis/hello\"" metadata
+            assert_string_contains ~needle:"\"share_dir\": \"share/wadi/hello\"" metadata
               "install metadata should publish the staged share root";
             assert_string_contains ~needle:"\"ocamlpath\": [" metadata
               "install metadata should publish OCAMLPATH roots for consumers";
@@ -65,7 +65,7 @@ let cases =
         with_fixture "hello" (fun workspace ->
             let prefix = Filename.concat workspace "_exe-only" in
             let install =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "install"; "--prefix"; prefix; "greeting" ]
             in
             assert_int_equal 0 install.status
@@ -75,13 +75,13 @@ let cases =
               (not (Fs.exists (Filename.concat prefix "bin/hello")))
               "installing only a library should not stage unrelated executables";
             let metadata =
-              Fs.read_file (Filename.concat prefix "share/oasis/hello/install.json")
+              Fs.read_file (Filename.concat prefix "share/wadi/hello/install.json")
             in
             assert_string_not_contains ~needle:"\"path\": \"bin/hello\"" metadata
               "install metadata should not list unrequested executables")) );
     ( "stages internal library dependencies needed by requested targets",
       (fun () ->
-        with_temp_dir "oasis-install-closure" (fun workspace ->
+        with_temp_dir "wadi-install-closure" (fun workspace ->
             write_manifest workspace
               {|
 [library.greeting]
@@ -104,7 +104,7 @@ deps = ["greeting"]
               {|let () = print_endline (Greeting.message "world")|};
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix; "hello" ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix; "hello" ]
             in
             assert_int_equal 0 install.status
               "install should stage the requested executable";
@@ -114,7 +114,7 @@ deps = ["greeting"]
               (not (Fs.exists (Filename.concat prefix "lib/unused")))
               "install closure should not stage unrelated libraries";
             let metadata =
-              Fs.read_file (Filename.concat prefix "share/oasis/workspace/install.json")
+              Fs.read_file (Filename.concat prefix "share/wadi/workspace/install.json")
             in
             assert_string_contains ~needle:"\"requested_targets\": [\"hello\"]"
               metadata
@@ -134,7 +134,7 @@ deps = ["greeting"]
         with_fixture "hello" (fun workspace ->
             let destdir = Filename.concat workspace "_pkg" in
             let install =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "install"; "--prefix"; "/usr/local"; "--destdir"; "_pkg" ]
             in
             assert_int_equal 0 install.status
@@ -143,7 +143,7 @@ deps = ["greeting"]
             assert_file_exists (Filename.concat staged_root "bin/hello");
             assert_file_exists (Filename.concat staged_root "lib/greeting/META");
             let metadata_path =
-              Filename.concat staged_root "share/oasis/hello/install.json"
+              Filename.concat staged_root "share/wadi/hello/install.json"
             in
             assert_file_exists metadata_path;
             let metadata = Fs.read_file metadata_path in
@@ -163,7 +163,7 @@ deps = ["greeting"]
             let destdir = Filename.concat workspace "_pkg" in
             let stage_root = Filename.concat destdir "_stage" in
             let install =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "install"; "--prefix"; "_stage"; "--destdir"; "_pkg" ]
             in
             assert_int_equal 0 install.status
@@ -172,7 +172,7 @@ deps = ["greeting"]
             assert_file_exists (Filename.concat stage_root "lib/greeting/META");
             let metadata =
               Fs.read_file
-                (Filename.concat stage_root "share/oasis/hello/install.json")
+                (Filename.concat stage_root "share/wadi/hello/install.json")
             in
             assert_string_contains ~needle:"\"prefix\": \"_stage\"" metadata
               "install metadata should preserve a relative logical prefix";
@@ -187,7 +187,7 @@ deps = ["greeting"]
               "install metadata should record the realized relative stage root")) );
     ( "records findlib requires in staged META files",
       (fun () ->
-        with_temp_dir "oasis-install-meta" (fun workspace ->
+        with_temp_dir "wadi-install-meta" (fun workspace ->
             write_manifest workspace
               {|
 [library.patterns]
@@ -209,7 +209,7 @@ let contains_digit text =
               {|let contains_digit = Patterns.contains_digit|};
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
             in
             assert_int_equal 0 install.status
               "install should succeed before META requires are inspected";
@@ -221,7 +221,7 @@ let contains_digit text =
               "dependent libraries should export internal library requires")) );
     ( "installs public names for libraries and executables",
       (fun () ->
-        with_temp_dir "oasis-install-public-names" (fun workspace ->
+        with_temp_dir "wadi-install-public-names" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -248,7 +248,7 @@ public_name = "demo-cli"
               {|let () = print_endline Facade.message|};
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
             in
             assert_int_equal 0 install.status
               "install should stage public names when present";
@@ -261,7 +261,7 @@ public_name = "demo-cli"
             assert_string_contains ~needle:"requires = \"demo.core\"" facade_meta
               "META requires should follow staged public library names";
             let metadata =
-              Fs.read_file (Filename.concat prefix "share/oasis/workspace/install.json")
+              Fs.read_file (Filename.concat prefix "share/wadi/workspace/install.json")
             in
             assert_string_contains ~needle:"\"meta\": \"lib/demo.core/META\"" metadata
               "install metadata should point at the staged public library path";
@@ -269,7 +269,7 @@ public_name = "demo-cli"
               "install metadata should point at the staged public executable path")) );
     ( "does not stage stale wrapper artifacts after wrapped mode flips",
       (fun () ->
-        with_temp_dir "oasis-install-prune-wrapper" (fun workspace ->
+        with_temp_dir "wadi-install-prune-wrapper" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -279,7 +279,7 @@ modules = ["greeting"]
 |};
             write_source workspace "lib/greeting.ml"
               {|let message = "wrapped"|};
-            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 first_build.status
               "the initial wrapped build should succeed before stale-wrapper pruning is exercised";
             let wrapper_cmi =
@@ -294,7 +294,7 @@ modules = ["greeting"]
 |};
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "install"; "--prefix"; prefix; "core" ]
             in
             assert_int_equal 0 install.status
@@ -307,20 +307,20 @@ modules = ["greeting"]
             assert_file_exists (Filename.concat prefix "lib/core/greeting.cmi"))) );
     ( "reports member package paths in install summaries",
       (fun () ->
-        with_temp_dir "oasis-install-package-paths" (fun workspace ->
+        with_temp_dir "wadi-install-package-paths" (fun workspace ->
             write_manifest workspace
               {|
 workspace = "demo"
 version = 1
 members = ["packages/core", "packages/app"]
 |};
-            write_workspace_file workspace "packages/core/oasis.toml"
+            write_workspace_file workspace "packages/core/wadi.toml"
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
 |};
-            write_workspace_file workspace "packages/app/oasis.toml"
+            write_workspace_file workspace "packages/app/wadi.toml"
               {|
 [executable.demo]
 dir = "app"
@@ -333,7 +333,7 @@ deps = ["core"]
               {|let () = print_endline Core.message|};
             let prefix = Filename.concat workspace "_stage" in
             let install =
-              run_oasis ~cwd:workspace [ "install"; "--prefix"; prefix ]
+              run_wadi ~cwd:workspace [ "install"; "--prefix"; prefix ]
             in
             assert_int_equal 0 install.status
               "member targets should install successfully";
@@ -347,7 +347,7 @@ deps = ["core"]
               "install summaries should surface member executable package paths")) );
     ( "rejects test targets for install",
       (fun () ->
-        with_temp_dir "oasis-install-tests" (fun workspace ->
+        with_temp_dir "wadi-install-tests" (fun workspace ->
             write_manifest workspace
               {|
 [test.suite]
@@ -355,11 +355,11 @@ dir = "test"
 main = "main"
 |};
             write_source workspace "test/main.ml" {|let () = print_endline "suite"|};
-            let install = run_oasis ~cwd:workspace [ "install"; "suite" ] in
+            let install = run_wadi ~cwd:workspace [ "install"; "suite" ] in
             assert_true (install.status <> 0)
               "install should reject test-only targets";
             assert_string_contains
-              ~needle:"target 'suite' is a test; oasis install only supports libraries and executables"
+              ~needle:"target 'suite' is a test; wadi install only supports libraries and executables"
               install.output
               "install should report unsupported target kinds clearly")) );
   ]

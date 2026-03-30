@@ -11,9 +11,9 @@ let write_executable workspace relative_path contents =
 
 let cases =
   [
-    ( "migrates dune files into an oasis manifest on stdout",
+    ( "migrates dune files into an wadi manifest on stdout",
       (fun () ->
-        with_temp_dir "oasis-migrate-basic" (fun workspace ->
+        with_temp_dir "wadi-migrate-basic" (fun workspace ->
             write_workspace_file workspace "dune-project"
               {|
 (lang dune 3.11)
@@ -42,7 +42,7 @@ let cases =
             write_source workspace "lib/core.ml" {|let value = "core"|};
             write_source workspace "app/main.ml" {|let () = print_endline Core.value|};
             write_source workspace "test/unit.ml" {|let () = print_endline Core.value|};
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate --stdout should render a manifest";
             assert_string_contains ~needle:"workspace = \"migrate_demo\"\n"
@@ -66,10 +66,10 @@ let cases =
             assert_string_contains
               ~needle:"[test.unit]\ndir = \"test\"\nmain = \"unit\"\ndeps = [\"core\"]\npackages = [\"ounit2\"]\n"
               migrate.output
-              "migrate should translate dune tests into oasis test targets")) );
+              "migrate should translate dune tests into wadi test targets")) );
     ( "preserves explicit dune wrapped=false libraries",
       (fun () ->
-        with_temp_dir "oasis-migrate-wrapped-false" (fun workspace ->
+        with_temp_dir "wadi-migrate-wrapped-false" (fun workspace ->
             write_workspace_file workspace "lib/dune"
               {|
 (library
@@ -77,7 +77,7 @@ let cases =
  (wrapped false))
 |};
             write_source workspace "lib/core.ml" {|let value = "core"|};
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should handle explicit dune wrapped flags";
             assert_string_not_contains ~needle:"wrapped = true" migrate.output
@@ -88,7 +88,7 @@ let cases =
               "wrapped=false dune libraries should still migrate as normal libraries")) );
     ( "drops checked-in wrapper sources from migrated wrapped-library module lists",
       (fun () ->
-        with_temp_dir "oasis-migrate-custom-wrapper" (fun workspace ->
+        with_temp_dir "wadi-migrate-custom-wrapper" (fun workspace ->
             write_workspace_file workspace "lib/dune"
               {|
 (library
@@ -96,7 +96,7 @@ let cases =
 |};
             write_source workspace "lib/core.ml" {|module Greeting = Greeting|};
             write_source workspace "lib/greeting.ml" {|let message = "hello"|};
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should preserve wrapped libraries with checked-in wrapper modules";
             assert_string_contains
@@ -108,7 +108,7 @@ let cases =
               "migrate should not emit the wrapper stem as a child module")) );
     ( "drops checked-in wrapper sources from explicit dune wrapped-library module lists",
       (fun () ->
-        with_temp_dir "oasis-migrate-explicit-wrapper-modules" (fun workspace ->
+        with_temp_dir "wadi-migrate-explicit-wrapper-modules" (fun workspace ->
             write_workspace_file workspace "lib/dune"
               {|
 (library
@@ -117,7 +117,7 @@ let cases =
 |};
             write_source workspace "lib/core.ml" {|module Greeting = Greeting|};
             write_source workspace "lib/greeting.ml" {|let message = "hello"|};
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should preserve explicit dune wrapped-library module lists with a checked-in wrapper";
             assert_string_contains
@@ -129,7 +129,7 @@ let cases =
               "migrate should not keep the wrapper stem in the migrated module list")) );
     ( "infers helper modules for dune executables groups",
       (fun () ->
-        with_temp_dir "oasis-migrate-executables" (fun workspace ->
+        with_temp_dir "wadi-migrate-executables" (fun workspace ->
             write_workspace_file workspace "app/dune"
               {|
 (executables
@@ -139,7 +139,7 @@ let cases =
             write_source workspace "app/alpha.ml" {|let () = print_endline Shared.value|};
             write_source workspace "app/beta.ml" {|let () = print_endline Shared.value|};
             write_source workspace "app/shared.ml" {|let value = "shared"|};
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should handle dune executables groups";
             assert_string_contains
@@ -150,9 +150,9 @@ let cases =
               ~needle:"[executable.beta]\ndir = \"app\"\nmain = \"beta\"\nmodules = [\"shared\"]\npackages = [\"unix\"]\n"
               migrate.output
               "migrate should infer helper modules for the second executable")) );
-    ( "refuses to overwrite an existing oasis manifest without force",
+    ( "refuses to overwrite an existing wadi manifest without force",
       (fun () ->
-        with_temp_dir "oasis-migrate-overwrite" (fun workspace ->
+        with_temp_dir "wadi-migrate-overwrite" (fun workspace ->
             write_workspace_file workspace "app/dune"
               {|
 (executable
@@ -164,16 +164,16 @@ let cases =
 workspace = "existing"
 version = 1
 |};
-            let migrate = run_oasis ~cwd:workspace [ "migrate" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate" ] in
             assert_true (migrate.status <> 0)
               "migrate should not overwrite an existing manifest by default";
             assert_string_contains
               ~needle:"refusing to overwrite existing file"
               migrate.output
               "migrate should explain how to opt into overwriting")) );
-    ( "migrates dune preprocess, pps, public names, and rules into first-class oasis sections",
+    ( "migrates dune preprocess, pps, public names, and rules into first-class wadi sections",
       (fun () ->
-        with_temp_dir "oasis-migrate-advanced" (fun workspace ->
+        with_temp_dir "wadi-migrate-advanced" (fun workspace ->
             write_workspace_file workspace "dune-project"
               {|
 (lang dune 3.11)
@@ -213,7 +213,7 @@ version = 1
                 "#!/bin/sh\nset -eu\nif [ \"$1\" = printppx ]; then\n  shift\n  printf './ppx/demo.exe --as-ppx\\n'\nelse\n  echo unsupported >&2\n  exit 1\nfi\n"
             in
             with_env "OCAMLFIND" ocamlfind (fun () ->
-                let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+                let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
                 assert_int_equal 0 migrate.status
                   "migrate should translate richer dune forms";
                 assert_string_contains
@@ -227,7 +227,7 @@ version = 1
                 assert_string_contains
                   ~needle:"[action.dune_action_3]\nargv = [\"tools/version.sh\"]\noutputs = [\"version.ml\"]\ndeps = [\"config/version.txt\"]\nstdout = \"version.ml\"\ncwd = \".\"\n"
                   migrate.output
-                  "migrate should turn dune rules into oasis actions";
+                  "migrate should turn dune rules into wadi actions";
                 assert_string_contains
                   ~needle:"[library.core]\npublic_name = \"migrate_demo.core\"\nwrapped = true\ndir = \".\"\nmodules = [\"version\"]\nactions = [\"dune_action_3\"]\npreprocess = [\"dune_preprocess_1\"]\npackages = [\"unix\"]\n"
                   migrate.output
@@ -242,7 +242,7 @@ version = 1
                   "public names should be emitted as manifest fields instead of review comments")) ));
     ( "migrates dune promote-mode source rules into checked-in generated source outputs",
       (fun () ->
-        with_temp_dir "oasis-migrate-promote-source" (fun workspace ->
+        with_temp_dir "wadi-migrate-promote-source" (fun workspace ->
             write_workspace_file workspace "dune"
               {|
 (library
@@ -259,7 +259,7 @@ version = 1
             ignore
               (write_executable workspace "tools/version.sh"
                  "#!/bin/sh\nprintf 'let value = \"generated\"\\n'\n");
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should translate dune promote-mode rules";
             assert_string_contains
@@ -272,7 +272,7 @@ version = 1
               "migrate should still attach the promote-mode action to the matching target")) );
     ( "infers explicit auxiliary file deps from dune preprocess actions and rules",
       (fun () ->
-        with_temp_dir "oasis-migrate-inferred-deps" (fun workspace ->
+        with_temp_dir "wadi-migrate-inferred-deps" (fun workspace ->
             write_workspace_file workspace "dune"
               {|
 (library
@@ -293,7 +293,7 @@ version = 1
             ignore
               (write_executable workspace "tools/render.sh"
                  "#!/bin/sh\ncat \"$1\" > \"$2\"\n");
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should infer auxiliary deps for straightforward dune actions";
             assert_string_contains
@@ -310,7 +310,7 @@ version = 1
               "migrate should drop the old manual-deps warning when explicit inputs are inferred")) );
     ( "preserves dune modules_without_implementation entries in migrated targets",
       (fun () ->
-        with_temp_dir "oasis-migrate-interface-only" (fun workspace ->
+        with_temp_dir "wadi-migrate-interface-only" (fun workspace ->
             write_workspace_file workspace "lib/dune"
               {|
 (library
@@ -320,16 +320,16 @@ version = 1
 |};
             write_source workspace "lib/logic.ml" {|let value = "logic"|};
             write_source workspace "lib/api.mli" {|val value : string|};
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should preserve interface-only dune modules";
             assert_string_contains
               ~needle:"[library.demo]\nwrapped = true\ndir = \"lib\"\nmodules = [\"logic\", \"api\"]\n"
               migrate.output
               "migrate should merge modules_without_implementation into the manifest module list")) );
-    ( "migrates dune progn, with-stdin-from, diff, and alias deps into usable oasis actions",
+    ( "migrates dune progn, with-stdin-from, diff, and alias deps into usable wadi actions",
       (fun () ->
-        with_temp_dir "oasis-migrate-composite-actions" (fun workspace ->
+        with_temp_dir "wadi-migrate-composite-actions" (fun workspace ->
             write_workspace_file workspace "dune"
               {|
 (library
@@ -351,7 +351,7 @@ version = 1
             ignore
               (write_executable workspace "tools/filter.sh"
                  "#!/bin/sh\ncat\n");
-            let migrate = run_oasis ~cwd:workspace [ "migrate"; "--stdout" ] in
+            let migrate = run_wadi ~cwd:workspace [ "migrate"; "--stdout" ] in
             assert_int_equal 0 migrate.status
               "migrate should support richer dune action forms without manual fallback";
             assert_string_contains
@@ -361,11 +361,11 @@ version = 1
             assert_string_contains
               ~needle:"[action.dune_action_2]\nsteps = [[\"cp\", \"fixtures/expected.txt\", \"copied.txt\"], [\"diff\", \"-u\", \"fixtures/expected.txt\", \"copied.txt\"]]\noutputs = [\"copied.txt\"]\ndeps = [\"fixtures/expected.txt\"]\ncwd = \".\"\n"
               migrate.output
-              "migrate should translate progn/diff rules into a first-class multi-step oasis action";
+              "migrate should translate progn/diff rules into a first-class multi-step wadi action";
             assert_string_contains
               ~needle:"# - generated action 'dune_action_2' from dune rule in"
               migrate.output
-              "migrate should keep a review comment when alias deps cannot map to concrete oasis file deps";
+              "migrate should keep a review comment when alias deps cannot map to concrete wadi file deps";
             assert_string_contains ~needle:"references alias deps (runtest)"
               migrate.output
               "migrate should explain which dune alias dependency needs manual review";

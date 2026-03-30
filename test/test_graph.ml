@@ -7,7 +7,7 @@ let cases =
   [
     ( "graphs target build order, package paths, and module order",
       (fun () ->
-        with_temp_dir "oasis-graph-order" (fun workspace ->
+        with_temp_dir "wadi-graph-order" (fun workspace ->
             write_manifest workspace
               {|
 workspace = "graph-demo"
@@ -18,14 +18,14 @@ members = ["packages/core", "packages/app"]
 dir = "shared"
 modules = ["shared"]
 |};
-            write_workspace_file workspace "packages/core/oasis.toml"
+            write_workspace_file workspace "packages/core/wadi.toml"
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
 deps = ["shared"]
 |};
-            write_workspace_file workspace "packages/app/oasis.toml"
+            write_workspace_file workspace "packages/app/wadi.toml"
               {|
 [executable.demo]
 dir = "app"
@@ -40,7 +40,7 @@ deps = ["core"]
               {|let render () = Core.value|};
             write_source workspace "packages/app/app/main.ml"
               {|let () = print_endline (Cli.render ())|};
-            let graph = run_oasis ~cwd:workspace [ "graph"; "demo" ] in
+            let graph = run_wadi ~cwd:workspace [ "graph"; "demo" ] in
             assert_int_equal 0 graph.status
               "graph should render the selected target closure";
             assert_string_contains ~needle:"Workspace: graph-demo\n" graph.output

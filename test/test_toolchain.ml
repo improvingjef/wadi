@@ -16,8 +16,8 @@ let cases =
         | None -> fail "expected ocamlc to resolve from PATH")) ;
     ( "prints a toolchain report without requiring a manifest",
       (fun () ->
-        with_temp_dir "oasis-toolchain" (fun workspace ->
-            let run = run_oasis ~cwd:workspace [ "toolchain" ] in
+        with_temp_dir "wadi-toolchain" (fun workspace ->
+            let run = run_wadi ~cwd:workspace [ "toolchain" ] in
             assert_int_equal 0 run.status
               "toolchain diagnostics should succeed without a workspace manifest";
             assert_string_contains ~needle:"ocamlc: " run.output
@@ -49,14 +49,14 @@ let cases =
                   ("expected bytecode fallback but resolution failed: " ^ message)))) ;
     ( "prints command-specific help for the toolchain subcommand",
       (fun () ->
-        with_temp_dir "oasis-toolchain-help" (fun workspace ->
-            let help = run_oasis ~cwd:workspace [ "toolchain"; "--help" ] in
+        with_temp_dir "wadi-toolchain-help" (fun workspace ->
+            let help = run_wadi ~cwd:workspace [ "toolchain"; "--help" ] in
             assert_true (help.status <> 0)
               "toolchain --help should short-circuit with usage";
-            assert_string_contains ~needle:"oasis toolchain" help.output
+            assert_string_contains ~needle:"wadi toolchain" help.output
               "toolchain help should include the toolchain signature";
             assert_string_not_contains
-              ~needle:"oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
+              ~needle:"wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]"
               help.output
               "toolchain help should stay scoped to the requested command")) );
   ]

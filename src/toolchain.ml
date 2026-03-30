@@ -132,7 +132,7 @@ let parse_backend_request value =
       Ok (Select backend)
 
 let env_backend_request () =
-  match Sys.getenv_opt "OASIS_BACKEND" with
+  match Sys.getenv_opt "WADI_BACKEND" with
   | None -> Ok Auto
   | Some value -> parse_backend_request value
 

@@ -7,7 +7,7 @@ let cases =
   [
     ( "launches a bytecode toplevel with workspace libraries and package dependencies",
       (fun () ->
-        with_temp_dir "oasis-repl-library" (fun workspace ->
+        with_temp_dir "wadi-repl-library" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -31,7 +31,7 @@ print_endline (string_of_int (Unix.getpid ()));;
 exit 0;;
 |};
             let repl =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "repl"; "core"; "--"; "-noinit"; "-noprompt"; script_path ]
             in
             assert_int_equal 0 repl.status
@@ -45,7 +45,7 @@ exit 0;;
               "repl should make selected package dependencies available in the toplevel")) );
     ( "uses the only runnable target by default when no library is present",
       (fun () ->
-        with_temp_dir "oasis-repl-runnable-default" (fun workspace ->
+        with_temp_dir "wadi-repl-runnable-default" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -62,7 +62,7 @@ modules = ["helper"]
 exit 0;;
 |};
             let repl =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "repl"; "--"; "-noinit"; "-noprompt"; script_path ]
             in
             assert_int_equal 0 repl.status
@@ -75,7 +75,7 @@ exit 0;;
               "repl should link helper modules from runnable targets")) );
     ( "reuses cached toplevel binaries when repl inputs are unchanged",
       (fun () ->
-        with_temp_dir "oasis-repl-cache" (fun workspace ->
+        with_temp_dir "wadi-repl-cache" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -89,7 +89,7 @@ modules = ["core"]
 exit 0;;
 |};
             let first =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "repl"; "core"; "--"; "-noinit"; "-noprompt"; script_path ]
             in
             assert_int_equal 0 first.status
@@ -99,7 +99,7 @@ exit 0;;
               first.output
               "the first repl launch should report a built toplevel";
             let second =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "repl"; "core"; "--"; "-noinit"; "-noprompt"; script_path ]
             in
             assert_int_equal 0 second.status
@@ -116,7 +116,7 @@ exit 0;;
               "reused repl launches should still execute the script successfully")) );
     ( "runs explicit --script input without depending on OCaml script-file argv handling",
       (fun () ->
-        with_temp_dir "oasis-repl-explicit-script" (fun workspace ->
+        with_temp_dir "wadi-repl-explicit-script" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -133,7 +133,7 @@ print_endline (string_of_bool (Unix.getpid () > 0));;
 exit 0;;
 |};
             let repl =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "repl"; "core"; "--script"; "repl-script.ml"; "--"; "-noinit"; "-noprompt" ]
             in
             assert_int_equal 0 repl.status
@@ -147,7 +147,7 @@ exit 0;;
               "repl --script should expose package-backed runtime code to the script")) );
     ( "renders machine-readable repl plans without launching the toplevel",
       (fun () ->
-        with_temp_dir "oasis-repl-plan" (fun workspace ->
+        with_temp_dir "wadi-repl-plan" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -163,7 +163,7 @@ env = ["REPL_MODE=plan"]
 exit 0;;
 |};
             let plan =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "repl";
                   "--plan";
@@ -199,7 +199,7 @@ exit 0;;
             assert_string_not_contains ~needle:"Launching repl" plan.output
               "planning mode should not launch the repl";
             let repl =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "repl";
                   "core";
@@ -213,7 +213,7 @@ exit 0;;
             assert_int_equal 0 repl.status
               "building the repl after planning should still succeed";
             let planned_again =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "repl"; "--plan"; "--json"; "core" ]
             in
             assert_int_equal 0 planned_again.status
@@ -224,7 +224,7 @@ exit 0;;
               "a warm repl plan should report that the cached toplevel can be reused")) );
     ( "rejects repl --json without planning mode",
       (fun () ->
-        with_temp_dir "oasis-repl-json-without-plan" (fun workspace ->
+        with_temp_dir "wadi-repl-json-without-plan" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -232,7 +232,7 @@ dir = "lib"
 modules = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let value = "core"|};
-            let repl = run_oasis ~cwd:workspace [ "repl"; "--json"; "core" ] in
+            let repl = run_wadi ~cwd:workspace [ "repl"; "--json"; "core" ] in
             assert_true (repl.status <> 0)
               "repl should reject JSON output without explicit planning mode";
             assert_string_contains ~needle:"repl --json requires --plan"

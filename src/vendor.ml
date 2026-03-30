@@ -33,7 +33,7 @@ type prepared_source = {
 let ( let* ) = Result.bind
 
 let excluded_entries =
-  [ ".git"; ".DS_Store"; "__MACOSX"; "_build"; "_bootstrap"; "_oasis"; "dist" ]
+  [ ".git"; ".DS_Store"; "__MACOSX"; "_build"; "_bootstrap"; "_wadi"; "dist" ]
 
 let validate_name label value =
   let value = String.trim value in
@@ -208,7 +208,7 @@ let suggested_name_from_url url =
   if name = "" || name = "." || name = "/" then "vendor" else name
 
 let prepare_git_source url ref_name checksum f =
-  with_temp_dir "oasis-vendor-git" (fun temp_dir ->
+  with_temp_dir "wadi-vendor-git" (fun temp_dir ->
       let checkout_dir = Filename.concat temp_dir "checkout" in
       let* _ =
         Process.ensure_success "git" [ "clone"; "--quiet"; url; checkout_dir ]
@@ -243,7 +243,7 @@ let prepare_git_source url ref_name checksum f =
           })
 
 let prepare_url_source url checksum f =
-  with_temp_dir "oasis-vendor-url" (fun temp_dir ->
+  with_temp_dir "wadi-vendor-url" (fun temp_dir ->
       let archive_path = Filename.concat temp_dir "downloaded-source" in
       let extract_dir = Filename.concat temp_dir "extract" in
       Fs.ensure_dir extract_dir;

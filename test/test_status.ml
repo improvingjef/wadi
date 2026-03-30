@@ -5,7 +5,7 @@ let cases =
     ( "summarizes current target state before the first build",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let status = run_oasis ~cwd:workspace [ "status" ] in
+            let status = run_wadi ~cwd:workspace [ "status" ] in
             assert_int_equal 0 status.status
               "status should summarize a workspace without compiling it";
             assert_string_contains ~needle:"Summary: rebuilt=2 regenerated=0 reused=0"
@@ -20,10 +20,10 @@ let cases =
     ( "reports reused targets after a successful build",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "build should succeed before status reports cache hits";
-            let status = run_oasis ~cwd:workspace [ "status" ] in
+            let status = run_wadi ~cwd:workspace [ "status" ] in
             assert_int_equal 0 status.status
               "status should still succeed after a build";
             assert_string_contains ~needle:"Summary: rebuilt=0 regenerated=0 reused=2"
@@ -35,7 +35,7 @@ let cases =
       (fun () ->
         with_fixture "hello" (fun workspace ->
             let status =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "status"; "--json"; "--backend"; "bytecode"; "hello" ]
             in
             assert_int_equal 0 status.status

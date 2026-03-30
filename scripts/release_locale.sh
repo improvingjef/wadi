@@ -1,6 +1,6 @@
 #!/bin/sh
 
-oasis_release_archive_locale() {
+wadi_release_archive_locale() {
   if command -v locale >/dev/null 2>&1; then
     available_locales=$(locale -a 2>/dev/null || true)
     for candidate in C.UTF-8 C.utf8; do
@@ -14,8 +14,8 @@ oasis_release_archive_locale() {
   printf 'C\n'
 }
 
-oasis_apply_release_archive_env() {
-  archive_locale=$(oasis_release_archive_locale)
+wadi_apply_release_archive_env() {
+  archive_locale=$(wadi_release_archive_locale)
   export LANG=$archive_locale
   export LC_ALL=$archive_locale
   export TZ=UTC

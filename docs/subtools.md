@@ -1,103 +1,103 @@
-## Oasis subtool split
+## Wadi subtool split
 
-`oasis` should feel like a toolbox, not a build-system kitchen sink. Each
+`wadi` should feel like a toolbox, not a build-system kitchen sink. Each
 subtool owns one job, prints direct facts, and composes through stable files and
 exit codes rather than hidden global state.
 
 ### Bootstrap
 
-- `oasis init`: scaffold a minimal workspace or package so the first buildable
+- `wadi init`: scaffold a minimal workspace or package so the first buildable
   manifest is generated instead of hand-written.
 
 ### Build lifecycle
 
-- `oasis build`: compile libraries, executables, and tests into predictable
+- `wadi build`: compile libraries, executables, and tests into predictable
   artifact roots.
-- `oasis status`: summarize which targets are currently rebuilt, regenerated,
+- `wadi status`: summarize which targets are currently rebuilt, regenerated,
   or reused without compiling.
-- `oasis clean`: remove the whole workspace artifact tree or just the requested
+- `wadi clean`: remove the whole workspace artifact tree or just the requested
   targets.
-- `oasis graph`: explain target and module dependency order.
-- `oasis explain`: show compiler invocations, include paths, and why a target
-  was rebuilt. Persist a machine-readable `.oasis-explain.json` sibling for
+- `wadi graph`: explain target and module dependency order.
+- `wadi explain`: show compiler invocations, include paths, and why a target
+  was rebuilt. Persist a machine-readable `.wadi-explain.json` sibling for
   editors and CI.
-- `oasis watch`: poll the workspace and rerun a selected subtool when files
+- `wadi watch`: poll the workspace and rerun a selected subtool when files
   change, without baking watch mode into every other command. Root workspaces
   can persist shared include/ignore globs under `[watch]`, and
-  `.oasiswatchignore` can absorb local noisy trees without bloating shell
+  `.wadiwatchignore` can absorb local noisy trees without bloating shell
   aliases. Lock-aware delegated subtools also keep root metadata like
-  `oasis.lock` visible even when include globs narrow the watched tree to
+  `wadi.lock` visible even when include globs narrow the watched tree to
   source directories.
 
 ### Execution
 
-- `oasis run`: build and launch executables with exact argv and signal
+- `wadi run`: build and launch executables with exact argv and signal
   semantics.
-- `oasis test`: discover, build, run, and summarize test targets.
-- `oasis bench`: build executable targets, run stable timing loops, and print
+- `wadi test`: discover, build, run, and summarize test targets.
+- `wadi bench`: build executable targets, run stable timing loops, and print
   machine-readable summaries.
 
 ### Dependencies and packages
 
-- `oasis deps`: resolve external libraries, surface missing packages, and print
+- `wadi deps`: resolve external libraries, surface missing packages, and print
   the exact toolchain assumptions.
-- `oasis vendor`: copy a local package or fetch a pinned git/archive source
+- `wadi vendor`: copy a local package or fetch a pinned git/archive source
   into `vendor/` and register it as a workspace member.
-- `oasis lock`: snapshot resolved toolchain facts and external package paths
+- `wadi lock`: snapshot resolved toolchain facts and external package paths
   into a machine-readable lock file and validate those facts during locked
   builds and installs.
-- `oasis install`: stage installable binaries, libraries, and metadata.
+- `wadi install`: stage installable binaries, libraries, and metadata.
 
 ### Discoverability
 
-- `oasis release-artifacts`: render `docs/cli.md`, top-level completion
+- `wadi release-artifacts`: render `docs/cli.md`, top-level completion
   scripts, and the packaged `package/share/...` install tree from the live
   binary.
-- `oasis package`: derive `oasis.opam`, `Formula/oasis.rb`, `SHA256SUMS`, and
+- `wadi package`: derive `wadi.opam`, `Formula/wadi.rb`, `SHA256SUMS`, and
   `release-assets.json` from canonical release metadata without scraping shell
   scripts.
-- `oasis docs`: render markdown CLI reference from the live command table.
-- `oasis completion`: generate shell completion scripts from the live command
+- `wadi docs`: render markdown CLI reference from the live command table.
+- `wadi completion`: generate shell completion scripts from the live command
   table.
-- `scripts/generate_packaging_manifests.sh`: derive `oasis.opam`,
-  `Formula/oasis.rb`, `SHA256SUMS`, and `release-assets.json` from canonical
+- `scripts/generate_packaging_manifests.sh`: derive `wadi.opam`,
+  `Formula/wadi.rb`, `SHA256SUMS`, and `release-assets.json` from canonical
   release metadata so release automation consumes one asset generator instead of
   scraping workflow state.
-- `oasis migrate`: scan `dune` and `dune-project` files and emit a reviewable
-  `oasis.toml` starting point.
+- `wadi migrate`: scan `dune` and `dune-project` files and emit a reviewable
+  `wadi.toml` starting point.
 
 ### Toolchain and environment
 
-- `oasis toolchain`: discover `ocamlc`, `ocamlopt`, standard libraries, and
+- `wadi toolchain`: discover `ocamlc`, `ocamlopt`, standard libraries, and
   platform quirks behind one portable driver.
-- `oasis doctor`: validate manifest, target graph, toolchain, package
+- `wadi doctor`: validate manifest, target graph, toolchain, package
   resolution, and lock drift in one checklist.
-- `oasis env`: print the environment a subtool would run under.
-- `oasis repl`: launch a workspace-aware OCaml toplevel.
+- `wadi env`: print the environment a subtool would run under.
+- `wadi repl`: launch a workspace-aware OCaml toplevel.
 
 ### Code generation and actions
 
-- `oasis action`: run declared generated-file steps inside a sandboxed runner
+- `wadi action`: run declared generated-file steps inside a sandboxed runner
   without paying a full compile/link.
-- `oasis ppx`: compile and apply preprocessor pipelines with explicit ordering.
-- `oasis promote`: copy declared generated outputs and explicit checked-in
+- `wadi ppx`: compile and apply preprocessor pipelines with explicit ordering.
+- `wadi promote`: copy declared generated outputs and explicit checked-in
   source snapshots back into the source tree on purpose, never by surprise.
 
 ## Dune feature mapping
 
-- `dune init` maps to `oasis init`.
-- `dune build` maps to `oasis build`.
-- `dune exec` maps to `oasis run`.
-- `dune runtest` maps to `oasis test`.
-- `dune clean` maps to `oasis clean`.
+- `dune init` maps to `wadi init`.
+- `dune build` maps to `wadi build`.
+- `dune exec` maps to `wadi run`.
+- `dune runtest` maps to `wadi test`.
+- `dune clean` maps to `wadi clean`.
 - `dune describe`, `dune rules`, and parts of `dune diagnostics` map to
-  `oasis graph` and `oasis explain`.
+  `wadi graph` and `wadi explain`.
 - `dune build -w`, `dune runtest -w`, and similar edit-run loops map to
-  `oasis watch`.
-- `dune external-lib-deps` maps to `oasis deps`.
-- `dune install` maps to `oasis install`.
+  `wadi watch`.
+- `dune external-lib-deps` maps to `wadi deps`.
+- `dune install` maps to `wadi install`.
 - `dune subst`, `dune promote`, and generated-file workflows map to
-  `oasis action`, `oasis ppx`, and `oasis promote`.
+  `wadi action`, `wadi ppx`, and `wadi promote`.
 
 ## Design constraints
 

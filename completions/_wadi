@@ -1,18 +1,18 @@
-#compdef oasis
+#compdef wadi
 
-_oasis_query() {
-  oasis completion --query --describe --current "$1" -- "${@:2}" 2>/dev/null
+_wadi_query() {
+  wadi completion --query --describe --current "$1" -- "${@:2}" 2>/dev/null
 }
-_oasis() {
+_wadi() {
   local current response first_line body
   local record protocol version kind value description
   local -a previous suggestions
   current="${words[CURRENT]}"
   previous=("${(@)words[2,CURRENT-1]}")
-  response="$(_oasis_query "$current" "${previous[@]}")"
+  response="$(_wadi_query "$current" "${previous[@]}")"
   first_line="${response%%$'\n'*}"
   IFS=$'\t' read -r protocol version kind <<< "$first_line"
-  [[ "$protocol" == '__oasis_completion' ]] || return
+  [[ "$protocol" == '__wadi_completion' ]] || return
   [[ "$version" == '1' ]] || return
   if [[ "$kind" == directories ]]; then
     _files -/
@@ -37,4 +37,4 @@ _oasis() {
   done <<< "$body"
   _describe 'value' suggestions
 }
-compdef _oasis oasis
+compdef _wadi wadi

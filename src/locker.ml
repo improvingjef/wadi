@@ -124,7 +124,7 @@ let create ~workspace_root workspace requested_targets =
       targets;
     }
 
-let default_lock_filename = "oasis.lock"
+let default_lock_filename = "wadi.lock"
 
 let default_lock_path workspace_root =
   Filename.concat workspace_root default_lock_filename
@@ -449,7 +449,7 @@ let compare_package_paths ~label locked current =
       | None ->
           differences :=
             (Printf.sprintf
-               "%s now resolves package '%s' at %s, but oasis.lock does not \
+               "%s now resolves package '%s' at %s, but wadi.lock does not \
                 record that package"
                label package_name current_path)
             :: !differences
@@ -466,7 +466,7 @@ let compare_package_paths ~label locked current =
       if not (Hashtbl.mem current_map package_name) then
         differences :=
           (Printf.sprintf
-             "%s no longer resolves package '%s', but oasis.lock still points \
+             "%s no longer resolves package '%s', but wadi.lock still points \
               at %s"
              label package_name locked_path)
           :: !differences)
@@ -494,14 +494,14 @@ let render_validation_error lock_path differences =
   String.concat "\n"
     (("lock validation failed against " ^ lock_path ^ ":")
     :: List.map (fun difference -> "- " ^ difference) differences
-    @ [ "Refresh the snapshot with `oasis lock`." ])
+    @ [ "Refresh the snapshot with `wadi lock`." ])
 
 let validate_current ~workspace_root workspace requested_targets =
   let lock_path = default_lock_path workspace_root in
   if not (Fs.exists lock_path) then
     Error
       (Printf.sprintf
-         "lock validation requested, but %s does not exist; run `oasis lock` first"
+         "lock validation requested, but %s does not exist; run `wadi lock` first"
          lock_path)
   else
     let* snapshot =
@@ -521,7 +521,7 @@ let validate_current ~workspace_root workspace requested_targets =
         :: !differences;
     if snapshot.manifest_digest <> current.manifest_digest then
       differences :=
-        "workspace manifest digest changed since oasis.lock was written"
+        "workspace manifest digest changed since wadi.lock was written"
         :: !differences;
     differences :=
       List.rev_append
@@ -547,7 +547,7 @@ let validate_current ~workspace_root workspace requested_targets =
         | None ->
             differences :=
               (Printf.sprintf
-                 "oasis.lock does not contain a snapshot for target %s"
+                 "wadi.lock does not contain a snapshot for target %s"
                  (Manifest.target_display_name target.target))
               :: !differences)
       current.targets;

@@ -58,7 +58,7 @@ let cases =
   [
     ( "reruns a selected subtool when workspace inputs change",
       (fun () ->
-        with_temp_dir "oasis-watch-rerun" (fun workspace ->
+        with_temp_dir "wadi-watch-rerun" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -72,7 +72,7 @@ main = "main"
                 {|let () = print_endline "second"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -98,9 +98,9 @@ main = "main"
               "watch should execute the selected subtool a second time";
             assert_string_contains ~needle:"second\n" watch.output
               "watch should include output from the rerun")) );
-    ( "reloads .oasiswatchignore changes without restarting the watcher",
+    ( "reloads .wadiwatchignore changes without restarting the watcher",
       (fun () ->
-        with_temp_dir "oasis-watch-ignore-reload" (fun workspace ->
+        with_temp_dir "wadi-watch-ignore-reload" (fun workspace ->
             write_manifest workspace
               {|
 [watch]
@@ -113,18 +113,18 @@ main = "main"
             write_source workspace "app/main.ml"
               {|let () = print_endline "demo"|};
             write_source workspace "docs/notes.txt" "notes\n";
-            write_workspace_file workspace ".oasiswatchignore" {|
+            write_workspace_file workspace ".wadiwatchignore" {|
 docs/**
 |};
             let reload_ignore =
-              spawn_delayed_write workspace ".oasiswatchignore" ""
+              spawn_delayed_write workspace ".wadiwatchignore" ""
             in
             let relevant_change =
               spawn_delayed_write ~delay_s:3 workspace "docs/notes.txt"
                 "updated notes\n"
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -147,7 +147,7 @@ docs/**
               "watch should rerun after a newly unignored path changes")) );
     ( "reloads manifest watch globs even when includes were previously narrower",
       (fun () ->
-        with_temp_dir "oasis-watch-manifest-reload" (fun workspace ->
+        with_temp_dir "wadi-watch-manifest-reload" (fun workspace ->
             write_manifest workspace
               {|
 [watch]
@@ -177,7 +177,7 @@ main = "main"
                 "updated notes\n"
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -201,23 +201,23 @@ main = "main"
               "manifest edits should still rerun the delegated subtool";
             assert_string_contains ~needle:"Watch-run 3: run demo" watch.output
               "watch should apply the reloaded manifest policy to later changes")) );
-    ( "reruns build --locked when oasis.lock changes outside included globs",
+    ( "reruns build --locked when wadi.lock changes outside included globs",
       (fun () ->
-        with_temp_dir "oasis-watch-build-locked" (fun workspace ->
+        with_temp_dir "wadi-watch-build-locked" (fun workspace ->
             write_demo_workspace
               ~watch_block:{|
 [watch]
 include = ["app/**"]
 |}
               workspace;
-            let locked = run_oasis ~cwd:workspace [ "lock"; "demo" ] in
+            let locked = run_wadi ~cwd:workspace [ "lock"; "demo" ] in
             assert_int_equal 0 locked.status
               "lock should succeed before watching a locked build";
             let drift_lock =
-              spawn_delayed_write workspace "oasis.lock" "{}\n"
+              spawn_delayed_write workspace "wadi.lock" "{}\n"
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -237,13 +237,13 @@ include = ["app/**"]
             assert_string_contains
               ~needle:"Watch-run 2: build --locked demo"
               watch.output
-              "watch should rerun build when oasis.lock changes outside the include globs";
+              "watch should rerun build when wadi.lock changes outside the include globs";
             assert_string_contains ~needle:"lock validation failed against"
               watch.output
               "locked build reruns should validate the changed lock file")) );
-    ( "does not watch oasis.lock for an ordinary build",
+    ( "does not watch wadi.lock for an ordinary build",
       (fun () ->
-        with_temp_dir "oasis-watch-build-unlocked" (fun workspace ->
+        with_temp_dir "wadi-watch-build-unlocked" (fun workspace ->
             write_demo_workspace
               ~watch_block:{|
 [watch]
@@ -251,7 +251,7 @@ include = ["app/**"]
 |}
               workspace;
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -267,35 +267,35 @@ include = ["app/**"]
             assert_int_equal 0 watch.status
               "watch should allow a non-locking build to run once successfully";
             assert_string_contains
-              ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore"
+              ~needle:"Watch-root-files: wadi.toml, .wadiwatchignore"
               watch.output
-              "ordinary builds should not add oasis.lock to the watched root-file set";
+              "ordinary builds should not add wadi.lock to the watched root-file set";
             assert_string_not_contains
-              ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore, oasis.lock"
+              ~needle:"Watch-root-files: wadi.toml, .wadiwatchignore, wadi.lock"
               watch.output
-              "ordinary builds should not report oasis.lock as a watched root file";
+              "ordinary builds should not report wadi.lock as a watched root file";
             assert_string_contains
-              ~needle:"Watch-root-file-roles: oasis.toml=reload+rerun, .oasiswatchignore=reload-only"
+              ~needle:"Watch-root-file-roles: wadi.toml=reload+rerun, .wadiwatchignore=reload-only"
               watch.output
               "ordinary builds should report only manifest reload and ignore-file policy roles")) );
-    ( "reruns install --warn-locked when oasis.lock changes outside included globs",
+    ( "reruns install --warn-locked when wadi.lock changes outside included globs",
       (fun () ->
-        with_temp_dir "oasis-watch-install-locked" (fun workspace ->
+        with_temp_dir "wadi-watch-install-locked" (fun workspace ->
             write_demo_workspace
               ~watch_block:{|
 [watch]
 include = ["app/**"]
 |}
               workspace;
-            let locked = run_oasis ~cwd:workspace [ "lock"; "demo" ] in
+            let locked = run_wadi ~cwd:workspace [ "lock"; "demo" ] in
             assert_int_equal 0 locked.status
               "lock should succeed before watching a lock-aware install";
             let prefix = Filename.concat workspace "_stage" in
             let drift_lock =
-              spawn_delayed_write workspace "oasis.lock" "{}\n"
+              spawn_delayed_write workspace "wadi.lock" "{}\n"
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -317,27 +317,27 @@ include = ["app/**"]
             assert_string_contains
               ~needle:"Watch-run 2: install --warn-locked --prefix"
               watch.output
-              "watch should rerun install when oasis.lock changes outside the include globs";
+              "watch should rerun install when wadi.lock changes outside the include globs";
             assert_string_contains ~needle:"lock validation failed against"
               watch.output
               "warn-locked install reruns should report the changed lock file")) );
-    ( "reports and watches oasis.lock for doctor by default",
+    ( "reports and watches wadi.lock for doctor by default",
       (fun () ->
-        with_temp_dir "oasis-watch-doctor-locked" (fun workspace ->
+        with_temp_dir "wadi-watch-doctor-locked" (fun workspace ->
             write_demo_workspace
               ~watch_block:{|
 [watch]
 include = ["app/**"]
 |}
               workspace;
-            let locked = run_oasis ~cwd:workspace [ "lock"; "demo" ] in
+            let locked = run_wadi ~cwd:workspace [ "lock"; "demo" ] in
             assert_int_equal 0 locked.status
               "lock should succeed before watching doctor";
             let drift_lock =
-              spawn_delayed_write workspace "oasis.lock" "{}\n"
+              spawn_delayed_write workspace "wadi.lock" "{}\n"
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -354,21 +354,21 @@ include = ["app/**"]
             assert_int_equal 0 watch.status
               "doctor should keep warning, not failing, when the lock file drifts";
             assert_string_contains
-              ~needle:"Watch-root-files: oasis.toml, .oasiswatchignore, oasis.lock"
+              ~needle:"Watch-root-files: wadi.toml, .wadiwatchignore, wadi.lock"
               watch.output
               "watch should report lock-aware root files for doctor";
             assert_string_contains
-              ~needle:"Watch-root-file-roles: oasis.toml=reload+rerun, .oasiswatchignore=reload-only, oasis.lock=rerun-only"
+              ~needle:"Watch-root-file-roles: wadi.toml=reload+rerun, .wadiwatchignore=reload-only, wadi.lock=rerun-only"
               watch.output
               "watch should explain which root files reload policy versus only trigger reruns";
             assert_string_contains ~needle:"Watch-run 2: doctor demo" watch.output
-              "watch should rerun doctor when oasis.lock changes outside the include globs";
+              "watch should rerun doctor when wadi.lock changes outside the include globs";
             assert_string_contains ~needle:"failed to read"
               watch.output
               "doctor reruns should inspect the changed lock file")) );
     ( "keeps the last watch policy after an ignore-file reload error",
       (fun () ->
-        with_temp_dir "oasis-watch-ignore-reload-error" (fun workspace ->
+        with_temp_dir "wadi-watch-ignore-reload-error" (fun workspace ->
             write_manifest workspace
               {|
 [watch]
@@ -381,23 +381,23 @@ main = "main"
             write_source workspace "app/main.ml"
               {|let () = print_endline "first"|};
             write_source workspace "docs/notes.txt" "notes\n";
-            write_workspace_file workspace ".oasiswatchignore" {|
+            write_workspace_file workspace ".wadiwatchignore" {|
 docs/**
 |};
             let break_ignore_file =
               spawn_delayed_script workspace "break-ignore-file"
                 (Printf.sprintf "rm -f %s\nmkdir %s"
                    (Filename.quote
-                      (Filename.concat workspace ".oasiswatchignore"))
+                      (Filename.concat workspace ".wadiwatchignore"))
                    (Filename.quote
-                      (Filename.concat workspace ".oasiswatchignore")))
+                      (Filename.concat workspace ".wadiwatchignore")))
             in
             let relevant_change =
               spawn_delayed_write ~delay_s:3 workspace "app/main.ml"
                 {|let () = print_endline "second"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -424,7 +424,7 @@ docs/**
               "watch should continue forwarding delegated subtool output after the warning")) );
     ( "stops on the first failing run without --keep-going",
       (fun () ->
-        with_temp_dir "oasis-watch-stop" (fun workspace ->
+        with_temp_dir "wadi-watch-stop" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -433,7 +433,7 @@ main = "main"
 |};
             write_source workspace "app/main.ml" {|let () = exit 7|};
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "watch"; "--max-runs"; "2"; "run"; "demo" ]
             in
             assert_int_equal 7 watch.status
@@ -444,7 +444,7 @@ main = "main"
               "watch should stop immediately instead of waiting for changes")) );
     ( "continues after a failing run when --keep-going is set",
       (fun () ->
-        with_temp_dir "oasis-watch-keep-going" (fun workspace ->
+        with_temp_dir "wadi-watch-keep-going" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -457,7 +457,7 @@ main = "main"
                 {|let () = print_endline "fixed"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--keep-going";
@@ -483,7 +483,7 @@ main = "main"
     ( "rejects watching the watch subtool itself",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let watch = run_oasis ~cwd:workspace [ "watch"; "watch"; "build" ] in
+            let watch = run_wadi ~cwd:workspace [ "watch"; "watch"; "build" ] in
             assert_true (watch.status <> 0)
               "watch should reject recursive watch invocations";
             assert_string_contains
@@ -492,7 +492,7 @@ main = "main"
               "watch should explain the recursive-command rejection")) );
     ( "ignores matching paths before rerunning",
       (fun () ->
-        with_temp_dir "oasis-watch-ignore" (fun workspace ->
+        with_temp_dir "wadi-watch-ignore" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -511,7 +511,7 @@ main = "main"
                 {|let () = print_endline "second"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--ignore";
@@ -536,7 +536,7 @@ main = "main"
               "watch should wait for the relevant source change before rerunning")) );
     ( "can restrict watch inputs to included globs",
       (fun () ->
-        with_temp_dir "oasis-watch-include" (fun workspace ->
+        with_temp_dir "wadi-watch-include" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -555,7 +555,7 @@ main = "main"
                 {|let () = print_endline "second"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--include";
@@ -580,7 +580,7 @@ main = "main"
               "watch should ignore changes outside the included glob set")) );
     ( "uses persisted manifest watch globs",
       (fun () ->
-        with_temp_dir "oasis-watch-manifest-globs" (fun workspace ->
+        with_temp_dir "wadi-watch-manifest-globs" (fun workspace ->
             write_manifest workspace
               {|
 [watch]
@@ -603,7 +603,7 @@ main = "main"
                 {|let () = print_endline "second"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -624,9 +624,9 @@ main = "main"
               "watch should rerun after a manifest-included path changes";
             assert_string_contains ~needle:"second\n" watch.output
               "watch should keep ignoring persisted ignored paths")) );
-    ( "loads extra ignore globs from .oasiswatchignore",
+    ( "loads extra ignore globs from .wadiwatchignore",
       (fun () ->
-        with_temp_dir "oasis-watch-ignore-file" (fun workspace ->
+        with_temp_dir "wadi-watch-ignore-file" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -636,7 +636,7 @@ main = "main"
             write_source workspace "app/main.ml"
               {|let () = print_endline "first"|};
             write_source workspace "docs/notes.txt" "notes\n";
-            write_workspace_file workspace ".oasiswatchignore"
+            write_workspace_file workspace ".wadiwatchignore"
               {|
 # Ignore generated docs noise.
 docs/**
@@ -650,7 +650,7 @@ docs/**
                 {|let () = print_endline "second"|}
             in
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--poll-ms";
@@ -673,7 +673,7 @@ docs/**
               "watch should keep the ignore-file-filtered docs tree from retriggering")) );
     ( "rejects conflicting inner --workspace flags",
       (fun () ->
-        with_temp_dir "oasis-watch-conflict" (fun workspace ->
+        with_temp_dir "wadi-watch-conflict" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -693,7 +693,7 @@ main = "main"
             write_source other_workspace "app/main.ml"
               {|let () = print_endline "other"|};
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [
                   "watch";
                   "--max-runs";
@@ -711,7 +711,7 @@ main = "main"
               "watch should explain why differing workspaces are unsafe")) );
     ( "allows a redundant inner --workspace for the same tree",
       (fun () ->
-        with_temp_dir "oasis-watch-same-workspace" (fun workspace ->
+        with_temp_dir "wadi-watch-same-workspace" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -721,7 +721,7 @@ main = "main"
             write_source workspace "app/main.ml"
               {|let () = print_endline "demo"|};
             let watch =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "watch"; "--max-runs"; "1"; "run"; "--workspace"; "."; "demo" ]
             in
             assert_int_equal 0 watch.status

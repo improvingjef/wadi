@@ -3,7 +3,7 @@ let ( let* ) = Result.bind
 let report_detail ~verbose message =
   if verbose then prerr_endline message
 
-let oasis_root = Layout.artifact_root
+let wadi_root = Layout.artifact_root
 
 let describe_target target =
   Printf.sprintf "%s %s" (Manifest.target_kind_name target)
@@ -49,7 +49,7 @@ let clean_workspace ~workspace_root ~profile ~verbose =
   let path =
     match profile with
     | Some profile -> Layout.build_root_for_profile workspace_root profile
-    | None -> oasis_root workspace_root
+    | None -> wadi_root workspace_root
   in
   if Fs.exists path then (
     report_detail ~verbose ("Cleaning " ^ path);

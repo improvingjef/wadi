@@ -58,7 +58,7 @@ let run_compiled_bootstrap ?profile ?(scope = Bootstrap.Full)
     | Some seed_root -> [ "--seed-root"; seed_root ]
     | None -> [])
   in
-  run_binary (oasis_bin ()) args
+  run_binary (wadi_bin ()) args
 
 let write_bootstrap_driver workspace generated_makefile =
   write_workspace_file workspace "scripts/render_bootstrap_mod_use.ml" "";
@@ -72,7 +72,7 @@ OCAMLFLAGS ?= -g
 BUILD_DIR := _bootstrap
 OBJ_DIR := $(BUILD_DIR)/obj
 BIN_DIR := $(BUILD_DIR)/bin
-BOOTSTRAP_MANIFEST := oasis.toml
+BOOTSTRAP_MANIFEST := wadi.toml
 BOOTSTRAP_GENERATOR := scripts/generate_bootstrap_makefile.ml
 BOOTSTRAP_MK := $(BUILD_DIR)/bootstrap.generated.mk
 BOOTSTRAP_COMPILER_KIND := ocamlopt
@@ -113,7 +113,7 @@ let copy_repo_path workspace relative_path =
 let copy_clean_bootstrap_fixture workspace =
   List.iter
     (copy_repo_path workspace)
-    [ "Makefile"; "oasis.toml"; "src"; "scripts"; "test" ]
+    [ "Makefile"; "wadi.toml"; "src"; "scripts"; "test" ]
 
 let run_workspace_bootstrap ?seed_root workspace =
   let args =
@@ -129,13 +129,13 @@ let run_workspace_bootstrap ?seed_root workspace =
     | Some seed_root -> [ "--seed-root"; seed_root ]
     | None -> []
   in
-  Process.run_capture ~cwd:workspace "./_bootstrap/bin/oasis" args
+  Process.run_capture ~cwd:workspace "./_bootstrap/bin/wadi" args
 
 let cases =
   [
     ( "derives bootstrap loader directives from the manifest instead of a hard-coded module list",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-loader" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-loader" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -171,7 +171,7 @@ modules = ["alpha", "beta", "gamma"]
               "bootstrap loader directives should be ordered from source dependencies")) );
     ( "derives bootstrap object lists, self-dependencies, and ordered rules from the workspace model",
       (fun () ->
-        with_temp_dir "oasis-bootstrap" (fun workspace ->
+        with_temp_dir "wadi-bootstrap" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -235,7 +235,7 @@ deps = ["core"]
               "bootstrap generation should make test links depend on bootstrap metadata")) );
     ( "includes generated wrapper modules for wrapped libraries in bootstrap plans",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-wrapped" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-wrapped" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -273,7 +273,7 @@ deps = ["core"]
               "bootstrap generation should compile the generated wrapper after its child modules")) );
     ( "uses checked-in wrapper modules in bootstrap plans without materializing generated wrappers",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-custom-wrapper" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-custom-wrapper" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -312,9 +312,9 @@ deps = ["core"]
               ~needle:"$(OBJ_DIR)/core.$(OBJ_EXT): src/core.ml $(BOOTSTRAP_MK) $(OBJ_DIR)/alpha.$(OBJ_EXT) | $(OBJ_DIR)"
               makefile
               "bootstrap generation should compile the checked-in wrapper source instead of a generated one")) );
-    ( "renders the full bootstrap makefile through the compiled oasis binary",
+    ( "renders the full bootstrap makefile through the compiled wadi binary",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-compiled" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-compiled" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -344,7 +344,7 @@ deps = ["core"]
               "the compiled bootstrap planner should match Bootstrap.render_makefile")) );
     ( "matches compiled seed metadata output for metadata-only bootstrap libraries",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-seed-helper" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-seed-helper" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -385,7 +385,7 @@ env = ["TARGET=local"]
     ( "uses a compiled seed binary for app-only bootstrap generation",
       (fun () ->
         let makefile = Fs.read_file (Filename.concat (Sys.getcwd ()) "Makefile") in
-        assert_string_contains ~needle:"BOOTSTRAP_SEED_BIN := $(BIN_DIR)/oasis-seed"
+        assert_string_contains ~needle:"BOOTSTRAP_SEED_BIN := $(BIN_DIR)/wadi-seed"
           makefile
           "the top-level Makefile should define a compiled bootstrap seed binary";
         assert_string_contains
@@ -421,7 +421,7 @@ env = ["TARGET=local"]
           makefile
           "bootstrap seed metadata should be remade from source inputs instead of relying on a tracked file";
         assert_string_contains
-          ~needle:"\"$(OASIS_BIN)\" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest \"$(BOOTSTRAP_MANIFEST)\" --format seed-metadata --seed-root \"$(BOOTSTRAP_SEED_ROOT)\""
+          ~needle:"\"$(WADI_BIN)\" $(BOOTSTRAP_INTERNAL_COMMAND) --manifest \"$(BOOTSTRAP_MANIFEST)\" --format seed-metadata --seed-root \"$(BOOTSTRAP_SEED_ROOT)\""
           makefile
           "bootstrap seed metadata refresh should run through the compiled bootstrap planner";
         assert_string_contains
@@ -463,23 +463,23 @@ env = ["TARGET=local"]
           makefile
           "full bootstrap generation should run through the compiled seed binary";
         assert_string_not_contains
-          ~needle:"$(MAKE) BOOTSTRAP_SCOPE=app $(BIN_DIR)/oasis"
+          ~needle:"$(MAKE) BOOTSTRAP_SCOPE=app $(BIN_DIR)/wadi"
           makefile
           "full bootstrap generation should not recurse through a separate app bootstrap build";
         assert_string_not_contains
-          ~needle:"$(BIN_DIR)/oasis $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --scope full"
+          ~needle:"$(BIN_DIR)/wadi $(BOOTSTRAP_INTERNAL_COMMAND) --manifest $(BOOTSTRAP_MANIFEST) --scope full"
           makefile
           "full bootstrap generation should not require a freshly built app binary before the makefile exists")) ;
     ( "bootstraps a clean checkout without tracked seed metadata",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-clean-checkout" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-clean-checkout" (fun workspace ->
             copy_clean_bootstrap_fixture workspace;
             let metadata_path =
               Filename.concat workspace "_bootstrap/bootstrap.seed-metadata.mk"
             in
             assert_true (not (Fs.exists metadata_path))
               "a clean-checkout bootstrap fixture should start without cached seed metadata";
-            let build = run_make ~cwd:workspace [ "_bootstrap/bin/oasis" ] in
+            let build = run_make ~cwd:workspace [ "_bootstrap/bin/wadi" ] in
             assert_int_equal 0 build.status
               ("clean-checkout bootstrap should regenerate seed metadata automatically\n"
              ^ build.output);
@@ -496,17 +496,17 @@ env = ["TARGET=local"]
               run_workspace_bootstrap ~seed_root:"_bootstrap/seed" workspace
             in
             assert_int_equal 0 generated.status
-              "the bootstrap-built oasis binary should render seed metadata successfully";
+              "the bootstrap-built wadi binary should render seed metadata successfully";
             let cached = Fs.read_file metadata_path in
             assert_string_equal generated.output cached
               "the regenerated bootstrap seed metadata should stay in sync with the built helper")) );
     ( "bootstraps a clean full checkout without detouring through app planning or empty shared-output sync",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-clean-full-checkout" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-clean-full-checkout" (fun workspace ->
             copy_clean_bootstrap_fixture workspace;
             let build =
               run_make ~cwd:workspace
-                [ "_bootstrap/bin/oasis"; "_bootstrap/bin/test_runner" ]
+                [ "_bootstrap/bin/wadi"; "_bootstrap/bin/test_runner" ]
             in
             assert_int_equal 0 build.status
               ("clean full bootstrap should succeed without stale restart artifacts\n"
@@ -518,12 +518,12 @@ env = ["TARGET=local"]
             assert_string_not_contains ~needle:"for path in ; do" build.output
               "clean full bootstrap should not run shared-output sync with an empty path list";
             assert_file_exists
-              (Filename.concat workspace "_bootstrap/bin/oasis");
+              (Filename.concat workspace "_bootstrap/bin/wadi");
             assert_file_exists
               (Filename.concat workspace "_bootstrap/bin/test_runner"))) );
     ( "renders transform-aware seed metadata for default-profile bootstrap libraries",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-seed-transforms" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-seed-transforms" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -630,7 +630,7 @@ ppx = ["rewrite"]
               "the generated bootstrap plan should keep common seed reuse enabled when the requested profile matches the seed metadata profile")) );
     ( "benchmarks bootstrap latency and emits machine-readable summaries",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-benchmark" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-benchmark" (fun workspace ->
             let fake_make = Filename.concat workspace "fake-make.sh" in
             write_workspace_file workspace "Makefile" "all:\n\t@:\n";
             write_workspace_file workspace "fake-make.sh"
@@ -643,9 +643,9 @@ while [ "$#" -gt 0 ]; do
       rm -rf _bootstrap
       exit 0
       ;;
-    _bootstrap/bin/oasis)
+    _bootstrap/bin/wadi)
       mkdir -p _bootstrap/bin
-      : > _bootstrap/bin/oasis
+      : > _bootstrap/bin/wadi
       ;;
     _bootstrap/bin/test_runner)
       mkdir -p _bootstrap/bin
@@ -678,7 +678,7 @@ done
               "benchmark JSON should include the warm app bootstrap phase")) );
     ( "emits interface-aware and package-aware bootstrap rules",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-packages" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-packages" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -731,7 +731,7 @@ deps = ["core"]
               "bootstrap generation should link through the package-aware driver")) );
     ( "treats interface-only modules as cmi-only bootstrap inputs",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-interface-only" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-interface-only" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -783,7 +783,7 @@ deps = ["core"]
               "bootstrap-built tests should remain runnable with interface-only library inputs")) );
     ( "builds profile-aware bootstrap outputs through actions, preprocessors, and ppx",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-transforms" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-transforms" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -903,7 +903,7 @@ ppx = ["rewrite"]
               "actions, preprocessors, ppx, and profile env should affect bootstrap-built tests")) );
     ( "allows executable-only bootstrap generation without scanning broken tests",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-app-only" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-app-only" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -940,7 +940,7 @@ deps = ["core"]
               "app-only bootstrap builds should not compile broken test sources")) );
     ( "rejects bootstrap manifests without exactly one executable and test",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-missing" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-missing" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -958,7 +958,7 @@ main = "main"
               "bootstrap generation should fail clearly when a test target is missing")) );
     ( "rejects duplicate module stems across bootstrap groups before generating rules",
       (fun () ->
-        with_temp_dir "oasis-bootstrap-collisions" (fun workspace ->
+        with_temp_dir "wadi-bootstrap-collisions" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]

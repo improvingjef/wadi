@@ -156,7 +156,7 @@ let resolve_requested_targets workspace requested_targets =
           | Some (Manifest.Test _) ->
               Error
                 (Printf.sprintf
-                   "target '%s' is a test; oasis install only supports libraries \
+                   "target '%s' is a test; wadi install only supports libraries \
                     and executables"
                    name)
           | Some target -> loop (target :: acc) rest)
@@ -191,7 +191,7 @@ let expand_install_names workspace targets =
                 | Some dependency_target ->
                     Error
                       (Printf.sprintf
-                         "target '%s' depends on %s '%s'; oasis install only \
+                         "target '%s' depends on %s '%s'; wadi install only \
                           closes over library dependencies"
                          name
                          (Manifest.target_kind_name dependency_target)

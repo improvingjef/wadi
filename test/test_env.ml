@@ -3,14 +3,14 @@ open Test_support
 let write_source workspace relative_path contents =
   Fs.write_file (Filename.concat workspace relative_path) contents
 
-let run_oasis_with_env ~cwd ~env args =
-  Process.run_capture ~cwd ~env (oasis_bin ()) args
+let run_wadi_with_env ~cwd ~env args =
+  Process.run_capture ~cwd ~env (wadi_bin ()) args
 
 let cases =
   [
     ( "prints merged build environments for compiler, action, and preprocess contexts",
       (fun () ->
-        with_temp_dir "oasis-env-build" (fun workspace ->
+        with_temp_dir "wadi-env-build" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -43,7 +43,7 @@ env = ["TARGET=demo"]
             write_source workspace "lib/core.ml" {|let message = Version.value|};
             write_source workspace "app/main.ml" {|let () = print_endline Core.message|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("HOST_ONLY", "from-host") ]
                 [ "env"; "--profile"; "release"; "build"; "demo" ]
             in
@@ -76,9 +76,9 @@ env = ["TARGET=demo"]
               "env output should include the requested executable context";
             assert_string_contains ~needle:"TARGET=demo\n" report.output
               "target-local env bindings should appear in executable contexts")) );
-    ( "prints focused action environments for oasis action planning",
+    ( "prints focused action environments for wadi action planning",
       (fun () ->
-        with_temp_dir "oasis-env-action" (fun workspace ->
+        with_temp_dir "wadi-env-action" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -100,7 +100,7 @@ env = ["TARGET=core"]
 |};
             write_source workspace "lib/core.ml" {|let message = Version.value|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("HOST_ONLY", "from-host") ]
                 [ "env"; "--profile"; "release"; "action"; "core" ]
             in
@@ -126,9 +126,9 @@ env = ["TARGET=core"]
             assert_string_not_contains ~needle:"Context: compiler-linker\n"
               report.output
               "env action should stay focused on action execution contexts")) );
-    ( "prints the runtime environment for oasis run planning",
+    ( "prints the runtime environment for wadi run planning",
       (fun () ->
-        with_temp_dir "oasis-env-run" (fun workspace ->
+        with_temp_dir "wadi-env-run" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -137,7 +137,7 @@ main = "main"
 |};
             write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("RUNTIME_ONLY", "yes") ]
                 [ "env"; "run"; "demo" ]
             in
@@ -155,7 +155,7 @@ main = "main"
               "runtime contexts should include inherited host variables")) );
     ( "prints runtime contexts for benchmark planning",
       (fun () ->
-        with_temp_dir "oasis-env-bench" (fun workspace ->
+        with_temp_dir "wadi-env-bench" (fun workspace ->
             write_manifest workspace
               {|
 [executable.alpha]
@@ -169,7 +169,7 @@ main = "beta"
             write_source workspace "app/alpha.ml" {|let () = ()|};
             write_source workspace "app/beta.ml" {|let () = ()|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("BENCH_ONLY", "yes") ]
                 [ "env"; "bench"; "alpha"; "beta" ]
             in
@@ -190,7 +190,7 @@ main = "beta"
               "benchmark runtime contexts should include inherited host variables")) );
     ( "prints declared bench runtime environments separately from executable build contexts",
       (fun () ->
-        with_temp_dir "oasis-env-bench-declared" (fun workspace ->
+        with_temp_dir "wadi-env-bench-declared" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -203,7 +203,7 @@ env = ["BENCH_MODE=quick"]
 |};
             write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("BENCH_ONLY", "yes") ]
                 [ "env"; "bench"; "quick" ]
             in
@@ -222,7 +222,7 @@ env = ["BENCH_MODE=quick"]
               "declared bench runtime contexts should still include inherited host variables")) );
     ( "prints machine-readable JSON env reports",
       (fun () ->
-        with_temp_dir "oasis-env-json" (fun workspace ->
+        with_temp_dir "wadi-env-json" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -238,7 +238,7 @@ env = ["TARGET=demo"]
 |};
             write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("HOST_ONLY", "from-host") ]
                 [ "env"; "--json"; "--profile"; "release"; "run"; "demo" ]
             in
@@ -273,7 +273,7 @@ env = ["TARGET=demo"]
               "env JSON should include target-local bindings")) );
     ( "filters env reports down to changed bindings only",
       (fun () ->
-        with_temp_dir "oasis-env-changed" (fun workspace ->
+        with_temp_dir "wadi-env-changed" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -289,7 +289,7 @@ env = ["TARGET=demo"]
 |};
             write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
             let report =
-              run_oasis_with_env ~cwd:workspace
+              run_wadi_with_env ~cwd:workspace
                 ~env:[ ("HOST_ONLY", "from-host"); ("SHARED", "default") ]
                 [ "env"; "--changed-only"; "--profile"; "release"; "run"; "demo" ]
             in

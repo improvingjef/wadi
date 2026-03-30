@@ -4,7 +4,7 @@ let cases =
   [
     ( "run_capture captures stdout, stderr, and cwd",
       fun () ->
-        with_temp_dir "oasis-process-capture" (fun workspace ->
+        with_temp_dir "wadi-process-capture" (fun workspace ->
             let subdir = Filename.concat workspace "nested" in
             Fs.ensure_dir subdir;
             let outcome =
@@ -36,9 +36,9 @@ let cases =
     ( "run_capture supports env overrides and stdin",
       fun () ->
         let outcome =
-          Process.run_capture ~env:[ ("OASIS_COLOR", "blue") ] ~stdin:"stdin-value"
+          Process.run_capture ~env:[ ("WADI_COLOR", "blue") ] ~stdin:"stdin-value"
             "/bin/sh"
-            [ "-c"; "printf '%s:' \"$OASIS_COLOR\"; cat" ]
+            [ "-c"; "printf '%s:' \"$WADI_COLOR\"; cat" ]
         in
         assert_int_equal 0 outcome.status
           "run_capture should allow stdin text and environment overlays";

@@ -1,6 +1,6 @@
 # Manifest Reference
 
-This is the working `oasis.toml` reference for the features currently shipped in
+This is the working `wadi.toml` reference for the features currently shipped in
 the repo.
 
 ## Top Level
@@ -12,7 +12,7 @@ members = ["packages/core"]     # optional
 ```
 
 `members` entries are workspace-relative directories that contain their own
-`oasis.toml`.
+`wadi.toml`.
 
 ## Watch
 
@@ -24,12 +24,12 @@ ignore = ["vendor/**", "docs/**"]
 
 Rules:
 
-- `include` narrows `oasis watch` to matching paths when present.
+- `include` narrows `wadi watch` to matching paths when present.
 - `ignore` adds workspace-wide ignore globs on top of the built-in `.git`,
-  `_oasis`, and `_bootstrap` exclusions.
+  `_wadi`, and `_bootstrap` exclusions.
 - Command-line `--include` and `--ignore` flags append to the persisted watch
   globs instead of replacing them.
-- A root-level `.oasiswatchignore` file may list one ignore glob per line.
+- A root-level `.wadiwatchignore` file may list one ignore glob per line.
   Blank lines and `#` comments are ignored.
 
 ## Targets
@@ -86,9 +86,9 @@ Rules:
 - `main` is a module stem, not a filename.
 - `modules` entries are stems only. No paths. No extensions.
 - `deps` may only reference workspace libraries.
-- Bench declarations reference executable targets by name and let `oasis bench`
+- Bench declarations reference executable targets by name and let `wadi bench`
   carry per-benchmark argv, env, labels, and default warmup/iteration counts.
-- If a workspace defines `[bench.*]` sections, `oasis bench` uses those by
+- If a workspace defines `[bench.*]` sections, `wadi bench` uses those by
   default; executable targets remain valid explicit benchmark names.
 - `public_name` controls the staged install name for libraries, `META` files, and executables.
 - `wrapped = true` generates a namespace wrapper module named after the library
@@ -97,7 +97,7 @@ Rules:
   not list it in `modules` or generate it from an action.
 - A wrapped library may provide a checked-in `dir/<library>.ml` and/or
   `dir/<library>.mli` as the wrapper implementation/interface. If no checked-in
-  `.ml` exists, oasis generates the wrapper implementation automatically.
+  `.ml` exists, wadi generates the wrapper implementation automatically.
 
 ## Actions
 
@@ -132,7 +132,7 @@ Rules:
 - `outputs` are relative to the target directory.
 - `checked_in_sources` names a subset of `.ml` / `.mli` outputs that are
   intentionally checked into the workspace and refreshed later with
-  `oasis promote`.
+  `wadi promote`.
 - `stdin` feeds literal text to the action process.
 - `stdin_path` feeds a workspace-relative file to stdin and is tracked as an
   input.
@@ -144,7 +144,7 @@ Rules:
 - If an output is `.ml` or `.mli`, it may not collide with checked-in source in
   the target directory unless it is listed in `checked_in_sources`.
 - Checked-in generated sources still build from the generated copy under
-  `_oasis`; `oasis build` does not silently rewrite the workspace snapshot.
+  `_wadi`; `wadi build` does not silently rewrite the workspace snapshot.
 - `sandbox = "workspace"` copies the workspace into the sandbox; `target`
   limits materialization to the target tree plus declared tool inputs.
 
@@ -167,7 +167,7 @@ falling back to `sh -c`.
 Why `deps` matters:
 
 - they are fingerprinted for incremental rebuilds
-- they show up in `oasis explain`
+- they show up in `wadi explain`
 - missing auxiliary files fail early with a direct error
 
 ## PPX Tools

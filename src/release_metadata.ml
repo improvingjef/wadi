@@ -88,7 +88,7 @@ let load path =
             else
               match String_util.split_once ~on:'=' line with
               | Some (name, value)
-                when String_util.starts_with ~prefix:"OASIS_"
+                when String_util.starts_with ~prefix:"WADI_"
                        (String.trim name) ->
                   let* parsed = parse_value path line_number value in
                   Hashtbl.replace table (String.trim name) parsed;
@@ -107,20 +107,20 @@ let load path =
       | Some value -> value
       | None -> default
     in
-    let* package_name = required "OASIS_PACKAGE_NAME" in
-    let* formula_class = required "OASIS_FORMULA_CLASS" in
-    let* release_version = required "OASIS_RELEASE_VERSION" in
-    let* release_tag_prefix = required "OASIS_RELEASE_TAG_PREFIX" in
-    let* synopsis = required "OASIS_SYNOPSIS" in
-    let* description = required "OASIS_DESCRIPTION" in
-    let* maintainer_name = required "OASIS_MAINTAINER_NAME" in
-    let* maintainer_email = required "OASIS_MAINTAINER_EMAIL" in
-    let* authors = required "OASIS_AUTHORS" in
-    let* license = required "OASIS_LICENSE" in
-    let* repository_url = required "OASIS_REPOSITORY_URL" in
-    let* bug_reports_url = required "OASIS_BUG_REPORTS_URL" in
-    let* dev_repo = required "OASIS_DEV_REPO" in
-    let* homebrew_tap = required "OASIS_HOMEBREW_TAP" in
+    let* package_name = required "WADI_PACKAGE_NAME" in
+    let* formula_class = required "WADI_FORMULA_CLASS" in
+    let* release_version = required "WADI_RELEASE_VERSION" in
+    let* release_tag_prefix = required "WADI_RELEASE_TAG_PREFIX" in
+    let* synopsis = required "WADI_SYNOPSIS" in
+    let* description = required "WADI_DESCRIPTION" in
+    let* maintainer_name = required "WADI_MAINTAINER_NAME" in
+    let* maintainer_email = required "WADI_MAINTAINER_EMAIL" in
+    let* authors = required "WADI_AUTHORS" in
+    let* license = required "WADI_LICENSE" in
+    let* repository_url = required "WADI_REPOSITORY_URL" in
+    let* bug_reports_url = required "WADI_BUG_REPORTS_URL" in
+    let* dev_repo = required "WADI_DEV_REPO" in
+    let* homebrew_tap = required "WADI_HOMEBREW_TAP" in
     Ok
       {
         package_name;
@@ -137,7 +137,7 @@ let load path =
         bug_reports_url;
         dev_repo;
         homebrew_tap;
-        homebrew_tap_remote_url = optional "OASIS_HOMEBREW_TAP_REMOTE_URL";
+        homebrew_tap_remote_url = optional "WADI_HOMEBREW_TAP_REMOTE_URL";
       }
 
 let load_for_root ?(root_dir = ".") () = load (metadata_path ~root_dir ())

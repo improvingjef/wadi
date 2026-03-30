@@ -1,4 +1,4 @@
-let artifact_root workspace_root = Filename.concat workspace_root "_oasis"
+let artifact_root workspace_root = Filename.concat workspace_root "_wadi"
 
 let default_profile = Manifest.default_profile_name
 
@@ -62,7 +62,7 @@ let executable_binary ?(profile = default_profile) workspace_root name =
 let test_binary ?(profile = default_profile) workspace_root name =
   Filename.concat (test_out_dir_for_profile workspace_root profile name) name
 
-let stamp_path out_dir = Filename.concat out_dir ".oasis-stamp"
+let stamp_path out_dir = Filename.concat out_dir ".wadi-stamp"
 
 let explain_path out_dir = Explain.report_path out_dir
 
@@ -99,7 +99,7 @@ let install_executable_path prefix name =
   Filename.concat prefix (relative_install_executable_path name)
 
 let relative_install_share_dir workspace_name =
-  Filename.concat "share/oasis" workspace_name
+  Filename.concat "share/wadi" workspace_name
 
 let install_share_dir prefix workspace_name =
   Filename.concat prefix (relative_install_share_dir workspace_name)

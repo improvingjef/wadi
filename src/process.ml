@@ -172,12 +172,12 @@ let spawn ?cwd ?(env = []) ?stdin_fd ?stdout_fd ?stderr_fd ?(extra_closes = [])
       with
       | Unix.Unix_error (error, _, _) ->
           write_stderr
-            (Printf.sprintf "oasis: failed to execute %s: %s\n" prog
+            (Printf.sprintf "wadi: failed to execute %s: %s\n" prog
                (Unix.error_message error));
           Unix._exit 127
       | exn ->
           write_stderr
-            (Printf.sprintf "oasis: failed to execute %s: %s\n" prog
+            (Printf.sprintf "wadi: failed to execute %s: %s\n" prog
                (Printexc.to_string exn));
           Unix._exit 127)
   | pid -> pid

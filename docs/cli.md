@@ -1,14 +1,14 @@
-# Oasis CLI
+# Wadi CLI
 
 Generated from the live command table.
 
 ## init
 
-Scaffold a minimal oasis workspace without hand-writing the first manifest.
+Scaffold a minimal wadi workspace without hand-writing the first manifest.
 
 Usage:
 
-`oasis init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]`
+`wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]`
 
 Options:
 - `--dir DIR`: Create or update the scaffold in DIR instead of the current directory.
@@ -21,11 +21,11 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis init`
-- `oasis init --name demo`
-- `oasis init --dir monorepo --member packages/core --library core`
-- `oasis init --dir examples/demo --library core --executable demo`
-- `oasis init --dir scratch --bare`
+- `wadi init`
+- `wadi init --name demo`
+- `wadi init --dir monorepo --member packages/core --library core`
+- `wadi init --dir examples/demo --library core --executable demo`
+- `wadi init --dir scratch --bare`
 
 ## build
 
@@ -33,22 +33,22 @@ Compile libraries, executables, and tests into predictable artifact roots.
 
 Usage:
 
-`oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]`
+`wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
-- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
-- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
+- `--locked`: Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
+- `--warn-locked`: Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis build`
-- `oasis build hello`
-- `oasis build --locked hello`
-- `oasis build --workspace examples/hello --profile release --verbose`
+- `wadi build`
+- `wadi build hello`
+- `wadi build --locked hello`
+- `wadi build --workspace examples/hello --profile release --verbose`
 
 ## status
 
@@ -56,20 +56,20 @@ Summarize which targets are rebuilt, regenerated, or reused without compiling.
 
 Usage:
 
-`oasis status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]`
+`wadi status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--json`: Print machine-readable JSON output instead of the text report.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis status`
-- `oasis status hello`
-- `oasis status --backend bytecode hello`
-- `oasis status --json --profile release`
+- `wadi status`
+- `wadi status hello`
+- `wadi status --backend bytecode hello`
+- `wadi status --json --profile release`
 
 ## doctor
 
@@ -77,30 +77,30 @@ Validate workspace configuration, toolchain health, package resolution, and lock
 
 Usage:
 
-`oasis doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]`
+`wadi doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--json`: Print machine-readable JSON output instead of the text report.
-- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
-- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
+- `--locked`: Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
+- `--warn-locked`: Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis doctor`
-- `oasis doctor hello`
-- `oasis doctor --locked hello`
-- `oasis doctor --json --backend bytecode`
+- `wadi doctor`
+- `wadi doctor hello`
+- `wadi doctor --locked hello`
+- `wadi doctor --json --backend bytecode`
 
 ## watch
 
-Poll the workspace and rerun a selected oasis subtool whenever inputs change.
+Poll the workspace and rerun a selected wadi subtool whenever inputs change.
 
 Usage:
 
-`oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]`
+`wadi watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -109,16 +109,16 @@ Options:
 - `--max-runs COUNT`: Exit after COUNT watched executions instead of running until interrupted.
 - `--keep-going`: Keep watching after a failed run instead of exiting with the first non-zero status.
 - `--include GLOB`: Watch only paths matching GLOB. Repeat to narrow large workspaces to the relevant source trees.
-- `--ignore GLOB`: Ignore paths matching GLOB in addition to the built-in .git, _oasis, and _bootstrap exclusions.
+- `--ignore GLOB`: Ignore paths matching GLOB in addition to the built-in .git, _wadi, and _bootstrap exclusions.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis watch build`
-- `oasis watch test unit`
-- `oasis watch --keep-going --max-runs 2 build hello`
-- `oasis watch --include 'lib/**' --include 'app/**' run demo`
-- `oasis watch --ignore 'vendor/**' build`
-- `oasis watch run demo -- --port 8080`
+- `wadi watch build`
+- `wadi watch test unit`
+- `wadi watch --keep-going --max-runs 2 build hello`
+- `wadi watch --include 'lib/**' --include 'app/**' run demo`
+- `wadi watch --ignore 'vendor/**' build`
+- `wadi watch run demo -- --port 8080`
 
 ## action
 
@@ -126,7 +126,7 @@ Run declared generated-file actions for selected targets without compiling or li
 
 Usage:
 
-`oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
+`wadi action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -135,10 +135,10 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis action`
-- `oasis action core`
-- `oasis action demo`
-- `oasis action --profile release core demo`
+- `wadi action`
+- `wadi action core`
+- `wadi action demo`
+- `wadi action --profile release core demo`
 
 ## ppx
 
@@ -146,7 +146,7 @@ Inspect or dump the post-preprocess, post-PPX source for one target module.
 
 Usage:
 
-`oasis ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]`
+`wadi ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -158,11 +158,11 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis ppx demo`
-- `oasis ppx demo main`
-- `oasis ppx --interface core version`
-- `oasis ppx --plan demo main`
-- `oasis ppx --output _debug/main.ml demo main`
+- `wadi ppx demo`
+- `wadi ppx demo main`
+- `wadi ppx --interface core version`
+- `wadi ppx --plan demo main`
+- `wadi ppx --output _debug/main.ml demo main`
 
 ## graph
 
@@ -170,18 +170,18 @@ Show target build order, module order, and pipeline shape without compiling.
 
 Usage:
 
-`oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]`
+`wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis graph`
-- `oasis graph hello`
-- `oasis graph --profile release --backend bytecode hello`
+- `wadi graph`
+- `wadi graph hello`
+- `wadi graph --profile release --backend bytecode hello`
 
 ## run
 
@@ -189,20 +189,20 @@ Build and launch an executable target with exact argv forwarding.
 
 Usage:
 
-`oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]`
+`wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis run`
-- `oasis run hello`
-- `oasis run --profile release hello -- --loud`
-- `oasis run -- --port 8080`
+- `wadi run`
+- `wadi run hello`
+- `wadi run --profile release hello -- --loud`
+- `wadi run -- --port 8080`
 
 ## test
 
@@ -210,20 +210,20 @@ Build and execute declared test targets with a direct failure summary.
 
 Usage:
 
-`oasis test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]`
+`wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis test`
-- `oasis test unit`
-- `oasis test unit integration`
-- `oasis test --workspace examples/hello --profile ci --verbose`
+- `wadi test`
+- `wadi test unit`
+- `wadi test unit integration`
+- `wadi test --workspace examples/hello --profile ci --verbose`
 
 ## bench
 
@@ -231,12 +231,12 @@ Build executable targets and report stable benchmark timing summaries.
 
 Usage:
 
-`oasis bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]`
+`wadi bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--json`: Print machine-readable JSON output instead of the text report.
 - `--warmup COUNT`: Run each benchmark target COUNT warmup times before measuring.
@@ -244,10 +244,10 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis bench`
-- `oasis bench demo`
-- `oasis bench --warmup 1 --iterations 5 demo`
-- `oasis bench --json demo`
+- `wadi bench`
+- `wadi bench demo`
+- `wadi bench --warmup 1 --iterations 5 demo`
+- `wadi bench --json demo`
 
 ## clean
 
@@ -255,7 +255,7 @@ Remove the whole artifact tree or only the requested target outputs.
 
 Usage:
 
-`oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
+`wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -264,10 +264,10 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis clean`
-- `oasis clean hello`
-- `oasis clean hello greeting`
-- `oasis clean --workspace examples/hello --profile release --verbose`
+- `wadi clean`
+- `wadi clean hello`
+- `wadi clean hello greeting`
+- `wadi clean --workspace examples/hello --profile release --verbose`
 
 ## promote
 
@@ -275,7 +275,7 @@ Copy declared non-source action outputs back into the workspace on purpose.
 
 Usage:
 
-`oasis promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
+`wadi promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -284,9 +284,9 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis promote`
-- `oasis promote snapshots`
-- `oasis promote --profile release fixtures`
+- `wadi promote`
+- `wadi promote snapshots`
+- `wadi promote --profile release fixtures`
 
 ## deps
 
@@ -294,16 +294,16 @@ Resolve transitive external package requirements for selected targets.
 
 Usage:
 
-`oasis deps [--workspace DIR] [TARGET ...]`
+`wadi deps [--workspace DIR] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis deps`
-- `oasis deps hello`
-- `oasis deps --workspace examples/hello greeting hello`
+- `wadi deps`
+- `wadi deps hello`
+- `wadi deps --workspace examples/hello greeting hello`
 
 ## lock
 
@@ -311,19 +311,19 @@ Snapshot resolved toolchain facts and external package paths into a machine-read
 
 Usage:
 
-`oasis lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]`
+`wadi lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
-- `--output PATH`: Write the generated manifest to PATH instead of oasis.toml.
+- `--output PATH`: Write the generated manifest to PATH instead of wadi.toml.
 - `--stdout`: Print the generated output instead of writing a file.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis lock`
-- `oasis lock demo`
-- `oasis lock --stdout`
-- `oasis lock --output oasis.lock.json demo`
+- `wadi lock`
+- `wadi lock demo`
+- `wadi lock --stdout`
+- `wadi lock --output wadi.lock.json demo`
 
 ## vendor
 
@@ -331,7 +331,7 @@ Copy or fetch a source dependency into vendor/ and register it as a workspace me
 
 Usage:
 
-`oasis vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]`
+`wadi vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -345,10 +345,10 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis vendor --source ../dep`
-- `oasis vendor --git https://example.com/dep.git --checksum 0123abcd --name dep`
-- `oasis vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep`
-- `oasis vendor --workspace examples/app --source ../core --force`
+- `wadi vendor --source ../dep`
+- `wadi vendor --git https://example.com/dep.git --checksum 0123abcd --name dep`
+- `wadi vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep`
+- `wadi vendor --workspace examples/app --source ../core --force`
 
 ## env
 
@@ -356,7 +356,7 @@ Print the exact subprocess environment a build, action, run, test, bench, or ins
 
 Usage:
 
-`oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]`
+`wadi env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -366,14 +366,14 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis env build`
-- `oasis env action core`
-- `oasis env --profile release build demo`
-- `oasis env --json run demo`
-- `oasis env --changed-only build demo`
-- `oasis env run demo`
-- `oasis env test unit`
-- `oasis env bench demo`
+- `wadi env build`
+- `wadi env action core`
+- `wadi env --profile release build demo`
+- `wadi env --json run demo`
+- `wadi env --changed-only build demo`
+- `wadi env run demo`
+- `wadi env test unit`
+- `wadi env bench demo`
 
 ## repl
 
@@ -381,7 +381,7 @@ Build a bytecode toplevel with workspace libraries and packages already wired in
 
 Usage:
 
-`oasis repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]`
+`wadi repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -393,11 +393,11 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis repl core`
-- `oasis repl demo`
-- `oasis repl --plan --json core`
-- `oasis repl core --script scripts/session.ml -- -noinit -noprompt`
-- `oasis repl --profile release core -- -noinit -noprompt`
+- `wadi repl core`
+- `wadi repl demo`
+- `wadi repl --plan --json core`
+- `wadi repl core --script scripts/session.ml -- -noinit -noprompt`
+- `wadi repl --profile release core -- -noinit -noprompt`
 
 ## install
 
@@ -405,25 +405,25 @@ Stage installable libraries, executables, and metadata under a prefix.
 
 Usage:
 
-`oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]`
+`wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--prefix DIR`: Stage installed files under DIR instead of the default profile root.
 - `--destdir DIR`: Prepend DIR to the resolved install prefix for packaging-style staging.
-- `--locked`: Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
-- `--warn-locked`: Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
+- `--locked`: Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
+- `--warn-locked`: Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis install`
-- `oasis install hello`
-- `oasis install --warn-locked --prefix _stage hello`
-- `oasis install --prefix _stage hello greeting`
-- `oasis install --prefix /usr/local --destdir _pkg hello`
+- `wadi install`
+- `wadi install hello`
+- `wadi install --warn-locked --prefix _stage hello`
+- `wadi install --prefix _stage hello greeting`
+- `wadi install --prefix /usr/local --destdir _pkg hello`
 
 ## release-artifacts
 
@@ -431,15 +431,15 @@ Render CLI docs, shell completions, and packaged install-tree payloads from the 
 
 Usage:
 
-`oasis release-artifacts [--output-dir DIR]`
+`wadi release-artifacts [--output-dir DIR]`
 
 Options:
 - `--output-dir DIR`: Write generated files under DIR instead of the current directory.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis release-artifacts`
-- `oasis release-artifacts --output-dir dist`
+- `wadi release-artifacts`
+- `wadi release-artifacts --output-dir dist`
 
 ## package
 
@@ -447,7 +447,7 @@ Render opam, Homebrew, checksum, and release-asset metadata from canonical relea
 
 Usage:
 
-`oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]`
+`wadi package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]`
 
 Options:
 - `--output-dir DIR`: Write generated files under DIR instead of the current directory.
@@ -462,11 +462,11 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis package`
-- `oasis package --output-dir dist`
-- `oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json`
-- `oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS`
-- `oasis package --source-archive-dir dist --source-archive-mode worktree`
+- `wadi package`
+- `wadi package --output-dir dist`
+- `wadi package --source-archive-dir dist --asset-index-output dist/release-assets.json`
+- `wadi package --source-archive dist/wadi-source.tar.gz --checksums-output dist/SHA256SUMS`
+- `wadi package --source-archive-dir dist --source-archive-mode worktree`
 
 ## sync-generated
 
@@ -474,13 +474,13 @@ Refresh bootstrap seed metadata, CLI docs, shell completions, and packaging mani
 
 Usage:
 
-`oasis sync-generated`
+`wadi sync-generated`
 
 Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis sync-generated`
+- `wadi sync-generated`
 
 ## release-cut
 
@@ -488,7 +488,7 @@ Bump the canonical release version, refresh packaging metadata, validate it, and
 
 Usage:
 
-`oasis release-cut --version X.Y.Z [--tag]`
+`wadi release-cut --version X.Y.Z [--tag]`
 
 Options:
 - `--version X.Y.Z`: Set the canonical release version to X.Y.Z before regenerating metadata.
@@ -496,16 +496,16 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis release-cut --version 0.2.0`
-- `oasis release-cut --version 0.2.0 --tag`
+- `wadi release-cut --version 0.2.0`
+- `wadi release-cut --version 0.2.0 --tag`
 
 ## update-homebrew-tap
 
-Clone or update the canonical Homebrew tap with the rendered oasis formula.
+Clone or update the canonical Homebrew tap with the rendered wadi formula.
 
 Usage:
 
-`oasis update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]`
+`wadi update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]`
 
 Options:
 - `--tap-dir DIR`: Update the Homebrew tap checkout rooted at DIR.
@@ -516,8 +516,8 @@ Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis update-homebrew-tap --tap-dir ../homebrew-oasis --formula Formula/oasis.rb --commit`
-- `oasis update-homebrew-tap --tap-dir ../homebrew-oasis --source-archive dist/oasis-0.1.0-source.tar.gz --commit --push`
+- `wadi update-homebrew-tap --tap-dir ../homebrew-wadi --formula Formula/wadi.rb --commit`
+- `wadi update-homebrew-tap --tap-dir ../homebrew-wadi --source-archive dist/wadi-0.1.0-source.tar.gz --commit --push`
 
 ## docs
 
@@ -525,13 +525,13 @@ Render markdown CLI reference directly from the live command table.
 
 Usage:
 
-`oasis docs`
+`wadi docs`
 
 Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis docs`
+- `wadi docs`
 
 ## completion
 
@@ -539,16 +539,16 @@ Generate shell completion scripts from the live command table.
 
 Usage:
 
-`oasis completion [--workspace DIR] SHELL`
+`wadi completion [--workspace DIR] SHELL`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis completion bash`
-- `oasis completion zsh`
-- `oasis completion fish`
+- `wadi completion bash`
+- `wadi completion zsh`
+- `wadi completion fish`
 
 ## toolchain
 
@@ -556,13 +556,13 @@ Print the resolved OCaml toolchain, backend, and package search roots.
 
 Usage:
 
-`oasis toolchain`
+`wadi toolchain`
 
 Options:
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis toolchain`
+- `wadi toolchain`
 
 ## explain
 
@@ -570,40 +570,40 @@ Show why a target rebuilt or reused artifacts and which commands were planned.
 
 Usage:
 
-`oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]`
+`wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
-- `--backend auto|native|bytecode`: Choose the compiler backend or let oasis auto-resolve it.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--current`: Compute a fresh rebuild explanation from current inputs without compiling, linking, or materializing generated sources.
 - `--json`: Print machine-readable JSON output instead of the text report.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis explain`
-- `oasis explain hello`
-- `oasis explain --current hello`
-- `oasis explain --current --backend bytecode hello`
-- `oasis explain --json hello`
-- `oasis explain --profile release greeting hello`
+- `wadi explain`
+- `wadi explain hello`
+- `wadi explain --current hello`
+- `wadi explain --current --backend bytecode hello`
+- `wadi explain --json hello`
+- `wadi explain --profile release greeting hello`
 
 ## migrate
 
-Scan dune files and emit a first-pass oasis.toml manifest with review comments.
+Scan dune files and emit a first-pass wadi.toml manifest with review comments.
 
 Usage:
 
-`oasis migrate [--workspace DIR] [--output PATH] [--stdout] [--force]`
+`wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
-- `--output PATH`: Write the generated manifest to PATH instead of oasis.toml.
+- `--output PATH`: Write the generated manifest to PATH instead of wadi.toml.
 - `--stdout`: Print the generated output instead of writing a file.
 - `--force`: Overwrite existing generated files or output paths.
 - `--help`: Print command-specific usage text.
 
 Examples:
-- `oasis migrate --stdout`
-- `oasis migrate --workspace ../old-project`
-- `oasis migrate --output converted.oasis.toml --force`
+- `wadi migrate --stdout`
+- `wadi migrate --workspace ../old-project`
+- `wadi migrate --output converted.wadi.toml --force`

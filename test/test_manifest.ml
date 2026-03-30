@@ -1,7 +1,7 @@
 open Test_support
 
 let load_manifest contents =
-  with_temp_dir "oasis-manifest" (fun workspace ->
+  with_temp_dir "wadi-manifest" (fun workspace ->
       write_manifest workspace contents;
       Manifest.load (manifest_path workspace))
 
@@ -432,7 +432,7 @@ actions = ["generate"]
           "checked-in generated sources should be constrained to declared outputs")) ;
     ( "parses multi-package workspace members",
       (fun () ->
-        with_temp_dir "oasis-members" (fun workspace_root ->
+        with_temp_dir "wadi-members" (fun workspace_root ->
             write_manifest workspace_root
               {|
 workspace = "demo"
@@ -446,14 +446,14 @@ profile = "release"
 dir = "shared"
 modules = ["shared"]
 |};
-            write_workspace_file workspace_root "packages/core/oasis.toml"
+            write_workspace_file workspace_root "packages/core/wadi.toml"
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
 deps = ["shared"]
 |};
-            write_workspace_file workspace_root "packages/app/oasis.toml"
+            write_workspace_file workspace_root "packages/app/wadi.toml"
               {|
 [executable.demo]
 dir = "app"
@@ -478,7 +478,7 @@ deps = ["core"]
             | _ -> fail "expected merged root and member targets")) );
     ( "parses package-local member tools with rebased paths",
       (fun () ->
-        with_temp_dir "oasis-member-tools" (fun workspace_root ->
+        with_temp_dir "wadi-member-tools" (fun workspace_root ->
             write_manifest workspace_root
               {|
 workspace = "demo"
@@ -489,7 +489,7 @@ members = ["packages/core"]
 dir = "shared"
 modules = ["shared"]
 |};
-            write_workspace_file workspace_root "packages/core/oasis.toml"
+            write_workspace_file workspace_root "packages/core/wadi.toml"
               {|
 [action.generate]
 argv = ["./scripts/generate.sh"]
@@ -576,14 +576,14 @@ ppx = ["rewrite"]
               "member ppx tools should rebase their deps")) );
     ( "rejects workspace-wide sections in member manifests",
       (fun () ->
-        with_temp_dir "oasis-member-defaults" (fun workspace_root ->
+        with_temp_dir "wadi-member-defaults" (fun workspace_root ->
             write_manifest workspace_root
               {|
 workspace = "demo"
 version = 1
 members = ["packages/core"]
 |};
-            write_workspace_file workspace_root "packages/core/oasis.toml"
+            write_workspace_file workspace_root "packages/core/wadi.toml"
               {|
 [defaults]
 profile = "release"
@@ -601,14 +601,14 @@ modules = ["core"]
               "member manifests should keep workspace defaults in the root manifest")) );
     ( "rejects watch sections in member manifests",
       (fun () ->
-        with_temp_dir "oasis-member-watch" (fun workspace_root ->
+        with_temp_dir "wadi-member-watch" (fun workspace_root ->
             write_manifest workspace_root
               {|
 workspace = "demo"
 version = 1
 members = ["packages/core"]
 |};
-            write_workspace_file workspace_root "packages/core/oasis.toml"
+            write_workspace_file workspace_root "packages/core/wadi.toml"
               {|
 [watch]
 include = ["lib/**"]

@@ -29,7 +29,7 @@ let cases =
     ( "reports when explain data is missing",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let explain = run_oasis ~cwd:workspace [ "explain"; "greeting" ] in
+            let explain = run_wadi ~cwd:workspace [ "explain"; "greeting" ] in
             assert_true (explain.status <> 0)
               "explain should fail before a target has been built";
             assert_string_contains
@@ -41,7 +41,7 @@ let cases =
         with_fixture "hello" (fun workspace ->
             let out_dir = Layout.library_out_dir workspace "greeting" in
             let explain =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "greeting" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "greeting" ]
             in
             assert_int_equal 0 explain.status
               "explain --current should work before any target has been built";
@@ -60,7 +60,7 @@ let cases =
       (fun () ->
         with_fixture "hello" (fun workspace ->
             let explain =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "explain"; "--current"; "--backend"; "bytecode"; "hello" ]
             in
             assert_int_equal 0 explain.status
@@ -75,7 +75,7 @@ let cases =
       (fun () ->
         with_fixture "hello" (fun workspace ->
             let explain =
-              run_oasis ~cwd:workspace [ "explain"; "--backend"; "bytecode"; "hello" ]
+              run_wadi ~cwd:workspace [ "explain"; "--backend"; "bytecode"; "hello" ]
             in
             assert_true (explain.status <> 0)
               "persisted explain should reject backend selection";
@@ -85,10 +85,10 @@ let cases =
     ( "records rebuilt and reused target state in explain reports",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "initial build should succeed before explain reports are read";
-            let first_explain = run_oasis ~cwd:workspace [ "explain"; "greeting" ] in
+            let first_explain = run_wadi ~cwd:workspace [ "explain"; "greeting" ] in
             assert_int_equal 0 first_explain.status
               "explain should read the persisted report after a build";
             assert_string_contains ~needle:"Target: greeting" first_explain.output
@@ -98,11 +98,11 @@ let cases =
             assert_string_contains ~needle:"previous build stamp missing"
               first_explain.output
               "fresh targets should explain that there was no prior stamp";
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "second build should succeed before checking the reused report";
             let second_explain =
-              run_oasis ~cwd:workspace [ "explain"; "greeting" ]
+              run_wadi ~cwd:workspace [ "explain"; "greeting" ]
             in
             assert_int_equal 0 second_explain.status
               "explain should still succeed after an up-to-date build";
@@ -115,14 +115,14 @@ let cases =
               "reused targets should explain the cache hit")) );
     ( "surfaces member package paths and local tool scopes in explain output",
       (fun () ->
-        with_temp_dir "oasis-explain-member-paths" (fun workspace ->
+        with_temp_dir "wadi-explain-member-paths" (fun workspace ->
             write_manifest workspace
               {|
 workspace = "demo"
 version = 1
 members = ["packages/core", "packages/app"]
 |};
-            write_workspace_file workspace "packages/core/oasis.toml"
+            write_workspace_file workspace "packages/core/wadi.toml"
               {|
 [action.generate_version]
 argv = ["./scripts/generate.sh"]
@@ -146,7 +146,7 @@ actions = ["generate_version"]
 preprocess = ["expand"]
 ppx = ["rewrite"]
 |};
-            write_workspace_file workspace "packages/app/oasis.toml"
+            write_workspace_file workspace "packages/app/wadi.toml"
               {|
 [executable.demo]
 dir = "app"
@@ -175,10 +175,10 @@ deps = ["core"]
               {|let message = "@@PREFIX@@" ^ ":" ^ Version.value ^ ":" ^ "ppx-marker"|};
             write_source workspace "packages/app/app/main.ml"
               {|let () = print_endline Core.message|};
-            let build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 build.status
               "member-local tool targets should build before explain is read";
-            let explain = run_oasis ~cwd:workspace [ "explain"; "core" ] in
+            let explain = run_wadi ~cwd:workspace [ "explain"; "core" ] in
             assert_int_equal 0 explain.status
               "explain should succeed for a built member target";
             assert_string_contains ~needle:"Package-path: packages/core"
@@ -196,7 +196,7 @@ deps = ["core"]
               explain.output
               "text explain output should show the scoped member ppx name";
             let json_explain =
-              run_oasis ~cwd:workspace [ "explain"; "--json"; "core" ]
+              run_wadi ~cwd:workspace [ "explain"; "--json"; "core" ]
             in
             assert_int_equal 0 json_explain.status
               "JSON explain should succeed for a built member target";
@@ -206,7 +206,7 @@ deps = ["core"]
     ( "persists a machine-readable explain sibling for automation",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "build should succeed before checking machine-readable explain data";
             let report_path =
@@ -227,14 +227,14 @@ deps = ["core"]
     ( "prints persisted explain JSON directly for automation",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "build should succeed before explain JSON is requested";
             let report_path =
               Layout.explain_json_path (Layout.library_out_dir workspace "greeting")
             in
             let expected = String.trim (Fs.read_file report_path) in
-            let explain = run_oasis ~cwd:workspace [ "explain"; "--json"; "greeting" ] in
+            let explain = run_wadi ~cwd:workspace [ "explain"; "--json"; "greeting" ] in
             assert_int_equal 0 explain.status
               "explain --json should succeed for built targets";
             assert_string_equal expected (String.trim explain.output)
@@ -244,11 +244,11 @@ deps = ["core"]
     ( "renders a JSON array when multiple explain targets are requested",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "build should succeed before explain JSON arrays are requested";
             let explain =
-              run_oasis ~cwd:workspace [ "explain"; "--json"; "greeting"; "hello" ]
+              run_wadi ~cwd:workspace [ "explain"; "--json"; "greeting"; "hello" ]
             in
             assert_int_equal 0 explain.status
               "explain --json should support multiple targets";
@@ -261,21 +261,21 @@ deps = ["core"]
     ( "recomputes current explain from edited inputs instead of loading stale reports",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "initial build should succeed before stale explain behavior is checked";
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "second build should persist a reused explain report";
             write_source workspace "lib/greeting.ml"
               {|let message name = "Hello again, " ^ name ^ "!"|};
-            let persisted = run_oasis ~cwd:workspace [ "explain"; "hello" ] in
+            let persisted = run_wadi ~cwd:workspace [ "explain"; "hello" ] in
             assert_int_equal 0 persisted.status
               "persisted explain should still load after the source changes";
             assert_string_contains ~needle:"State: reused" persisted.output
               "persisted explain should remain stale until another build runs";
             let current =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "hello" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "hello" ]
             in
             assert_int_equal 0 current.status
               "current explain should succeed after a source edit";
@@ -291,7 +291,7 @@ deps = ["core"]
       (fun () ->
         with_fixture "hello" (fun workspace ->
             let explain =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "explain"; "--current"; "--json"; "greeting"; "hello" ]
             in
             assert_int_equal 0 explain.status
@@ -306,7 +306,7 @@ deps = ["core"]
               "current explain JSON should report the planned rebuild state")) );
     ( "keeps current explain side-effect-light for generated and preprocessed sources",
       (fun () ->
-        with_temp_dir "oasis-explain-current-dry-run" (fun workspace ->
+        with_temp_dir "wadi-explain-current-dry-run" (fun workspace ->
             write_manifest workspace
               {|
 [action.generate_version]
@@ -341,7 +341,7 @@ preprocess = ["trace"]
               Filename.concat (Filename.concat out_dir "preprocessed") "main.ml"
             in
             let explain =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "demo" ]
             in
             assert_int_equal 0 explain.status
               "current explain should succeed for generated-source targets before a build";
@@ -354,7 +354,7 @@ preprocess = ["trace"]
               "current explain should report that declared generated sources are absent")) );
     ( "distinguishes action-only regeneration from a full rebuild in explain reports",
       (fun () ->
-        with_temp_dir "oasis-explain-action-regeneration" (fun workspace ->
+        with_temp_dir "wadi-explain-action-regeneration" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -375,7 +375,7 @@ modules = ["version"]
                  "#!/bin/sh\nprintf 'let message = \"generated\"\\n' > version.ml\n");
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let first_build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build"; "demo" ] in
             assert_int_equal 0 first_build.status
               "the initial action-backed build should succeed";
             let generated_version =
@@ -385,7 +385,7 @@ modules = ["version"]
             let generated_version = Fs.realpath generated_version in
             Fs.remove_tree generated_version;
             let current =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "demo" ]
             in
             assert_int_equal 0 current.status
               "current explain should succeed after a generated output is removed";
@@ -398,10 +398,10 @@ modules = ["version"]
             assert_string_contains ~needle:"action generate_version: planned"
               current.output
               "current explain should show that the action would rerun";
-            let second_build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build"; "demo" ] in
             assert_int_equal 0 second_build.status
               "the follow-up build should repair the missing generated output";
-            let persisted = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            let persisted = run_wadi ~cwd:workspace [ "explain"; "demo" ] in
             assert_int_equal 0 persisted.status
               "persisted explain should load after action-only regeneration";
             assert_string_contains ~needle:"State: regenerated" persisted.output
@@ -415,7 +415,7 @@ modules = ["version"]
               "persisted explain should preserve the generated-output repair reason")) );
     ( "shows declared action and preprocessor inputs in persisted explain output",
       (fun () ->
-        with_temp_dir "oasis-explain-steady-action-inputs" (fun workspace ->
+        with_temp_dir "wadi-explain-steady-action-inputs" (fun workspace ->
             write_manifest workspace
               {|
 [action.generate_version]
@@ -444,10 +444,10 @@ preprocess = ["trace"]
             write_source workspace "config/banner.txt" "banner";
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            let build = run_wadi ~cwd:workspace [ "build"; "demo" ] in
             assert_int_equal 0 build.status
               "the generated-source build should succeed before reading explain data";
-            let explain = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            let explain = run_wadi ~cwd:workspace [ "explain"; "demo" ] in
             assert_int_equal 0 explain.status
               "persisted explain should load after a generated-source build";
             assert_string_contains
@@ -462,7 +462,7 @@ preprocess = ["trace"]
               "persisted explain should show declared preprocessor auxiliary inputs")) );
     ( "shows declared ppx inputs in persisted explain output",
       (fun () ->
-        with_temp_dir "oasis-explain-steady-ppx-inputs" (fun workspace ->
+        with_temp_dir "wadi-explain-steady-ppx-inputs" (fun workspace ->
             let _ppx_binary =
               Test_transforms.compile_string_marker_ppx workspace
                 ~relative_path:"ppx/rewrite.ml"
@@ -483,10 +483,10 @@ ppx = ["rewrite"]
             write_source workspace "ppx/message.txt" "first";
             write_source workspace "app/main.ml"
               {|let () = print_endline "__PPX__"|};
-            let build = run_oasis ~cwd:workspace [ "build"; "demo" ] in
+            let build = run_wadi ~cwd:workspace [ "build"; "demo" ] in
             assert_int_equal 0 build.status
               "the ppx-backed build should succeed before reading explain data";
-            let explain = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            let explain = run_wadi ~cwd:workspace [ "explain"; "demo" ] in
             assert_int_equal 0 explain.status
               "persisted explain should load after a ppx-backed build";
             assert_string_contains
@@ -495,16 +495,16 @@ ppx = ["rewrite"]
     ( "surfaces rebuild reasons and planned compiler commands",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "baseline build should succeed before editing sources";
             write_source workspace "lib/greeting.ml"
               {|let message name = "Hello again, " ^ name ^ "!"|};
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "rebuild after editing a source should succeed";
             let library_explain =
-              run_oasis ~cwd:workspace [ "explain"; "greeting" ]
+              run_wadi ~cwd:workspace [ "explain"; "greeting" ]
             in
             assert_int_equal 0 library_explain.status
               "explain should load the rebuilt library report";
@@ -523,7 +523,7 @@ ppx = ["rewrite"]
             assert_string_contains ~needle:"link:" library_explain.output
               "the explain report should include the planned link command";
             let executable_explain =
-              run_oasis ~cwd:workspace [ "explain"; "hello" ]
+              run_wadi ~cwd:workspace [ "explain"; "hello" ]
             in
             assert_int_equal 0 executable_explain.status
               "explain should load the rebuilt executable report";
@@ -532,7 +532,7 @@ ppx = ["rewrite"]
               "downstream targets should explain dependency-triggered rebuilds")) );
     ( "explains when a module becomes interface-only",
       (fun () ->
-        with_temp_dir "oasis-explain-interface-only" (fun workspace ->
+        with_temp_dir "wadi-explain-interface-only" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -540,13 +540,13 @@ dir = "lib"
 modules = ["api"]
 |};
             write_source workspace "lib/api.ml" {|let greeting = "hello"|};
-            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 first_build.status
               "the initial implementation-backed build should succeed";
             Fs.remove_tree (Filename.concat workspace "lib/api.ml");
             write_source workspace "lib/api.mli" {|val greeting : string|};
             let explain =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "core" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "core" ]
             in
             assert_int_equal 0 explain.status
               "current explain should succeed after a module loses its implementation";
@@ -558,7 +558,7 @@ modules = ["api"]
               "current explain should describe the implementation-availability change directly")) );
     ( "explains preprocessor auxiliary input changes",
       (fun () ->
-        with_temp_dir "oasis-explain-preprocess-deps" (fun workspace ->
+        with_temp_dir "wadi-explain-preprocess-deps" (fun workspace ->
             write_manifest workspace
               {|
 [preprocess.expand]
@@ -576,12 +576,12 @@ preprocess = ["expand"]
             write_source workspace "config/banner.txt" "first";
             write_source workspace "app/main.ml"
               {|let () = print_endline "__TOKEN__"|};
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "the initial preprocessor-backed build should succeed";
             write_source workspace "config/banner.txt" "second";
             let current =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "demo" ]
             in
             assert_int_equal 0 current.status
               "current explain should succeed after a preprocessor input edit";
@@ -589,7 +589,7 @@ preprocess = ["expand"]
               ~needle:"preprocessor auxiliary input changed: config/banner.txt (expand)"
               current.output
               "current explain should call out the edited preprocessor input";
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "the edited preprocessor input should trigger a rebuild";
             assert_string_contains ~needle:"Built executable demo" second_build.output
@@ -601,7 +601,7 @@ preprocess = ["expand"]
               "the rebuilt executable should reflect the updated preprocessor input")) );
     ( "explains ppx auxiliary input changes",
       (fun () ->
-        with_temp_dir "oasis-explain-ppx-deps" (fun workspace ->
+        with_temp_dir "wadi-explain-ppx-deps" (fun workspace ->
             let _ppx_binary =
               Test_transforms.compile_string_marker_ppx workspace
                 ~relative_path:"ppx/rewrite.ml"
@@ -622,12 +622,12 @@ ppx = ["rewrite"]
             write_source workspace "ppx/message.txt" "first";
             write_source workspace "app/main.ml"
               {|let () = print_endline "__PPX__"|};
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "the initial ppx-backed build should succeed";
             write_source workspace "ppx/message.txt" "second";
             let current =
-              run_oasis ~cwd:workspace [ "explain"; "--current"; "demo" ]
+              run_wadi ~cwd:workspace [ "explain"; "--current"; "demo" ]
             in
             assert_int_equal 0 current.status
               "current explain should succeed after a ppx input edit";
@@ -635,7 +635,7 @@ ppx = ["rewrite"]
               ~needle:"ppx auxiliary input changed: ppx/message.txt (rewrite)"
               current.output
               "current explain should call out the edited ppx input";
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "the edited ppx input should trigger a rebuild";
             assert_string_contains ~needle:"Built executable demo" second_build.output
@@ -647,7 +647,7 @@ ppx = ["rewrite"]
               "the rebuilt executable should reflect the updated ppx input")) );
     ( "caches package and toolchain discovery within one build session",
       (fun () ->
-        with_temp_dir "oasis-explain-cache" (fun workspace ->
+        with_temp_dir "wadi-explain-cache" (fun workspace ->
             write_manifest workspace
               {|
 [library.patterns]
@@ -686,7 +686,7 @@ let contains_digit text =
             let build =
               with_env "OCAMLFIND" ocamlfind_wrapper (fun () ->
                   with_env "OCAMLC" ocamlc_wrapper (fun () ->
-                      run_oasis ~cwd:workspace [ "build" ]))
+                      run_wadi ~cwd:workspace [ "build" ]))
             in
             assert_int_equal 0 build.status
               "package-backed builds should succeed with wrapped tool probes";
@@ -697,7 +697,7 @@ let contains_digit text =
               "package lookup should be cached across targets in one build session";
             assert_int_equal 1 (count_exact_line "ocamlc -where" lines)
               "stdlib discovery should be cached for the whole build session";
-            let explain = run_oasis ~cwd:workspace [ "explain"; "demo" ] in
+            let explain = run_wadi ~cwd:workspace [ "explain"; "demo" ] in
             assert_int_equal 0 explain.status
               "explain should load reports for package-backed executables";
             assert_string_contains ~needle:"package: str ->" explain.output

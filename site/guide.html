@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Guide &mdash; Oasis</title>
+<title>Guide &mdash; Wadi</title>
 <style>
 /* ===== RESET & BASE ===== */
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -297,7 +297,7 @@ footer {
 
 <!-- NAV -->
 <nav>
-  <a href="index.html" class="logo"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="palm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c96a"/><stop offset="100%" stop-color="#c4813a"/></linearGradient></defs><path fill="url(#palm-grad)" d="M34 60 C34 60 33 42 31 34 C30 30 28 26 27 24 C24 22 16 20 6 22 C12 18 20 17 26 20 C22 16 14 8 4 6 C14 6 22 12 27 20 C25 14 20 6 16 2 C22 6 26 14 28 22 C32 16 40 8 50 8 C42 12 34 18 30 24 C34 18 42 12 52 14 C44 16 34 22 30 26 C36 20 44 16 54 18 C46 20 36 24 31 28 C32 30 34 42 35 52 L36 60 C36 60 40 62 42 62 C38 63 30 63 26 62 C28 62 32 60 34 60Z"/></svg>Oasis</a>
+  <a href="index.html" class="logo"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="palm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c96a"/><stop offset="100%" stop-color="#c4813a"/></linearGradient></defs><path fill="url(#palm-grad)" d="M34 60 C34 60 33 42 31 34 C30 30 28 26 27 24 C24 22 16 20 6 22 C12 18 20 17 26 20 C22 16 14 8 4 6 C14 6 22 12 27 20 C25 14 20 6 16 2 C22 6 26 14 28 22 C32 16 40 8 50 8 C42 12 34 18 30 24 C34 18 42 12 52 14 C44 16 34 22 30 26 C36 20 44 16 54 18 C46 20 36 24 31 28 C32 30 34 42 35 52 L36 60 C36 60 40 62 42 62 C38 63 30 63 26 62 C28 62 32 60 34 60Z"/></svg>Wadi</a>
   <div class="nav-links">
     <a href="index.html">Home</a>
     <a href="guide.html" class="active">Guide</a>
@@ -330,6 +330,10 @@ footer {
   <a href="#cmd-explain">explain</a>
   <a href="#cmd-install">install</a>
   <a href="#cmd-toolchain">toolchain</a>
+  <a href="#cmd-watch">watch</a>
+  <a href="#cmd-init">init</a>
+  <a href="#cmd-doctor">doctor</a>
+  <a href="#cmd-lock">lock</a>
   <a href="#cmd-graph">graph</a>
   <a href="#cmd-deps">deps</a>
   <a href="#cmd-env">env</a>
@@ -347,13 +351,13 @@ footer {
 <!-- CONTENT -->
 <div class="content">
 
-<h1>The Oasis <span>Guide</span></h1>
-<p class="subtitle">Everything you need to build OCaml projects with oasis.</p>
+<h1>The Wadi <span>Guide</span></h1>
+<p class="subtitle">Everything you need to build OCaml projects with wadi.</p>
 
 <!-- ============================================================ -->
 <h2 id="first-project">Your First Project</h2>
 
-<p>Create a directory with a library and an executable. You need two things: source files and an <code>oasis.toml</code> manifest.</p>
+<p>Create a directory with a library and an executable. You need two things: source files and an <code>wadi.toml</code> manifest.</p>
 
 <h3>Project structure</h3>
 
@@ -365,7 +369,7 @@ footer {
   project layout
 </div>
 <pre>myproject/
-  oasis.toml
+  wadi.toml
   lib/
     greeting.ml
   app/
@@ -401,7 +405,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml
+  wadi.toml
 </div>
 <pre><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"myproject"</span>
 <span class="kw">version</span>   <span class="op">=</span> 1
@@ -420,15 +424,15 @@ footer {
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis build
-<span class="success">Built library greeting  &rarr; _oasis/build/default/lib/greeting/libgreeting.cmxa</span>
-<span class="success">Built executable hello  &rarr; _oasis/build/default/exe/hello/hello</span>
+<pre><span class="prompt">$</span> wadi build
+<span class="success">Built library greeting  &rarr; _wadi/build/default/lib/greeting/libgreeting.cmxa</span>
+<span class="success">Built executable hello  &rarr; _wadi/build/default/exe/hello/hello</span>
 
-<span class="prompt">$</span> oasis run
+<span class="prompt">$</span> wadi run
 <span class="output">Hello, world!</span></pre>
 </div>
 
-<p>That's it. Oasis resolved the dependency, inferred module compilation order, and built everything. The second time you run <code>oasis build</code>, it will skip both targets because nothing changed.</p>
+<p>That's it. Wadi resolved the dependency, inferred module compilation order, and built everything. The second time you run <code>wadi build</code>, it will skip both targets because nothing changed.</p>
 
 <!-- ============================================================ -->
 <h2 id="project-with-deps">Adding Dependencies</h2>
@@ -440,7 +444,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml
+  wadi.toml
 </div>
 <pre><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"server"</span>
 <span class="kw">version</span>   <span class="op">=</span> 1
@@ -463,20 +467,20 @@ footer {
 </div>
 
 <div class="callout">
-<p><strong>Transitive resolution.</strong> The <code>server</code> executable depends on <code>db</code>, which depends on <code>core</code>. Oasis resolves the full closure automatically. External packages propagate too&mdash;<code>server</code> gets <code>unix</code> and <code>sqlite3</code> without declaring them.</p>
+<p><strong>Transitive resolution.</strong> The <code>server</code> executable depends on <code>db</code>, which depends on <code>core</code>. Wadi resolves the full closure automatically. External packages propagate too&mdash;<code>server</code> gets <code>unix</code> and <code>sqlite3</code> without declaring them.</p>
 </div>
 
 <!-- ============================================================ -->
 <h2 id="testing">Writing Tests</h2>
 
-<p>Test targets work like executables but are discovered by <code>oasis test</code>.</p>
+<p>Test targets work like executables but are discovered by <code>wadi test</code>.</p>
 
 <div class="code-block">
 <div class="code-header">
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml (add to the server project)
+  wadi.toml (add to the server project)
 </div>
 <pre><span class="op">[</span><span class="kw">test.unit</span><span class="op">]</span>
 <span class="fn">dir</span>  <span class="op">=</span> <span class="str">"test"</span>
@@ -491,12 +495,12 @@ footer {
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis test
+<pre><span class="prompt">$</span> wadi test
 <span class="success">ok - unit</span>
 <span class="success">ok - integration</span>
 <span class="success">2 of 2 tests passed</span>
 
-<span class="prompt">$</span> oasis test unit           <span class="output"># run just one</span>
+<span class="prompt">$</span> wadi test unit           <span class="output"># run just one</span>
 <span class="success">ok - unit</span>
 <span class="success">1 of 1 tests passed</span></pre>
 </div>
@@ -506,7 +510,7 @@ footer {
 <!-- ============================================================ -->
 <h2 id="manifest-overview">Manifest Reference</h2>
 
-<p>The manifest is a single <code>oasis.toml</code> file at your project root. It uses a subset of TOML with sections, strings, arrays, and integers.</p>
+<p>The manifest is a single <code>wadi.toml</code> file at your project root. It uses a subset of TOML with sections, strings, arrays, and integers.</p>
 
 <h3>Top-level fields</h3>
 
@@ -570,7 +574,7 @@ footer {
 <!-- ============================================================ -->
 <h2 id="tests">Tests</h2>
 
-<p>Tests use the same structure as executables. The only difference is that <code>oasis test</code> discovers and runs them.</p>
+<p>Tests use the same structure as executables. The only difference is that <code>wadi test</code> discovers and runs them.</p>
 
 <div class="code-block">
 <div class="code-header">
@@ -596,7 +600,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml
+  wadi.toml
 </div>
 <pre><span class="op">[</span><span class="kw">action.lexer</span><span class="op">]</span>
 <span class="fn">argv</span>    <span class="op">=</span> [<span class="str">"ocamllex"</span>, <span class="str">"lexer.mll"</span>]
@@ -637,7 +641,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml
+  wadi.toml
 </div>
 <pre><span class="op">[</span><span class="kw">profile.release</span><span class="op">]</span>
 <span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-O2"</span>, <span class="str">"-unbox-closures"</span>]
@@ -652,12 +656,12 @@ footer {
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis build --profile release
-<span class="success">Built library core     &rarr; _oasis/build/release/lib/core/libcore.cmxa</span>
-<span class="success">Built executable server &rarr; _oasis/build/release/exe/server/server</span></pre>
+<pre><span class="prompt">$</span> wadi build --profile release
+<span class="success">Built library core     &rarr; _wadi/build/release/lib/core/libcore.cmxa</span>
+<span class="success">Built executable server &rarr; _wadi/build/release/exe/server/server</span></pre>
 </div>
 
-<p>Profile artifacts are isolated under <code>_oasis/build/&lt;profile&gt;/</code> so you can have debug and release builds side by side.</p>
+<p>Profile artifacts are isolated under <code>_wadi/build/&lt;profile&gt;/</code> so you can have debug and release builds side by side.</p>
 
 <!-- ============================================================ -->
 <h2 id="defaults">Defaults</h2>
@@ -669,7 +673,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml
+  wadi.toml
 </div>
 <pre><span class="op">[</span><span class="kw">defaults</span><span class="op">]</span>
 <span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-w"</span>, <span class="str">"+a-4-40-42"</span>]
@@ -677,7 +681,7 @@ footer {
 </div>
 
 <!-- ============================================================ -->
-<h2 id="cmd-build">oasis build</h2>
+<h2 id="cmd-build">wadi build</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -686,7 +690,7 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
+<pre>wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
 </div>
 
 <p>Compile libraries, executables, and tests. With no targets, builds everything. Targets are built in dependency order with content-based incremental caching.</p>
@@ -699,7 +703,7 @@ footer {
 </ul>
 
 <!-- ============================================================ -->
-<h2 id="cmd-run">oasis run</h2>
+<h2 id="cmd-run">wadi run</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -708,19 +712,19 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]</pre>
+<pre>wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]</pre>
 </div>
 
 <p>Build and launch an executable. If the workspace has a single executable, the target is optional. Arguments after <code>--</code> are forwarded directly. Process spawning is direct&mdash;signals, streaming IO, and exit codes are preserved exactly.</p>
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis run server -- --port 8080 --verbose
+<pre><span class="prompt">$</span> wadi run server -- --port 8080 --verbose
 <span class="output">Listening on :8080</span></pre>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="cmd-test">oasis test</h2>
+<h2 id="cmd-test">wadi test</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -729,13 +733,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
+<pre>wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
 </div>
 
 <p>Build and run test targets. With no targets, runs all tests. Reports TAP-style output with a pass/fail summary. Exits 0 if all tests pass, 1 if any fail.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-clean">oasis clean</h2>
+<h2 id="cmd-clean">wadi clean</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -744,13 +748,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]</pre>
+<pre>wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]</pre>
 </div>
 
-<p>Remove build artifacts. With no targets, removes the entire <code>_oasis/</code> tree. With targets, removes only those outputs and prunes empty directories.</p>
+<p>Remove build artifacts. With no targets, removes the entire <code>_wadi/</code> tree. With targets, removes only those outputs and prunes empty directories.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-explain">oasis explain</h2>
+<h2 id="cmd-explain">wadi explain</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -759,7 +763,7 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]</pre>
+<pre>wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]</pre>
 </div>
 
 <p>Show why a target was rebuilt or reused. Displays fingerprint diffs, compiler invocations, include paths, and module order.</p>
@@ -771,14 +775,14 @@ footer {
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis explain core
+<pre><span class="prompt">$</span> wadi explain core
 <span class="output">target core: rebuilt</span>
 <span class="output">  reason: source changed lib/engine.ml</span>
 <span class="output">  fingerprint: manifest a3f8c1 sources 9e2b07 toolchain d41d8c</span></pre>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="cmd-install">oasis install</h2>
+<h2 id="cmd-install">wadi install</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -787,18 +791,18 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]</pre>
+<pre>wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]</pre>
 </div>
 
 <p>Stage libraries, executables, and metadata for distribution. Generates findlib-compatible <code>META</code> files. Resolves transitive library closures automatically.</p>
 
 <ul>
-  <li><code>--prefix DIR</code> &mdash; install root (default: <code>_oasis/install/&lt;profile&gt;</code>)</li>
+  <li><code>--prefix DIR</code> &mdash; install root (default: <code>_wadi/install/&lt;profile&gt;</code>)</li>
   <li><code>--destdir DIR</code> &mdash; prepend to prefix for package-manager staging</li>
 </ul>
 
 <!-- ============================================================ -->
-<h2 id="cmd-toolchain">oasis toolchain</h2>
+<h2 id="cmd-toolchain">wadi toolchain</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -807,13 +811,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis toolchain</pre>
+<pre>wadi toolchain</pre>
 </div>
 
 <p>Print the resolved OCaml compiler paths, backend selection, stdlib location, and package search roots. The first thing to run when something doesn't build.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-graph">oasis graph</h2>
+<h2 id="cmd-watch">wadi watch</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -822,13 +826,84 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]</pre>
+<pre>wadi watch [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
+</div>
+
+<p>File-watching rebuild loop. Monitors source files and the manifest for changes and re-runs incremental builds automatically. Hit Ctrl-C to stop.</p>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi watch
+<span class="output">watching 12 sources + wadi.toml ...</span>
+<span class="success">Built library core        &rarr; _wadi/build/default/lib/core/libcore.cmxa</span>
+<span class="success">Built executable app      &rarr; _wadi/build/default/exe/app/app</span>
+<span class="output">[changed lib/engine.ml]</span>
+<span class="success">Built library core        &rarr; _wadi/build/default/lib/core/libcore.cmxa</span>
+<span class="success">Built executable app      &rarr; _wadi/build/default/exe/app/app</span></pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cmd-init">wadi init</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi init [--lib | --exe | --full] [NAME]</pre>
+</div>
+
+<p>Scaffold a new project. Generates a <code>wadi.toml</code> and starter source files. Use <code>--lib</code> for a library-only project, <code>--exe</code> for an executable, or <code>--full</code> for a library + executable + tests layout.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-doctor">wadi doctor</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi doctor [--workspace DIR]</pre>
+</div>
+
+<p>Run workspace health checks. Validates the manifest, verifies toolchain availability, checks for stale artifacts, and reports any issues it finds.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-lock">wadi lock</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi lock [--workspace DIR] [--update]</pre>
+</div>
+
+<p>Snapshot exact toolchain versions and package resolutions into a lockfile (<code>wadi.lock</code>). Ensures reproducible builds across machines and CI environments. Use <code>--update</code> to refresh the lockfile after changing dependencies.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-graph">wadi graph</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]</pre>
 </div>
 
 <p>Show target build order, module compilation order, and active action/preprocess/PPX pipelines without compiling anything.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-deps">oasis deps</h2>
+<h2 id="cmd-deps">wadi deps</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -837,13 +912,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis deps [--workspace DIR] [TARGET ...]</pre>
+<pre>wadi deps [--workspace DIR] [TARGET ...]</pre>
 </div>
 
 <p>Resolve and display transitive external package requirements for selected targets.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-env">oasis env</h2>
+<h2 id="cmd-env">wadi env</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -852,13 +927,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]</pre>
+<pre>wadi env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]</pre>
 </div>
 
 <p>Print the exact subprocess environment a build, run, test, or install step would inherit. Useful for debugging environment-sensitive builds.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-repl">oasis repl</h2>
+<h2 id="cmd-repl">wadi repl</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -867,13 +942,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]</pre>
+<pre>wadi repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]</pre>
 </div>
 
 <p>Build a bytecode toplevel with workspace libraries and packages already loaded. Great for interactive exploration of your library API.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-migrate">oasis migrate</h2>
+<h2 id="cmd-migrate">wadi migrate</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -882,13 +957,13 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis migrate [--workspace DIR] [--output PATH] [--stdout] [--force]</pre>
+<pre>wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]</pre>
 </div>
 
-<p>Scan <code>dune</code> and <code>dune-project</code> files and generate a first-pass <code>oasis.toml</code> with review comments for anything that needs manual attention.</p>
+<p>Scan <code>dune</code> and <code>dune-project</code> files and generate a first-pass <code>wadi.toml</code> with review comments for anything that needs manual attention.</p>
 
 <!-- ============================================================ -->
-<h2 id="cmd-completion">oasis completion</h2>
+<h2 id="cmd-completion">wadi completion</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -897,19 +972,19 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis completion [--workspace DIR] bash|zsh|fish</pre>
+<pre>wadi completion [--workspace DIR] bash|zsh|fish</pre>
 </div>
 
 <p>Generate shell completion scripts. Completions use a runtime query protocol so they stay accurate as your project changes.</p>
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis completion bash >> ~/.bashrc
-<span class="prompt">$</span> oasis completion zsh > ~/.zfunc/_oasis</pre>
+<pre><span class="prompt">$</span> wadi completion bash >> ~/.bashrc
+<span class="prompt">$</span> wadi completion zsh > ~/.zfunc/_wadi</pre>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="cmd-docs">oasis docs</h2>
+<h2 id="cmd-docs">wadi docs</h2>
 
 <div class="code-block">
 <div class="code-header">
@@ -918,7 +993,7 @@ footer {
   <span class="code-dot g"></span>
   signature
 </div>
-<pre>oasis docs</pre>
+<pre>wadi docs</pre>
 </div>
 
 <p>Render markdown CLI reference from the live command table. Single source of truth for help text, docs, and completions.</p>
@@ -926,7 +1001,7 @@ footer {
 <!-- ============================================================ -->
 <h2 id="incremental">Incremental Builds</h2>
 
-<p>Oasis uses content-based fingerprints, not timestamps. A target is rebuilt only when its inputs actually change. The fingerprint includes:</p>
+<p>Wadi uses content-based fingerprints, not timestamps. A target is rebuilt only when its inputs actually change. The fingerprint includes:</p>
 
 <ul>
   <li>Compiler version and backend</li>
@@ -937,12 +1012,12 @@ footer {
   <li>Dependency library fingerprints</li>
 </ul>
 
-<p>Fingerprints are stored in <code>.oasis-stamp</code> files alongside build artifacts. Use <code>oasis explain</code> to see exactly what changed.</p>
+<p>Fingerprints are stored in <code>.wadi-stamp</code> files alongside build artifacts. Use <code>wadi explain</code> to see exactly what changed.</p>
 
 <!-- ============================================================ -->
 <h2 id="toolchain-resolution">Toolchain Resolution</h2>
 
-<p>Oasis resolves compilers and tools in a predictable order:</p>
+<p>Wadi resolves compilers and tools in a predictable order:</p>
 
 <ol>
   <li>Environment variables: <code>OCAMLC</code>, <code>OCAMLOPT</code>, <code>OCAMLDEP</code>, <code>OCAMLFIND</code></li>
@@ -951,11 +1026,11 @@ footer {
 
 <p>Backend selection follows: if <code>--backend</code> is specified, use it. Otherwise try native (<code>ocamlopt</code>), fall back to bytecode (<code>ocamlc</code>). External packages are resolved via <code>ocamlfind query</code>.</p>
 
-<p>Run <code>oasis toolchain</code> to see exactly what was resolved:</p>
+<p>Run <code>wadi toolchain</code> to see exactly what was resolved:</p>
 
 <div class="terminal">
 <div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
-<pre><span class="prompt">$</span> oasis toolchain
+<pre><span class="prompt">$</span> wadi toolchain
 <span class="output">ocamlopt:         /home/dev/.opam/default/bin/ocamlopt</span>
 <span class="output">ocamldep:         /home/dev/.opam/default/bin/ocamldep</span>
 <span class="output">ocamlfind:        /home/dev/.opam/default/bin/ocamlfind</span>
@@ -974,7 +1049,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  oasis.toml (root)
+  wadi.toml (root)
 </div>
 <pre><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"myproject"</span>
 <span class="kw">version</span>   <span class="op">=</span> 1
@@ -992,7 +1067,7 @@ footer {
   <span class="code-dot r"></span>
   <span class="code-dot y"></span>
   <span class="code-dot g"></span>
-  packages/core/oasis.toml
+  packages/core/wadi.toml
 </div>
 <pre><span class="op">[</span><span class="kw">library.core</span><span class="op">]</span>
 <span class="fn">dir</span>     <span class="op">=</span> <span class="str">"src"</span>

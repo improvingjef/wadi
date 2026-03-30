@@ -51,12 +51,12 @@ let resolve_executable workspace name =
   | Some (Manifest.Library _) ->
       Error
         (Printf.sprintf
-           "target '%s' is a library; oasis bench only supports executables or [bench.*] declarations"
+           "target '%s' is a library; wadi bench only supports executables or [bench.*] declarations"
            name)
   | Some (Manifest.Test _) ->
       Error
         (Printf.sprintf
-           "target '%s' is a test; oasis bench only supports executables or [bench.*] declarations"
+           "target '%s' is a test; wadi bench only supports executables or [bench.*] declarations"
            name)
   | None -> Error (Printf.sprintf "unknown target '%s'" name)
 

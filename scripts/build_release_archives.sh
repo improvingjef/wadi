@@ -4,12 +4,12 @@ set -eu
 ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$ROOT_DIR/release/metadata.sh"
 . "$ROOT_DIR/scripts/release_locale.sh"
-. "$ROOT_DIR/scripts/oasis_self_host.sh"
+. "$ROOT_DIR/scripts/wadi_self_host.sh"
 
-oasis_apply_release_archive_env
+wadi_apply_release_archive_env
 
 OUTPUT_DIR=$ROOT_DIR/dist
-BINARY_PATH=${OASIS_BIN:-$ROOT_DIR/_bootstrap/bin/oasis}
+BINARY_PATH=${WADI_BIN:-$ROOT_DIR/_bootstrap/bin/wadi}
 BINARY_PATH_EXPLICIT=0
 BUILD_SOURCE=1
 BUILD_BINARY=1
@@ -60,7 +60,7 @@ copy_tree_files() {
   list_source_paths "$src_root" \
     | while IFS= read -r relative_path; do
         [ -n "$relative_path" ] || continue
-        if [ "$relative_path" = "Formula/oasis.rb" ]; then
+        if [ "$relative_path" = "Formula/wadi.rb" ]; then
           continue
         fi
         src_path=$src_root/$relative_path
@@ -81,8 +81,8 @@ create_archive() {
   parent_dir=$1
   root_name=$2
   archive_path=$3
-  tmp_tar=$(mktemp "${TMPDIR:-/tmp}/oasis-release-tar.XXXXXX")
-  file_list=$(mktemp "${TMPDIR:-/tmp}/oasis-release-files.XXXXXX")
+  tmp_tar=$(mktemp "${TMPDIR:-/tmp}/wadi-release-tar.XXXXXX")
+  file_list=$(mktemp "${TMPDIR:-/tmp}/wadi-release-files.XXXXXX")
   (
     cd "$parent_dir"
     {
@@ -96,9 +96,9 @@ create_archive() {
 }
 
 build_source_archive() {
-  archive_name=$(oasis_release_source_archive_name)
-  root_name=$(oasis_release_source_dir_name)
-  work_dir=$(mktemp -d "${TMPDIR:-/tmp}/oasis-release-source.XXXXXX")
+  archive_name=$(wadi_release_source_archive_name)
+  root_name=$(wadi_release_source_dir_name)
+  work_dir=$(mktemp -d "${TMPDIR:-/tmp}/wadi-release-source.XXXXXX")
   trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
   stage_root=$work_dir/$root_name
   mkdir -p "$stage_root"
@@ -115,19 +115,19 @@ build_binary_archive() {
     exit 2
   fi
   if [ "$BINARY_PATH_EXPLICIT" -eq 0 ]; then
-    BINARY_PATH=$(oasis_resolve_repo_binary "$ROOT_DIR")
+    BINARY_PATH=$(wadi_resolve_repo_binary "$ROOT_DIR")
   fi
   if [ ! -f "$BINARY_PATH" ]; then
     echo "build_release_archives.sh: binary not found: $BINARY_PATH" >&2
     exit 1
   fi
-  archive_name=$(oasis_release_binary_archive_name "$OS_NAME" "$ARCH_NAME")
-  root_name=$(oasis_release_binary_dir_name "$OS_NAME" "$ARCH_NAME")
-  work_dir=$(mktemp -d "${TMPDIR:-/tmp}/oasis-release-binary.XXXXXX")
+  archive_name=$(wadi_release_binary_archive_name "$OS_NAME" "$ARCH_NAME")
+  root_name=$(wadi_release_binary_dir_name "$OS_NAME" "$ARCH_NAME")
+  work_dir=$(mktemp -d "${TMPDIR:-/tmp}/wadi-release-binary.XXXXXX")
   trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
   package_dir=$work_dir/package-root
   install_root=$work_dir/$root_name
-  OASIS_BIN=$BINARY_PATH "$ROOT_DIR/scripts/generate_release_artifacts.sh" \
+  WADI_BIN=$BINARY_PATH "$ROOT_DIR/scripts/generate_release_artifacts.sh" \
     --output-dir "$package_dir"
   "$ROOT_DIR/scripts/install_release_tree.sh" \
     --package-root "$package_dir/package" \

@@ -80,9 +80,9 @@ let update_release_version ~metadata_path version =
   let rewritten =
     List.map
       (fun line ->
-        if String_util.starts_with ~prefix:"OASIS_RELEASE_VERSION=" line then (
+        if String_util.starts_with ~prefix:"WADI_RELEASE_VERSION=" line then (
           updated := true;
-          Printf.sprintf "OASIS_RELEASE_VERSION='%s'" version)
+          Printf.sprintf "WADI_RELEASE_VERSION='%s'" version)
         else line)
       lines
   in
@@ -134,11 +134,11 @@ let update_homebrew_tap (options : update_homebrew_tap_options) =
         run_command "git" [ "clone"; clone_url; options.tap_dir ] |> Result.map ignore
       else Ok ()
     in
-    let formula_output = Filename.concat options.tap_dir "Formula/oasis.rb" in
+    let formula_output = Filename.concat options.tap_dir "Formula/wadi.rb" in
     write_file_if_changed formula_output formula_contents;
     let status =
       Process.run_capture ~cwd:options.tap_dir "git"
-        [ "status"; "--short"; "--"; "Formula/oasis.rb" ]
+        [ "status"; "--short"; "--"; "Formula/wadi.rb" ]
     in
     if status.status <> 0 then
       Error
@@ -150,7 +150,7 @@ let update_homebrew_tap (options : update_homebrew_tap_options) =
         if options.do_commit then
           let* _ =
             run_command ~cwd:options.tap_dir "git"
-              [ "add"; "Formula/oasis.rb" ]
+              [ "add"; "Formula/wadi.rb" ]
           in
           let* _ =
             run_command ~cwd:options.tap_dir
@@ -207,9 +207,9 @@ let cut_release ~root_dir ~version ~create_tag =
     Packager.run packaging_options
   in
   let* _ =
-    run_command ~cwd:root_dir "ruby" [ "-c"; Filename.concat "Formula" "oasis.rb" ]
+    run_command ~cwd:root_dir "ruby" [ "-c"; Filename.concat "Formula" "wadi.rb" ]
   in
-  let* _ = run_command ~cwd:root_dir "opam" [ "lint"; "oasis.opam" ] in
+  let* _ = run_command ~cwd:root_dir "opam" [ "lint"; "wadi.opam" ] in
   let expected_tag = Release_metadata.release_tag metadata in
   let* () =
     if create_tag then
@@ -241,6 +241,6 @@ let cut_release ~root_dir ~version ~create_tag =
   in
   Ok
     (Printf.sprintf
-       "Release cut for %s refreshed release/metadata.sh, oasis.opam, \
-        Formula/oasis.rb, dist/%s, and %s"
+       "Release cut for %s refreshed release/metadata.sh, wadi.opam, \
+        Formula/wadi.rb, dist/%s, and %s"
        expected_tag (Release_metadata.source_archive_name metadata) asset_index_path)

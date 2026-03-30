@@ -29,7 +29,7 @@ install: [
     "--package-root"
     "package"
     "--binary"
-    "_bootstrap/bin/oasis"
+    "_bootstrap/bin/wadi"
     "--prefix"
     prefix
   ]

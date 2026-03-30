@@ -41,7 +41,7 @@ let resolve_requested_targets workspace requested_targets =
               let kind = Manifest.target_kind_name target in
               Error
                 (Printf.sprintf
-                   "target '%s' is %s %s; oasis test only supports tests" name
+                   "target '%s' is %s %s; wadi test only supports tests" name
                    (kind_article kind) kind))
     in
     loop [] requested_targets

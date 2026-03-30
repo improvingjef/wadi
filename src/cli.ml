@@ -291,7 +291,7 @@ let backend_option =
   {
     usage = "--backend auto|native|bytecode";
     flags = [ "--backend" ];
-    description = "Choose the compiler backend or let oasis auto-resolve it.";
+    description = "Choose the compiler backend or let wadi auto-resolve it.";
   }
 
 let verbose_option =
@@ -334,7 +334,7 @@ let output_option =
   {
     usage = "--output PATH";
     flags = [ "--output" ];
-    description = "Write the generated manifest to PATH instead of oasis.toml.";
+    description = "Write the generated manifest to PATH instead of wadi.toml.";
   }
 
 let ppx_output_option =
@@ -566,7 +566,7 @@ let ignore_glob_option =
     usage = "--ignore GLOB";
     flags = [ "--ignore" ];
     description =
-      "Ignore paths matching GLOB in addition to the built-in .git, _oasis, and _bootstrap exclusions.";
+      "Ignore paths matching GLOB in addition to the built-in .git, _wadi, and _bootstrap exclusions.";
   }
 
 let dir_option =
@@ -618,7 +618,7 @@ let locked_option =
     usage = "--locked";
     flags = [ "--locked" ];
     description =
-      "Require oasis.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.";
+      "Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.";
   }
 
 let warn_locked_option =
@@ -626,7 +626,7 @@ let warn_locked_option =
     usage = "--warn-locked";
     flags = [ "--warn-locked" ];
     description =
-      "Warn when oasis.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.";
+      "Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.";
   }
 
 let source_option =
@@ -677,7 +677,7 @@ let interface_option =
 
 let backend_completion_words = [ "auto"; "native"; "bytecode" ]
 
-let completion_protocol_name = "__oasis_completion"
+let completion_protocol_name = "__wadi_completion"
 
 let completion_protocol_version = "1"
 
@@ -719,13 +719,13 @@ let build_doc =
     name = "build";
     summary = "Compile libraries, executables, and tests into predictable artifact roots.";
     signature =
-      "oasis build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]";
+      "wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]";
     examples =
       [
-        "oasis build";
-        "oasis build hello";
-        "oasis build --locked hello";
-        "oasis build --workspace examples/hello --profile release --verbose";
+        "wadi build";
+        "wadi build hello";
+        "wadi build --locked hello";
+        "wadi build --workspace examples/hello --profile release --verbose";
       ];
     options =
       [
@@ -747,13 +747,13 @@ let status_doc =
     summary =
       "Summarize which targets are rebuilt, regenerated, or reused without compiling.";
     signature =
-      "oasis status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]";
+      "wadi status [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [TARGET ...]";
     examples =
       [
-        "oasis status";
-        "oasis status hello";
-        "oasis status --backend bytecode hello";
-        "oasis status --json --profile release";
+        "wadi status";
+        "wadi status hello";
+        "wadi status --backend bytecode hello";
+        "wadi status --json --profile release";
       ];
     options =
       [
@@ -773,13 +773,13 @@ let doctor_doc =
     summary =
       "Validate workspace configuration, toolchain health, package resolution, and lock drift.";
     signature =
-      "oasis doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]";
+      "wadi doctor [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--json] [--locked | --warn-locked] [TARGET ...]";
     examples =
       [
-        "oasis doctor";
-        "oasis doctor hello";
-        "oasis doctor --locked hello";
-        "oasis doctor --json --backend bytecode";
+        "wadi doctor";
+        "wadi doctor hello";
+        "wadi doctor --locked hello";
+        "wadi doctor --json --backend bytecode";
       ];
     options =
       [
@@ -799,17 +799,17 @@ let watch_doc =
   {
     name = "watch";
     summary =
-      "Poll the workspace and rerun a selected oasis subtool whenever inputs change.";
+      "Poll the workspace and rerun a selected wadi subtool whenever inputs change.";
     signature =
-      "oasis watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]";
+      "wadi watch [--workspace DIR] [--poll-ms COUNT] [--debounce-ms COUNT] [--max-runs COUNT] [--keep-going] [--include GLOB] [--ignore GLOB] SUBTOOL [ARG ...]";
     examples =
       [
-        "oasis watch build";
-        "oasis watch test unit";
-        "oasis watch --keep-going --max-runs 2 build hello";
-        "oasis watch --include 'lib/**' --include 'app/**' run demo";
-        "oasis watch --ignore 'vendor/**' build";
-        "oasis watch run demo -- --port 8080";
+        "wadi watch build";
+        "wadi watch test unit";
+        "wadi watch --keep-going --max-runs 2 build hello";
+        "wadi watch --include 'lib/**' --include 'app/**' run demo";
+        "wadi watch --ignore 'vendor/**' build";
+        "wadi watch run demo -- --port 8080";
       ];
     options =
       [
@@ -829,16 +829,16 @@ let watch_doc =
 let init_doc =
   {
     name = "init";
-    summary = "Scaffold a minimal oasis workspace without hand-writing the first manifest.";
+    summary = "Scaffold a minimal wadi workspace without hand-writing the first manifest.";
     signature =
-      "oasis init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]";
+      "wadi init [--dir DIR] [--member PATH] [--name NAME] [--library NAME] [--executable NAME] [--bare] [--force]";
     examples =
       [
-        "oasis init";
-        "oasis init --name demo";
-        "oasis init --dir monorepo --member packages/core --library core";
-        "oasis init --dir examples/demo --library core --executable demo";
-        "oasis init --dir scratch --bare";
+        "wadi init";
+        "wadi init --name demo";
+        "wadi init --dir monorepo --member packages/core --library core";
+        "wadi init --dir examples/demo --library core --executable demo";
+        "wadi init --dir scratch --bare";
       ];
     options =
       [
@@ -861,13 +861,13 @@ let action_doc =
     summary =
       "Run declared generated-file actions for selected targets without compiling or linking.";
     signature =
-      "oasis action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+      "wadi action [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
-        "oasis action";
-        "oasis action core";
-        "oasis action demo";
-        "oasis action --profile release core demo";
+        "wadi action";
+        "wadi action core";
+        "wadi action demo";
+        "wadi action --profile release core demo";
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
     completion_words = [];
@@ -880,14 +880,14 @@ let ppx_doc =
     summary =
       "Inspect or dump the post-preprocess, post-PPX source for one target module.";
     signature =
-      "oasis ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]";
+      "wadi ppx [--workspace DIR] [--profile NAME] [--verbose] [--interface] [--plan] [--output PATH] TARGET [MODULE]";
     examples =
       [
-        "oasis ppx demo";
-        "oasis ppx demo main";
-        "oasis ppx --interface core version";
-        "oasis ppx --plan demo main";
-        "oasis ppx --output _debug/main.ml demo main";
+        "wadi ppx demo";
+        "wadi ppx demo main";
+        "wadi ppx --interface core version";
+        "wadi ppx --plan demo main";
+        "wadi ppx --output _debug/main.ml demo main";
       ];
     options =
       [
@@ -908,13 +908,13 @@ let run_doc =
     name = "run";
     summary = "Build and launch an executable target with exact argv forwarding.";
     signature =
-      "oasis run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
+      "wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]";
     examples =
       [
-        "oasis run";
-        "oasis run hello";
-        "oasis run --profile release hello -- --loud";
-        "oasis run -- --port 8080";
+        "wadi run";
+        "wadi run hello";
+        "wadi run --profile release hello -- --loud";
+        "wadi run -- --port 8080";
       ];
     options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
     completion_words = [];
@@ -926,13 +926,13 @@ let test_doc =
     name = "test";
     summary = "Build and execute declared test targets with a direct failure summary.";
     signature =
-      "oasis test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
+      "wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]";
     examples =
       [
-        "oasis test";
-        "oasis test unit";
-        "oasis test unit integration";
-        "oasis test --workspace examples/hello --profile ci --verbose";
+        "wadi test";
+        "wadi test unit";
+        "wadi test unit integration";
+        "wadi test --workspace examples/hello --profile ci --verbose";
       ];
     options = [ workspace_option; profile_option; backend_option; verbose_option; help_option ];
     completion_words = [];
@@ -945,13 +945,13 @@ let bench_doc =
     summary =
       "Build executable targets and report stable benchmark timing summaries.";
     signature =
-      "oasis bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]";
+      "wadi bench [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [--json] [--warmup COUNT] [--iterations COUNT] [TARGET ...]";
     examples =
       [
-        "oasis bench";
-        "oasis bench demo";
-        "oasis bench --warmup 1 --iterations 5 demo";
-        "oasis bench --json demo";
+        "wadi bench";
+        "wadi bench demo";
+        "wadi bench --warmup 1 --iterations 5 demo";
+        "wadi bench --json demo";
       ];
     options =
       [
@@ -972,13 +972,13 @@ let clean_doc =
   {
     name = "clean";
     summary = "Remove the whole artifact tree or only the requested target outputs.";
-    signature = "oasis clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+    signature = "wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
-        "oasis clean";
-        "oasis clean hello";
-        "oasis clean hello greeting";
-        "oasis clean --workspace examples/hello --profile release --verbose";
+        "wadi clean";
+        "wadi clean hello";
+        "wadi clean hello greeting";
+        "wadi clean --workspace examples/hello --profile release --verbose";
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
     completion_words = [];
@@ -991,12 +991,12 @@ let promote_doc =
     summary =
       "Copy declared non-source action outputs back into the workspace on purpose.";
     signature =
-      "oasis promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
+      "wadi promote [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]";
     examples =
       [
-        "oasis promote";
-        "oasis promote snapshots";
-        "oasis promote --profile release fixtures";
+        "wadi promote";
+        "wadi promote snapshots";
+        "wadi promote --profile release fixtures";
       ];
     options = [ workspace_option; profile_option; verbose_option; help_option ];
     completion_words = [];
@@ -1008,12 +1008,12 @@ let graph_doc =
     name = "graph";
     summary = "Show target build order, module order, and pipeline shape without compiling.";
     signature =
-      "oasis graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]";
+      "wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]";
     examples =
       [
-        "oasis graph";
-        "oasis graph hello";
-        "oasis graph --profile release --backend bytecode hello";
+        "wadi graph";
+        "wadi graph hello";
+        "wadi graph --profile release --backend bytecode hello";
       ];
     options = [ workspace_option; profile_option; backend_option; help_option ];
     completion_words = [];
@@ -1024,12 +1024,12 @@ let deps_doc =
   {
     name = "deps";
     summary = "Resolve transitive external package requirements for selected targets.";
-    signature = "oasis deps [--workspace DIR] [TARGET ...]";
+    signature = "wadi deps [--workspace DIR] [TARGET ...]";
     examples =
       [
-        "oasis deps";
-        "oasis deps hello";
-        "oasis deps --workspace examples/hello greeting hello";
+        "wadi deps";
+        "wadi deps hello";
+        "wadi deps --workspace examples/hello greeting hello";
       ];
     options = [ workspace_option; help_option ];
     completion_words = [];
@@ -1042,13 +1042,13 @@ let lock_doc =
     summary =
       "Snapshot resolved toolchain facts and external package paths into a machine-readable lock file.";
     signature =
-      "oasis lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]";
+      "wadi lock [--workspace DIR] [--output PATH] [--stdout] [TARGET ...]";
     examples =
       [
-        "oasis lock";
-        "oasis lock demo";
-        "oasis lock --stdout";
-        "oasis lock --output oasis.lock.json demo";
+        "wadi lock";
+        "wadi lock demo";
+        "wadi lock --stdout";
+        "wadi lock --output wadi.lock.json demo";
       ];
     options = [ workspace_option; output_option; stdout_option; help_option ];
     completion_words = [];
@@ -1061,13 +1061,13 @@ let vendor_doc =
     summary =
       "Copy or fetch a source dependency into vendor/ and register it as a workspace member.";
     signature =
-      "oasis vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]";
+      "wadi vendor [--workspace DIR] (--source DIR | --git URL | --url URL) [--ref REV] [--checksum VALUE] [--name NAME] [--force]";
     examples =
       [
-        "oasis vendor --source ../dep";
-        "oasis vendor --git https://example.com/dep.git --checksum 0123abcd --name dep";
-        "oasis vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep";
-        "oasis vendor --workspace examples/app --source ../core --force";
+        "wadi vendor --source ../dep";
+        "wadi vendor --git https://example.com/dep.git --checksum 0123abcd --name dep";
+        "wadi vendor --url https://example.com/dep.tar.gz --checksum sha256:0123abcd --name dep";
+        "wadi vendor --workspace examples/app --source ../core --force";
       ];
     options =
       [
@@ -1091,17 +1091,17 @@ let env_doc =
     summary =
       "Print the exact subprocess environment a build, action, run, test, bench, or install step would inherit.";
     signature =
-      "oasis env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]";
+      "wadi env [--workspace DIR] [--profile NAME] [--json] [--changed-only] SUBTOOL [TARGET ...]";
     examples =
       [
-        "oasis env build";
-        "oasis env action core";
-        "oasis env --profile release build demo";
-        "oasis env --json run demo";
-        "oasis env --changed-only build demo";
-        "oasis env run demo";
-        "oasis env test unit";
-        "oasis env bench demo";
+        "wadi env build";
+        "wadi env action core";
+        "wadi env --profile release build demo";
+        "wadi env --json run demo";
+        "wadi env --changed-only build demo";
+        "wadi env run demo";
+        "wadi env test unit";
+        "wadi env bench demo";
       ];
     options =
       [
@@ -1121,14 +1121,14 @@ let repl_doc =
     summary =
       "Build a bytecode toplevel with workspace libraries and packages already wired in.";
     signature =
-      "oasis repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]";
+      "wadi repl [--workspace DIR] [--profile NAME] [--verbose] [--plan] [--json] [--script PATH] [TARGET] [-- OCAML_ARG ...]";
     examples =
       [
-        "oasis repl core";
-        "oasis repl demo";
-        "oasis repl --plan --json core";
-        "oasis repl core --script scripts/session.ml -- -noinit -noprompt";
-        "oasis repl --profile release core -- -noinit -noprompt";
+        "wadi repl core";
+        "wadi repl demo";
+        "wadi repl --plan --json core";
+        "wadi repl core --script scripts/session.ml -- -noinit -noprompt";
+        "wadi repl --profile release core -- -noinit -noprompt";
       ];
     options =
       [
@@ -1149,14 +1149,14 @@ let install_doc =
     name = "install";
     summary = "Stage installable libraries, executables, and metadata under a prefix.";
     signature =
-      "oasis install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]";
+      "wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--locked | --warn-locked] [--verbose] [TARGET ...]";
     examples =
       [
-        "oasis install";
-        "oasis install hello";
-        "oasis install --warn-locked --prefix _stage hello";
-        "oasis install --prefix _stage hello greeting";
-        "oasis install --prefix /usr/local --destdir _pkg hello";
+        "wadi install";
+        "wadi install hello";
+        "wadi install --warn-locked --prefix _stage hello";
+        "wadi install --prefix _stage hello greeting";
+        "wadi install --prefix /usr/local --destdir _pkg hello";
       ];
     options =
       [
@@ -1179,11 +1179,11 @@ let release_artifacts_doc =
     name = "release-artifacts";
     summary =
       "Render CLI docs, shell completions, and packaged install-tree payloads from the live binary.";
-    signature = "oasis release-artifacts [--output-dir DIR]";
+    signature = "wadi release-artifacts [--output-dir DIR]";
     examples =
       [
-        "oasis release-artifacts";
-        "oasis release-artifacts --output-dir dist";
+        "wadi release-artifacts";
+        "wadi release-artifacts --output-dir dist";
       ];
     options = [ output_dir_option; help_option ];
     completion_words = [];
@@ -1196,14 +1196,14 @@ let package_doc =
     summary =
       "Render opam, Homebrew, checksum, and release-asset metadata from canonical release facts.";
     signature =
-      "oasis package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]";
+      "wadi package [--output-dir DIR] [--opam-output PATH] [--formula-output PATH] [--checksums-output PATH] [--asset-index-output PATH] [--source-archive PATH | --source-archive-dir DIR | --reuse-source-archive-dir DIR] [--source-archive-mode tracked|worktree]";
     examples =
       [
-        "oasis package";
-        "oasis package --output-dir dist";
-        "oasis package --source-archive-dir dist --asset-index-output dist/release-assets.json";
-        "oasis package --source-archive dist/oasis-source.tar.gz --checksums-output dist/SHA256SUMS";
-        "oasis package --source-archive-dir dist --source-archive-mode worktree";
+        "wadi package";
+        "wadi package --output-dir dist";
+        "wadi package --source-archive-dir dist --asset-index-output dist/release-assets.json";
+        "wadi package --source-archive dist/wadi-source.tar.gz --checksums-output dist/SHA256SUMS";
+        "wadi package --source-archive-dir dist --source-archive-mode worktree";
       ];
     options =
       [
@@ -1227,8 +1227,8 @@ let sync_generated_doc =
     name = "sync-generated";
     summary =
       "Refresh bootstrap seed metadata, CLI docs, shell completions, and packaging manifests together.";
-    signature = "oasis sync-generated";
-    examples = [ "oasis sync-generated" ];
+    signature = "wadi sync-generated";
+    examples = [ "wadi sync-generated" ];
     options = [ help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
@@ -1239,11 +1239,11 @@ let release_cut_doc =
     name = "release-cut";
     summary =
       "Bump the canonical release version, refresh packaging metadata, validate it, and optionally tag the repo.";
-    signature = "oasis release-cut --version X.Y.Z [--tag]";
+    signature = "wadi release-cut --version X.Y.Z [--tag]";
     examples =
       [
-        "oasis release-cut --version 0.2.0";
-        "oasis release-cut --version 0.2.0 --tag";
+        "wadi release-cut --version 0.2.0";
+        "wadi release-cut --version 0.2.0 --tag";
       ];
     options = [ version_option; tag_option; help_option ];
     completion_words = [];
@@ -1254,13 +1254,13 @@ let update_homebrew_tap_doc =
   {
     name = "update-homebrew-tap";
     summary =
-      "Clone or update the canonical Homebrew tap with the rendered oasis formula.";
+      "Clone or update the canonical Homebrew tap with the rendered wadi formula.";
     signature =
-      "oasis update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]";
+      "wadi update-homebrew-tap --tap-dir DIR [--formula PATH | --source-archive PATH] [--commit] [--push]";
     examples =
       [
-        "oasis update-homebrew-tap --tap-dir ../homebrew-oasis --formula Formula/oasis.rb --commit";
-        "oasis update-homebrew-tap --tap-dir ../homebrew-oasis --source-archive dist/oasis-0.1.0-source.tar.gz --commit --push";
+        "wadi update-homebrew-tap --tap-dir ../homebrew-wadi --formula Formula/wadi.rb --commit";
+        "wadi update-homebrew-tap --tap-dir ../homebrew-wadi --source-archive dist/wadi-0.1.0-source.tar.gz --commit --push";
       ];
     options =
       [
@@ -1279,8 +1279,8 @@ let docs_doc =
   {
     name = "docs";
     summary = "Render markdown CLI reference directly from the live command table.";
-    signature = "oasis docs";
-    examples = [ "oasis docs" ];
+    signature = "wadi docs";
+    examples = [ "wadi docs" ];
     options = [ help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
@@ -1290,8 +1290,8 @@ let completion_doc =
   {
     name = "completion";
     summary = "Generate shell completion scripts from the live command table.";
-    signature = "oasis completion [--workspace DIR] SHELL";
-    examples = [ "oasis completion bash"; "oasis completion zsh"; "oasis completion fish" ];
+    signature = "wadi completion [--workspace DIR] SHELL";
+    examples = [ "wadi completion bash"; "wadi completion zsh"; "wadi completion fish" ];
     options = [ workspace_option; help_option ];
     completion_words = [ "bash"; "zsh"; "fish" ];
     watch_root_files = no_watch_root_files;
@@ -1301,8 +1301,8 @@ let toolchain_doc =
   {
     name = "toolchain";
     summary = "Print the resolved OCaml toolchain, backend, and package search roots.";
-    signature = "oasis toolchain";
-    examples = [ "oasis toolchain" ];
+    signature = "wadi toolchain";
+    examples = [ "wadi toolchain" ];
     options = [ help_option ];
     completion_words = [];
     watch_root_files = no_watch_root_files;
@@ -1313,15 +1313,15 @@ let explain_doc =
     name = "explain";
     summary = "Show why a target rebuilt or reused artifacts and which commands were planned.";
     signature =
-      "oasis explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]";
+      "wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]";
     examples =
       [
-        "oasis explain";
-        "oasis explain hello";
-        "oasis explain --current hello";
-        "oasis explain --current --backend bytecode hello";
-        "oasis explain --json hello";
-        "oasis explain --profile release greeting hello";
+        "wadi explain";
+        "wadi explain hello";
+        "wadi explain --current hello";
+        "wadi explain --current --backend bytecode hello";
+        "wadi explain --json hello";
+        "wadi explain --profile release greeting hello";
       ];
     options =
       [
@@ -1340,14 +1340,14 @@ let migrate_doc =
   {
     name = "migrate";
     summary =
-      "Scan dune files and emit a first-pass oasis.toml manifest with review comments.";
+      "Scan dune files and emit a first-pass wadi.toml manifest with review comments.";
     signature =
-      "oasis migrate [--workspace DIR] [--output PATH] [--stdout] [--force]";
+      "wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]";
     examples =
       [
-        "oasis migrate --stdout";
-        "oasis migrate --workspace ../old-project";
-        "oasis migrate --output converted.oasis.toml --force";
+        "wadi migrate --stdout";
+        "wadi migrate --workspace ../old-project";
+        "wadi migrate --output converted.wadi.toml --force";
       ];
     options =
       [ workspace_option; output_option; stdout_option; force_option; help_option ];
@@ -1421,7 +1421,7 @@ let render_examples_markdown examples =
 let render_markdown docs =
   String.concat "\n"
     ([
-       "# Oasis CLI";
+       "# Wadi CLI";
        "";
        "Generated from the live command table.";
      ]
@@ -1449,7 +1449,7 @@ let command_flag_words doc =
   List.concat_map (fun option_doc -> option_doc.flags) doc.options
 
 let completion_query_command ?workspace_dir ?(describe = false) () =
-  "oasis completion"
+  "wadi completion"
   ^
   (match workspace_dir with
   | Some dir -> " --workspace " ^ String_util.shell_quote dir
@@ -1461,10 +1461,10 @@ let render_bash_completion ?workspace_dir () =
   let query = completion_query_command ?workspace_dir ~describe:true () in
   String.concat "\n"
     [
-      "_oasis_query() {";
+      "_wadi_query() {";
       "  " ^ query ^ " --current \"$1\" -- \"${@:2}\" 2>/dev/null";
       "}";
-      "_oasis_show_descriptions() {";
+      "_wadi_show_descriptions() {";
       "  local line";
       "  while IFS= read -r line; do";
       "    [[ -n \"$line\" ]] || continue";
@@ -1472,12 +1472,12 @@ let render_bash_completion ?workspace_dir () =
       "    printf '%s\\n' \"$line\" >&2";
       "  done";
       "}";
-      "_oasis() {";
+      "_wadi() {";
       "  local cur response first_line body record protocol version kind value description";
       "  local -a previous values described";
       "  cur=\"${COMP_WORDS[COMP_CWORD]}\"";
       "  previous=(\"${COMP_WORDS[@]:1:$((COMP_CWORD-1))}\")";
-      "  response=\"$(_oasis_query \"$cur\" \"${previous[@]}\")\"";
+      "  response=\"$(_wadi_query \"$cur\" \"${previous[@]}\")\"";
       "  first_line=\"${response%%$'\\n'*}\"";
       "  IFS=$'\\t' read -r protocol version kind <<< \"$first_line\"";
       "  [[ \"$protocol\" == "
@@ -1511,10 +1511,10 @@ let render_bash_completion ?workspace_dir () =
       "  done <<< \"$body\"";
       "  compgen -V COMPREPLY -W \"$(printf '%s\\n' \"${values[@]}\")\" -- \"$cur\"";
       "  if [[ ${#described[@]} -gt 0 && ${#COMPREPLY[@]} -gt 1 ]]; then";
-      "    _oasis_show_descriptions <<< \"$(printf '%s\\n' \"${described[@]}\")\"";
+      "    _wadi_show_descriptions <<< \"$(printf '%s\\n' \"${described[@]}\")\"";
       "  fi";
       "}";
-      "complete -F _oasis oasis";
+      "complete -F _wadi wadi";
       "";
     ]
 
@@ -1522,18 +1522,18 @@ let render_zsh_completion ?workspace_dir () =
   let query = completion_query_command ?workspace_dir ~describe:true () in
   String.concat "\n"
     [
-      "#compdef oasis";
+      "#compdef wadi";
       "";
-      "_oasis_query() {";
+      "_wadi_query() {";
       "  " ^ query ^ " --current \"$1\" -- \"${@:2}\" 2>/dev/null";
       "}";
-      "_oasis() {";
+      "_wadi() {";
       "  local current response first_line body";
       "  local record protocol version kind value description";
       "  local -a previous suggestions";
       "  current=\"${words[CURRENT]}\"";
       "  previous=(\"${(@)words[2,CURRENT-1]}\")";
-      "  response=\"$(_oasis_query \"$current\" \"${previous[@]}\")\"";
+      "  response=\"$(_wadi_query \"$current\" \"${previous[@]}\")\"";
       "  first_line=\"${response%%$'\\n'*}\"";
       "  IFS=$'\\t' read -r protocol version kind <<< \"$first_line\"";
       "  [[ \"$protocol\" == "
@@ -1565,7 +1565,7 @@ let render_zsh_completion ?workspace_dir () =
       "  done <<< \"$body\"";
       "  _describe 'value' suggestions";
       "}";
-      "compdef _oasis oasis";
+      "compdef _wadi wadi";
       "";
     ]
 
@@ -1594,7 +1594,7 @@ let render_fish_option command_name (option_doc : option_doc) =
   if flag_parts = [] then ""
   else
     String.concat " "
-      ([ "complete"; "-c"; "oasis"; "-n"; "__fish_seen_subcommand_from " ^ command_name ]
+      ([ "complete"; "-c"; "wadi"; "-n"; "__fish_seen_subcommand_from " ^ command_name ]
       @ flag_parts
       @ [ "-d"; String_util.shell_quote option_doc.description ])
 
@@ -1602,7 +1602,7 @@ let render_fish_completion ?workspace_dir () =
   let query = completion_query_command ?workspace_dir ~describe:true () in
   String.concat "\n"
     [
-      "function __oasis_complete";
+      "function __wadi_complete";
       "  set -l previous (commandline -opc)";
       "  if test (count $previous) -gt 0";
       "    set previous $previous[2..-1]";
@@ -1646,7 +1646,7 @@ let render_fish_completion ?workspace_dir () =
       "    end";
       "  end";
       "end";
-      "complete -c oasis -f -a '(__oasis_complete)'";
+      "complete -c wadi -f -a '(__wadi_complete)'";
       "";
     ]
 
@@ -1660,7 +1660,7 @@ let completion_script ?workspace_dir shell =
         (Printf.sprintf "unknown shell '%s'; expected bash, fish, or zsh" shell)
 
 let report_error message =
-  prerr_endline ("oasis: " ^ message);
+  prerr_endline ("wadi: " ^ message);
   Exit_code 1
 
 let default_backend_request () = Toolchain.env_backend_request ()
@@ -2977,12 +2977,12 @@ let resolve_run_target workspace requested_target =
       | Some (Manifest.Library _) ->
           Error
             (Printf.sprintf
-               "target '%s' is a library; oasis run only supports executables"
+               "target '%s' is a library; wadi run only supports executables"
                name)
       | Some (Manifest.Test _) ->
           Error
             (Printf.sprintf
-               "target '%s' is a test; oasis run only supports executables"
+               "target '%s' is a test; wadi run only supports executables"
                name)
       | Some (Manifest.Executable executable) -> Ok executable)
   | None -> (
@@ -3037,7 +3037,7 @@ let validate_lock_policy lock_policy ~workspace_root workspace requested_targets
       with
       | Ok () -> Ok ()
       | Error message ->
-          prerr_endline ("oasis: warning: " ^ message);
+          prerr_endline ("wadi: warning: " ^ message);
           Ok ())
   | Require_locked ->
       Locker.validate_current ~workspace_root workspace requested_targets

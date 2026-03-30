@@ -64,7 +64,7 @@ let choose_default_target workspace =
   | [] -> (
       match non_library_targets workspace with
       | [ target ] -> Ok target
-      | [] -> Error "workspace does not define any targets for oasis repl"
+      | [] -> Error "workspace does not define any targets for wadi repl"
       | targets ->
           Error
             (Printf.sprintf "workspace defines multiple targets; choose one: %s"

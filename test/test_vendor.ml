@@ -4,14 +4,14 @@ let write_source workspace relative_path contents =
   Fs.write_file (Filename.concat workspace relative_path) contents
 
 let write_member_manifest workspace contents =
-  Fs.write_file (Filename.concat workspace "oasis.toml") contents
+  Fs.write_file (Filename.concat workspace "wadi.toml") contents
 
 let git_env =
   [
-    ("GIT_AUTHOR_NAME", "Oasis Tests");
-    ("GIT_AUTHOR_EMAIL", "oasis@example.com");
-    ("GIT_COMMITTER_NAME", "Oasis Tests");
-    ("GIT_COMMITTER_EMAIL", "oasis@example.com");
+    ("GIT_AUTHOR_NAME", "Wadi Tests");
+    ("GIT_AUTHOR_EMAIL", "wadi@example.com");
+    ("GIT_COMMITTER_NAME", "Wadi Tests");
+    ("GIT_COMMITTER_EMAIL", "wadi@example.com");
   ]
 
 let run_git ~cwd args = Process.run_capture ~cwd ~env:git_env "git" args
@@ -51,7 +51,7 @@ let cases =
   [
     ( "vendors a local package into vendor/ and registers it as a member",
       fun () ->
-        with_temp_dir "oasis-vendor-src" (fun source ->
+        with_temp_dir "wadi-vendor-src" (fun source ->
             write_member_manifest source
               {|
 [library.dep]
@@ -59,7 +59,7 @@ dir = "lib"
 modules = ["dep"]
 |};
             write_source source "lib/dep.ml" {|let message = "vendored"|};
-            with_temp_dir "oasis-vendor-workspace" (fun workspace ->
+            with_temp_dir "wadi-vendor-workspace" (fun workspace ->
                 write_manifest workspace
                   {|
 workspace = "demo"
@@ -73,23 +73,23 @@ deps = ["dep"]
                 write_source workspace "app/main.ml"
                   {|let () = print_endline Dep.message|};
                 let vendor =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [ "vendor"; "--source"; source; "--name"; "dep" ]
                 in
                 assert_int_equal 0 vendor.status
                   "vendor should copy and register a local package";
-                assert_file_exists (Filename.concat workspace "vendor/dep/oasis.toml");
+                assert_file_exists (Filename.concat workspace "vendor/dep/wadi.toml");
                 assert_string_contains ~needle:{|members = ["vendor/dep"]|}
                   (Fs.read_file (manifest_path workspace))
                   "vendor should register the new member in the root manifest";
-                let run = run_oasis ~cwd:workspace [ "run"; "demo" ] in
+                let run = run_wadi ~cwd:workspace [ "run"; "demo" ] in
                 assert_int_equal 0 run.status
                   "the vendored package should participate in normal builds";
                 assert_string_contains ~needle:"vendored\n" run.output
                   "the root workspace should resolve the vendored library")) );
     ( "rejects vendored manifests that are not member-compatible",
       fun () ->
-        with_temp_dir "oasis-vendor-invalid" (fun source ->
+        with_temp_dir "wadi-vendor-invalid" (fun source ->
             write_member_manifest source
               {|
 workspace = "dep"
@@ -100,14 +100,14 @@ dir = "lib"
 modules = ["dep"]
 |};
             write_source source "lib/dep.ml" {|let message = "bad"|};
-            with_temp_dir "oasis-vendor-root" (fun workspace ->
+            with_temp_dir "wadi-vendor-root" (fun workspace ->
                 write_manifest workspace
                   {|
 workspace = "demo"
 version = 1
 |};
                 let vendor =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [ "vendor"; "--source"; source; "--name"; "dep" ]
                 in
                 assert_true (vendor.status <> 0)
@@ -118,7 +118,7 @@ version = 1
                   "vendor should explain the member-safety violation")) );
     ( "replaces an existing vendored checkout with force",
       fun () ->
-        with_temp_dir "oasis-vendor-force-src" (fun source ->
+        with_temp_dir "wadi-vendor-force-src" (fun source ->
             write_member_manifest source
               {|
 [library.dep]
@@ -126,7 +126,7 @@ dir = "lib"
 modules = ["dep"]
 |};
             write_source source "lib/dep.ml" {|let message = "first"|};
-            with_temp_dir "oasis-vendor-force-workspace" (fun workspace ->
+            with_temp_dir "wadi-vendor-force-workspace" (fun workspace ->
                 write_manifest workspace
                   {|
 workspace = "demo"
@@ -140,14 +140,14 @@ deps = ["dep"]
                 write_source workspace "app/main.ml"
                   {|let () = print_endline Dep.message|};
                 let first =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [ "vendor"; "--source"; source; "--name"; "dep" ]
                 in
                 assert_int_equal 0 first.status
                   "the first vendor command should succeed";
                 write_source source "lib/dep.ml" {|let message = "second"|};
                 let rejected =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [ "vendor"; "--source"; source; "--name"; "dep" ]
                 in
                 assert_true (rejected.status <> 0)
@@ -156,19 +156,19 @@ deps = ["dep"]
                   rejected.output
                   "vendor should explain how to replace an existing checkout";
                 let forced =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [ "vendor"; "--source"; source; "--name"; "dep"; "--force" ]
                 in
                 assert_int_equal 0 forced.status
                   "vendor --force should refresh an existing checkout";
-                let run = run_oasis ~cwd:workspace [ "run"; "demo" ] in
+                let run = run_wadi ~cwd:workspace [ "run"; "demo" ] in
                 assert_int_equal 0 run.status
                   "the refreshed vendored package should still build";
                 assert_string_contains ~needle:"second\n" run.output
                   "force should copy the updated vendored sources")) );
     ( "vendors a git source with a pinned commit checksum",
       fun () ->
-        with_temp_dir "oasis-vendor-git-src" (fun source ->
+        with_temp_dir "wadi-vendor-git-src" (fun source ->
             write_member_manifest source
               {|
 [library.dep]
@@ -177,7 +177,7 @@ modules = ["dep"]
 |};
             write_source source "lib/dep.ml" {|let message = "git-vendored"|};
             let revision = init_git_repo source in
-            with_temp_dir "oasis-vendor-git-workspace" (fun workspace ->
+            with_temp_dir "wadi-vendor-git-workspace" (fun workspace ->
                 write_manifest workspace
                   {|
 workspace = "demo"
@@ -191,7 +191,7 @@ deps = ["dep"]
                 write_source workspace "app/main.ml"
                   {|let () = print_endline Dep.message|};
                 let vendor =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [
                       "vendor";
                       "--git";
@@ -204,14 +204,14 @@ deps = ["dep"]
                 in
                 assert_int_equal 0 vendor.status
                   "vendor should clone a pinned git source";
-                let run = run_oasis ~cwd:workspace [ "run"; "demo" ] in
+                let run = run_wadi ~cwd:workspace [ "run"; "demo" ] in
                 assert_int_equal 0 run.status
                   "git-vendored packages should participate in normal builds";
                 assert_string_contains ~needle:"git-vendored\n" run.output
                   "the root workspace should resolve the git-vendored library")) );
     ( "vendors a source archive URL with a pinned checksum",
       fun () ->
-        with_temp_dir "oasis-vendor-url-parent" (fun parent ->
+        with_temp_dir "wadi-vendor-url-parent" (fun parent ->
             let source = Filename.concat parent "dep-src" in
             Unix.mkdir source 0o755;
             write_member_manifest source
@@ -229,7 +229,7 @@ modules = ["dep"]
             assert_int_equal 0 archive.status
               "tar should create a vendored source archive";
             let checksum = sha256 archive_path in
-            with_temp_dir "oasis-vendor-url-workspace" (fun workspace ->
+            with_temp_dir "wadi-vendor-url-workspace" (fun workspace ->
                 write_manifest workspace
                   {|
 workspace = "demo"
@@ -243,7 +243,7 @@ deps = ["dep"]
                 write_source workspace "app/main.ml"
                   {|let () = print_endline Dep.message|};
                 let vendor =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [
                       "vendor";
                       "--url";
@@ -256,14 +256,14 @@ deps = ["dep"]
                 in
                 assert_int_equal 0 vendor.status
                   "vendor should fetch a pinned source archive";
-                let run = run_oasis ~cwd:workspace [ "run"; "demo" ] in
+                let run = run_wadi ~cwd:workspace [ "run"; "demo" ] in
                 assert_int_equal 0 run.status
                   "archive-vendored packages should participate in normal builds";
                 assert_string_contains ~needle:"url-vendored\n" run.output
                   "the root workspace should resolve the archive-vendored library")) );
     ( "rejects git vendoring when the pinned checksum does not match",
       fun () ->
-        with_temp_dir "oasis-vendor-git-mismatch-src" (fun source ->
+        with_temp_dir "wadi-vendor-git-mismatch-src" (fun source ->
             write_member_manifest source
               {|
 [library.dep]
@@ -272,14 +272,14 @@ modules = ["dep"]
 |};
             write_source source "lib/dep.ml" {|let message = "bad"|};
             ignore (init_git_repo source);
-            with_temp_dir "oasis-vendor-git-mismatch-workspace" (fun workspace ->
+            with_temp_dir "wadi-vendor-git-mismatch-workspace" (fun workspace ->
                 write_manifest workspace
                   {|
 workspace = "demo"
 version = 1
 |};
                 let vendor =
-                  run_oasis ~cwd:workspace
+                  run_wadi ~cwd:workspace
                     [
                       "vendor";
                       "--git";

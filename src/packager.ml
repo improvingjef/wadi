@@ -116,7 +116,7 @@ let render_formula (metadata : Release_metadata.t) ~source_sha256 =
       "  test do";
       (Printf.sprintf "    output = shell_output(\"#{bin}/%s docs\")"
          metadata.package_name);
-      "    assert_match \"Oasis CLI\", output";
+      "    assert_match \"Wadi CLI\", output";
       "  end";
       "end";
       "";
@@ -183,7 +183,7 @@ let resolve_source_archive ~root_dir ~source_archive_mode
       build_source_archive ~root_dir ~output_dir:dir ~source_archive_mode
         metadata
   | None ->
-      let temp_dir = create_temp_dir "oasis-release-manifests" in
+      let temp_dir = create_temp_dir "wadi-release-manifests" in
       Fun.protect
         ~finally:(fun () -> Fs.remove_tree temp_dir)
         (fun () ->
@@ -194,7 +194,7 @@ let resolve_source_archive ~root_dir ~source_archive_mode
           | Ok archive_path ->
               let retained =
                 Filename.concat root_dir
-                  (Filename.concat "_oasis"
+                  (Filename.concat "_wadi"
                      (Filename.concat "tmp"
                         (Release_metadata.source_archive_name metadata)))
               in

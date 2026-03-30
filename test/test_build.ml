@@ -45,7 +45,7 @@ let cases =
     ( "builds and runs the hello fixture",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status "hello fixture should build cleanly";
             assert_string_contains ~needle:"Built library greeting" build.output
               "library build output should be reported";
@@ -59,7 +59,7 @@ let cases =
     ( "links transitive library dependencies",
       (fun () ->
         with_fixture "transitive" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "transitive fixture should build cleanly";
             let executable = executable_path workspace "demo" in
@@ -71,7 +71,7 @@ let cases =
               "transitive libraries should be linked in executable output")) );
     ( "builds a multi-package workspace with shared dependency analysis",
       (fun () ->
-        with_temp_dir "oasis-multi-package" (fun workspace ->
+        with_temp_dir "wadi-multi-package" (fun workspace ->
             write_manifest workspace
               {|
 workspace = "demo"
@@ -82,14 +82,14 @@ members = ["packages/core", "packages/app"]
 dir = "shared"
 modules = ["shared"]
 |};
-            write_workspace_file workspace "packages/core/oasis.toml"
+            write_workspace_file workspace "packages/core/wadi.toml"
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
 deps = ["shared"]
 |};
-            write_workspace_file workspace "packages/app/oasis.toml"
+            write_workspace_file workspace "packages/app/wadi.toml"
               {|
 [executable.demo]
 dir = "app"
@@ -101,7 +101,7 @@ deps = ["core"]
               {|let message () = Shared.prefix ^ "-package"|};
             write_source workspace "packages/app/app/main.ml"
               {|let () = print_endline (Core.message ())|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "multi-package workspaces should build from the root manifest";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -111,7 +111,7 @@ deps = ["core"]
               "cross-member dependency analysis should produce a working executable")) );
     ( "uses package-local member actions, preprocessors, and ppx without leaking root tools",
       (fun () ->
-        with_temp_dir "oasis-member-local-tools" (fun workspace ->
+        with_temp_dir "wadi-member-local-tools" (fun workspace ->
             write_manifest workspace
               {|
 workspace = "demo"
@@ -128,7 +128,7 @@ argv = ["./root-tools/expand.sh"]
 [ppx.rewrite]
 argv = ["./root-tools/rewrite.exe"]
 |};
-            write_workspace_file workspace "packages/core/oasis.toml"
+            write_workspace_file workspace "packages/core/wadi.toml"
               {|
 [action.generate_version]
 argv = ["./scripts/generate.sh"]
@@ -152,7 +152,7 @@ actions = ["generate_version"]
 preprocess = ["expand"]
 ppx = ["rewrite"]
 |};
-            write_workspace_file workspace "packages/app/oasis.toml"
+            write_workspace_file workspace "packages/app/wadi.toml"
               {|
 [executable.demo]
 dir = "app"
@@ -181,7 +181,7 @@ deps = ["core"]
               {|let message = "@@PREFIX@@" ^ ":" ^ Version.value ^ ":" ^ "ppx-marker"|};
             write_source workspace "packages/app/app/main.ml"
               {|let () = print_endline Core.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "member-local tools should build successfully without centralizing them in the root manifest";
             assert_string_contains ~needle:"Built library core (packages/core)"
@@ -198,7 +198,7 @@ deps = ["core"]
     ( "builds a requested library without unrelated executables",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let build = run_oasis ~cwd:workspace [ "build"; "greeting" ] in
+            let build = run_wadi ~cwd:workspace [ "build"; "greeting" ] in
             assert_int_equal 0 build.status
               "selective library builds should succeed";
             assert_file_exists (library_archive_path workspace "greeting");
@@ -208,21 +208,21 @@ deps = ["core"]
     ;
     ( "reports missing source files",
       (fun () ->
-        with_temp_dir "oasis-missing" (fun workspace ->
+        with_temp_dir "wadi-missing" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
 |};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "missing source files should fail the build";
             assert_string_contains ~needle:"missing source file" build.output
               "missing source files should produce a direct error")) );
     ( "builds libraries with interface-only modules",
       (fun () ->
-        with_temp_dir "oasis-interface-only" (fun workspace ->
+        with_temp_dir "wadi-interface-only" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -236,7 +236,7 @@ deps = ["core"]
 |};
             write_source workspace "lib/api.mli" {|val greeting : string|};
             write_source workspace "app/main.ml" {|let () = print_endline "ok"|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "interface-only library modules should build cleanly";
             let out_dir = Layout.library_out_dir workspace "core" in
@@ -255,7 +255,7 @@ deps = ["core"]
               "the executable linked against an interface-only library should run")) );
     ( "prunes stale object files when a module becomes interface-only",
       (fun () ->
-        with_temp_dir "oasis-interface-prune" (fun workspace ->
+        with_temp_dir "wadi-interface-prune" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -263,14 +263,14 @@ dir = "lib"
 modules = ["api"]
 |};
             write_source workspace "lib/api.ml" {|let greeting = "hello"|};
-            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 first_build.status
               "the initial implementation-backed build should succeed";
             let out_dir = Layout.library_out_dir workspace "core" in
             assert_file_exists (Filename.concat out_dir "api.cmx");
             Fs.remove_tree (Filename.concat workspace "lib/api.ml");
             write_source workspace "lib/api.mli" {|val greeting : string|};
-            let second_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 second_build.status
               "rebuilding after dropping the implementation should still succeed";
             assert_file_exists (Filename.concat out_dir "api.cmi");
@@ -282,7 +282,7 @@ modules = ["api"]
               "stale native archives should be removed when a module loses its implementation")) );
     ( "rejects interface-only main modules for executables",
       (fun () ->
-        with_temp_dir "oasis-interface-only-main" (fun workspace ->
+        with_temp_dir "wadi-interface-only-main" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -290,7 +290,7 @@ dir = "app"
 main = "main"
 |};
             write_source workspace "app/main.mli" {|val main : unit -> unit|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "executables should reject interface-only main modules";
             assert_string_contains
@@ -299,7 +299,7 @@ main = "main"
               "the error should explain that runnable entrypoints need a .ml implementation")) );
     ( "infers library module order from source dependencies",
       (fun () ->
-        with_temp_dir "oasis-module-order" (fun workspace ->
+        with_temp_dir "wadi-module-order" (fun workspace ->
             write_manifest workspace
               {|
 [library.demo]
@@ -325,7 +325,7 @@ let value = "ordered"
               {|let render (value : Provider.t) = value|};
             write_source workspace "app/main.ml"
               {|let () = print_endline (Consumer.render Provider.value)|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "dependency-driven module sorting should allow declarative manifests";
             let run = run_binary (executable_path workspace "app") [] in
@@ -335,7 +335,7 @@ let value = "ordered"
               "inferred module order should produce a working executable")) );
     ( "builds wrapped libraries with a generated namespace module",
       (fun () ->
-        with_temp_dir "oasis-wrapped-library" (fun workspace ->
+        with_temp_dir "wadi-wrapped-library" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -351,7 +351,7 @@ deps = ["core"]
             write_source workspace "lib/greeting.ml" {|let message = "wrapped"|};
             write_source workspace "app/main.ml"
               {|let () = print_endline Core.Greeting.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "wrapped libraries should build successfully";
             assert_file_exists
@@ -363,7 +363,7 @@ deps = ["core"]
               "wrapped libraries should expose child modules through the namespace wrapper")) );
     ( "builds wrapped libraries with a checked-in wrapper module and removes stale generated wrappers",
       (fun () ->
-        with_temp_dir "oasis-wrapped-custom-wrapper" (fun workspace ->
+        with_temp_dir "wadi-wrapped-custom-wrapper" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -379,7 +379,7 @@ deps = ["core"]
             write_source workspace "lib/greeting.ml" {|let message = "wrapped"|};
             write_source workspace "app/main.ml"
               {|let () = print_endline Core.Greeting.message|};
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "wrapped libraries should build before switching to a checked-in wrapper";
             let generated_wrapper =
@@ -394,7 +394,7 @@ let message = Greeting.message ^ " via wrapper"
 |};
             write_source workspace "app/main.ml"
               {|let () = print_endline Core.message|};
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "wrapped libraries should accept a checked-in wrapper module";
             assert_true (not (Fs.exists generated_wrapper))
@@ -406,7 +406,7 @@ let message = Greeting.message ^ " via wrapper"
               "checked-in wrapper modules should define the wrapped library surface")) );
     ( "builds wrapped libraries with a checked-in wrapper interface",
       (fun () ->
-        with_temp_dir "oasis-wrapped-wrapper-interface" (fun workspace ->
+        with_temp_dir "wadi-wrapped-wrapper-interface" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -428,7 +428,7 @@ end
             write_source workspace "lib/greeting.ml" {|let message = "interface"|};
             write_source workspace "app/main.ml"
               {|let () = print_endline Core.Greeting.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "wrapped libraries should support a checked-in wrapper interface";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -438,7 +438,7 @@ end
               "checked-in wrapper interfaces should constrain the generated wrapper implementation")) );
     ( "rejects wrapped libraries that reuse the reserved wrapper stem",
       (fun () ->
-        with_temp_dir "oasis-wrapped-conflict" (fun workspace ->
+        with_temp_dir "wadi-wrapped-conflict" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -447,7 +447,7 @@ dir = "lib"
 modules = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let value = "conflict"|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "wrapped libraries should reject module lists that collide with the generated wrapper";
             assert_string_contains
@@ -456,7 +456,7 @@ modules = ["core"]
               "wrapped-library collisions should explain the reserved stem")) );
     ( "prunes stale compiled outputs when a target's module list shrinks",
       (fun () ->
-        with_temp_dir "oasis-prune-stale-modules" (fun workspace ->
+        with_temp_dir "wadi-prune-stale-modules" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -465,7 +465,7 @@ modules = ["core", "stale"]
 |};
             write_source workspace "lib/core.ml" {|let value = "core"|};
             write_source workspace "lib/stale.ml" {|let value = "stale"|};
-            let first_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 first_build.status
               "the initial build should succeed before stale-output pruning is exercised";
             let out_dir = Layout.library_out_dir workspace "core" in
@@ -481,7 +481,7 @@ modules = ["core", "stale"]
 dir = "lib"
 modules = ["core"]
 |};
-            let second_build = run_oasis ~cwd:workspace [ "build"; "core" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build"; "core" ] in
             assert_int_equal 0 second_build.status
               "rebuilding after the module list shrinks should still succeed";
             List.iter
@@ -494,10 +494,10 @@ modules = ["core"]
     ( "reuses artifacts when inputs are unchanged",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "initial build should succeed before up-to-date checks";
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "rebuilding unchanged sources should still succeed";
             assert_string_contains ~needle:"Up to date library greeting"
@@ -515,12 +515,12 @@ modules = ["core"]
     ( "rebuilds changed targets and downstream dependents",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "initial build should succeed before incremental invalidation";
             write_source workspace "lib/greeting.ml"
               {|let message name = "Hello again, " ^ name ^ "!"|};
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "rebuild after a source edit should succeed";
             assert_string_contains ~needle:"Built library greeting"
@@ -536,7 +536,7 @@ modules = ["core"]
               "rebuilt executable should reflect the updated library output")) );
     ( "builds against external packages and propagates them through dependencies",
       (fun () ->
-        with_temp_dir "oasis-packages" (fun workspace ->
+        with_temp_dir "wadi-packages" (fun workspace ->
             write_manifest workspace
               {|
 [library.patterns]
@@ -559,7 +559,7 @@ let contains_digit text =
 let () =
   print_endline (string_of_bool (Patterns.contains_digit "abc123"))
 |};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "external package builds should succeed";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -569,7 +569,7 @@ let () =
               "package-backed executable should link transitive external packages")) );
     ( "reports unknown external packages directly",
       (fun () ->
-        with_temp_dir "oasis-package-missing" (fun workspace ->
+        with_temp_dir "wadi-package-missing" (fun workspace ->
             write_manifest workspace
               {|
 [library.patterns]
@@ -578,7 +578,7 @@ modules = ["patterns"]
 packages = ["missing_pkg_demo"]
 |};
             write_source workspace "lib/patterns.ml" {|let value = 1|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "unknown packages should fail the build";
             assert_string_contains
@@ -587,7 +587,7 @@ packages = ["missing_pkg_demo"]
               "unknown packages should produce a direct resolver error")) );
     ( "orders modules from interface dependencies",
       (fun () ->
-        with_temp_dir "oasis-interface-order" (fun workspace ->
+        with_temp_dir "wadi-interface-order" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
@@ -608,7 +608,7 @@ let value = "interfaces count"
 |};
             write_source workspace "app/main.ml"
               {|let () = print_endline Alpha.value|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "interface dependencies should participate in inferred module order";
             let run = run_binary (executable_path workspace "app") [] in
@@ -618,7 +618,7 @@ let value = "interfaces count"
               "interface-driven ordering should produce the expected output")) );
     ( "reports module dependency cycles with target context",
       (fun () ->
-        with_temp_dir "oasis-module-cycle" (fun workspace ->
+        with_temp_dir "wadi-module-cycle" (fun workspace ->
             write_manifest workspace
               {|
 [library.cycle]
@@ -627,7 +627,7 @@ modules = ["alpha", "beta"]
 |};
             write_source workspace "lib/alpha.ml" {|let value = Beta.value|};
             write_source workspace "lib/beta.ml" {|let value = Alpha.value|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "cyclic modules should fail before compilation";
             assert_string_contains
@@ -651,7 +651,7 @@ modules = ["alpha", "beta"]
             let build =
               with_env "OCAMLOPT" ocamlopt_wrapper (fun () ->
                   with_env "OCAMLDEP" ocamldep_wrapper (fun () ->
-                      run_oasis ~cwd:workspace [ "build" ]))
+                      run_wadi ~cwd:workspace [ "build" ]))
             in
             assert_int_equal 0 build.status
               "build should succeed when compiler commands are overridden";
@@ -671,7 +671,7 @@ modules = ["alpha", "beta"]
             let build =
               with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
                   with_env "OCAMLC" ocamlc_wrapper (fun () ->
-                      run_oasis ~cwd:workspace [ "build" ]))
+                      run_wadi ~cwd:workspace [ "build" ]))
             in
             assert_int_equal 0 build.status
               "build should fall back to bytecode when ocamlopt is unavailable";
@@ -689,7 +689,7 @@ modules = ["alpha", "beta"]
         with_fixture "hello" (fun workspace ->
             let build =
               with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
-                  run_oasis ~cwd:workspace [ "build"; "--backend"; "native" ])
+                  run_wadi ~cwd:workspace [ "build"; "--backend"; "native" ])
             in
             assert_true (build.status <> 0)
               "explicit native builds should fail when ocamlopt is unavailable";
@@ -699,7 +699,7 @@ modules = ["alpha", "beta"]
               "backend selection failures should explain the missing compiler")) );
     ( "resolves unix from a stdlib subdirectory",
       (fun () ->
-        with_temp_dir "oasis-unix-subdir" (fun workspace ->
+        with_temp_dir "wadi-unix-subdir" (fun workspace ->
             let stdlib_dir = Filename.concat workspace "lib/ocaml" in
             let unix_dir = Filename.concat stdlib_dir "unix" in
             Fs.ensure_dir unix_dir;
@@ -713,7 +713,7 @@ modules = ["alpha", "beta"]
             | None -> fail "expected unix library resolution to succeed")) );
     ( "resolves unix from the stdlib root when needed",
       (fun () ->
-        with_temp_dir "oasis-unix-root" (fun workspace ->
+        with_temp_dir "wadi-unix-root" (fun workspace ->
             let stdlib_dir = Filename.concat workspace "lib/ocaml" in
             Fs.ensure_dir stdlib_dir;
             Fs.write_file (Filename.concat stdlib_dir "unix.cmi") "";
@@ -726,7 +726,7 @@ modules = ["alpha", "beta"]
             | None -> fail "expected unix library resolution to succeed")) );
     ( "runs sandboxed actions to generate modules without leaking undeclared files",
       (fun () ->
-        with_temp_dir "oasis-action-generate" (fun workspace ->
+        with_temp_dir "wadi-action-generate" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -750,7 +750,7 @@ modules = ["version"]
             write_source workspace "scripts/template.txt" "from-template\n";
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "sandboxed actions should run before source discovery";
             assert_true (not (Fs.exists (Filename.concat workspace "app/version.ml")))
@@ -767,7 +767,7 @@ modules = ["version"]
               "generated modules should compile from declared action outputs")) );
     ( "runs workspace sandboxes from cloned materializations without leaking writes",
       (fun () ->
-        with_temp_dir "oasis-action-workspace-sandbox" (fun workspace ->
+        with_temp_dir "wadi-action-workspace-sandbox" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -790,7 +790,7 @@ modules = ["snapshot"]
             write_source workspace "shared/message.txt" "workspace-sandbox";
             write_source workspace "app/main.ml"
               {|let () = print_endline Snapshot.value|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "workspace sandboxes should still build successfully";
             assert_true
@@ -803,7 +803,7 @@ modules = ["snapshot"]
               "workspace sandboxes should still expose declared workspace inputs")) );
     ( "regenerates missing action outputs without rebuilding unchanged targets",
       (fun () ->
-        with_temp_dir "oasis-action-regenerate" (fun workspace ->
+        with_temp_dir "wadi-action-regenerate" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -824,7 +824,7 @@ modules = ["version"]
                  "#!/bin/sh\nprintf 'let message = \"generated\"\\n' > version.ml\n");
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let first_build = run_oasis ~cwd:workspace [ "build" ] in
+            let first_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 first_build.status
               "the initial action-backed build should succeed";
             let generated_version =
@@ -832,7 +832,7 @@ modules = ["version"]
                 "generated/version.ml"
             in
             Fs.remove_tree generated_version;
-            let second_build = run_oasis ~cwd:workspace [ "build" ] in
+            let second_build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 second_build.status
               "rebuilding after deleting a generated source should still succeed";
             assert_file_exists generated_version;
@@ -853,7 +853,7 @@ modules = ["version"]
               "action-only repair should preserve the executable behavior")) );
     ( "rejects generated source outputs that collide with checked-in files",
       (fun () ->
-        with_temp_dir "oasis-action-collision" (fun workspace ->
+        with_temp_dir "wadi-action-collision" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -875,7 +875,7 @@ modules = ["version"]
               {|let message = "checked-in"|};
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "colliding generated source outputs should fail before the build runs";
             assert_string_contains ~needle:"collides with checked-in source"
@@ -885,7 +885,7 @@ modules = ["version"]
               "the collision report should point at the checked-in source path")) );
     ( "builds from explicit checked-in generated source snapshots without auto-promoting them",
       (fun () ->
-        with_temp_dir "oasis-action-checked-in-source" (fun workspace ->
+        with_temp_dir "wadi-action-checked-in-source" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -908,7 +908,7 @@ modules = ["version"]
               {|let message = "checked-in"|};
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "explicit checked-in generated sources should bypass the normal collision guard";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -921,7 +921,7 @@ modules = ["version"]
               "build should not silently rewrite checked-in source snapshots")) );
     ( "requires actions to regenerate checked-in source snapshots instead of reusing copied workspace files",
       (fun () ->
-        with_temp_dir "oasis-action-checked-in-source-missing" (fun workspace ->
+        with_temp_dir "wadi-action-checked-in-source-missing" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -944,7 +944,7 @@ modules = ["version"]
               {|let message = "checked-in"|};
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_true (build.status <> 0)
               "actions should not satisfy declared outputs from copied checked-in files";
             assert_string_contains
@@ -953,7 +953,7 @@ modules = ["version"]
               "the builder should fail if the action never rewrites its checked-in generated source")) );
     ( "writes action stdout directly into declared generated outputs",
       (fun () ->
-        with_temp_dir "oasis-action-stdout" (fun workspace ->
+        with_temp_dir "wadi-action-stdout" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -975,7 +975,7 @@ modules = ["version"]
                  "#!/bin/sh\nprintf 'let message = \"stdout\"\\n'\n");
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "actions should support redirecting stdout into declared outputs without a shell wrapper";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -985,7 +985,7 @@ modules = ["version"]
               "action stdout redirection should materialize compiler-readable generated modules")) );
     ( "runs multi-step actions without shell fallbacks",
       (fun () ->
-        with_temp_dir "oasis-action-steps" (fun workspace ->
+        with_temp_dir "wadi-action-steps" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -1011,7 +1011,7 @@ modules = ["version"]
             write_source workspace "fixtures/version.txt" "steps\n";
             write_source workspace "app/main.ml"
               {|let () = print_endline Version.message|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "multi-step actions should build successfully";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -1021,7 +1021,7 @@ modules = ["version"]
               "later action steps should be able to consume files produced by earlier steps in the sandbox")) );
     ( "feeds preprocessors from declared stdin_path inputs",
       (fun () ->
-        with_temp_dir "oasis-preprocess-stdin-path" (fun workspace ->
+        with_temp_dir "wadi-preprocess-stdin-path" (fun workspace ->
             write_manifest workspace
               {|
 [preprocess.seed]
@@ -1039,7 +1039,7 @@ preprocess = ["seed"]
             write_source workspace "fixtures/main_template.ml"
               {|let () = print_endline "seeded"|};
             write_source workspace "app/main.ml" {|let () = failwith "ignored"|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "preprocessors should support stdin_path-backed transforms without shell indirection";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -1049,7 +1049,7 @@ preprocess = ["seed"]
               "stdin_path preprocessors should read from the declared file input instead of the original source contents")) );
     ( "applies named preprocessors in pipeline order",
       (fun () ->
-        with_temp_dir "oasis-preprocess" (fun workspace ->
+        with_temp_dir "wadi-preprocess" (fun workspace ->
             write_manifest workspace
               {|
 [preprocess.first]
@@ -1071,7 +1071,7 @@ preprocess = ["first", "second"]
                  "#!/bin/sh\nsed 's/stage_one/pipeline/'\n");
             write_source workspace "app/main.ml"
               {|let () = print_endline "__TOKEN__"|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "preprocessed builds should compile successfully";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -1081,7 +1081,7 @@ preprocess = ["first", "second"]
               "preprocessors should be applied in manifest order")) );
     ( "runs configured ppx rewriters during compilation",
       (fun () ->
-        with_temp_dir "oasis-ppx" (fun workspace ->
+        with_temp_dir "wadi-ppx" (fun workspace ->
             let _ppx_binary =
               Test_transforms.compile_string_marker_ppx workspace
                 ~relative_path:"ppx/rewrite.ml"
@@ -1100,7 +1100,7 @@ ppx = ["rewrite"]
 |};
             write_source workspace "app/main.ml"
               {|let () = print_endline "__PPX__"|};
-            let build = run_oasis ~cwd:workspace [ "build" ] in
+            let build = run_wadi ~cwd:workspace [ "build" ] in
             assert_int_equal 0 build.status
               "ppx-backed builds should compile successfully";
             let run = run_binary (executable_path workspace "demo") [] in
@@ -1110,7 +1110,7 @@ ppx = ["rewrite"]
               "configured ppx rewriters should affect compiled output")) );
     ( "resolves default profiles and target overrides into separate build roots",
       (fun () ->
-        with_temp_dir "oasis-profiles" (fun workspace ->
+        with_temp_dir "wadi-profiles" (fun workspace ->
             write_manifest workspace
               {|
 [defaults]
@@ -1143,7 +1143,7 @@ main = "main"
             in
             let release_build =
               with_env "OCAMLOPT" ocamlopt_wrapper (fun () ->
-                  run_oasis ~cwd:workspace [ "build" ])
+                  run_wadi ~cwd:workspace [ "build" ])
             in
             assert_int_equal 0 release_build.status
               "the default profile should build successfully";
@@ -1160,7 +1160,7 @@ main = "main"
             Fs.write_file log_path "";
             let dev_build =
               with_env "OCAMLOPT" ocamlopt_wrapper (fun () ->
-                  run_oasis ~cwd:workspace [ "build"; "--profile"; "dev" ])
+                  run_wadi ~cwd:workspace [ "build"; "--profile"; "dev" ])
             in
             assert_int_equal 0 dev_build.status
               "explicit alternate profiles should build successfully";

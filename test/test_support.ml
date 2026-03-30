@@ -93,15 +93,15 @@ let fixture_root name =
   Filename.concat (Filename.concat (Sys.getcwd ()) "test/fixtures") name
 
 let with_fixture name f =
-  with_temp_dir ("oasis-" ^ name) (fun path ->
+  with_temp_dir ("wadi-" ^ name) (fun path ->
       Fs.copy_tree ~src:(fixture_root name) ~dst:path;
       f path)
 
-let oasis_bin () =
-  try Sys.getenv "OASIS_BIN" with
-  | Not_found -> fail "OASIS_BIN is not set"
+let wadi_bin () =
+  try Sys.getenv "WADI_BIN" with
+  | Not_found -> fail "WADI_BIN is not set"
 
-let run_oasis ~cwd args = Process.run_capture ~cwd (oasis_bin ()) args
+let run_wadi ~cwd args = Process.run_capture ~cwd (wadi_bin ()) args
 
 let run_binary path args = Process.run_capture path args
 

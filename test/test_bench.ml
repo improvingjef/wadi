@@ -7,7 +7,7 @@ let cases =
   [
     ( "benchmarks executable targets and prints a timing summary",
       (fun () ->
-        with_temp_dir "oasis-bench-text" (fun workspace ->
+        with_temp_dir "wadi-bench-text" (fun workspace ->
             write_manifest workspace
               {|
 [executable.alpha]
@@ -21,7 +21,7 @@ main = "beta"
             write_source workspace "app/alpha.ml" {|let () = ()|};
             write_source workspace "app/beta.ml" {|let () = ()|};
             let bench =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "bench"; "--warmup"; "0"; "--iterations"; "2" ]
             in
             assert_int_equal 0 bench.status
@@ -36,7 +36,7 @@ main = "beta"
       (fun () ->
         with_fixture "hello" (fun workspace ->
             let bench =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "bench"; "--json"; "--warmup"; "0"; "--iterations"; "2"; "hello" ]
             in
             assert_int_equal 0 bench.status
@@ -49,7 +49,7 @@ main = "beta"
               "bench JSON should record the measured iteration count")) );
     ( "benchmarks declared [bench.*] entries with custom argv and metadata by default",
       (fun () ->
-        with_temp_dir "oasis-bench-declared" (fun workspace ->
+        with_temp_dir "wadi-bench-declared" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -70,7 +70,7 @@ let () =
     prerr_endline "missing bench argv";
     exit 2)
 |};
-            let bench = run_oasis ~cwd:workspace [ "bench" ] in
+            let bench = run_wadi ~cwd:workspace [ "bench" ] in
             assert_int_equal 0 bench.status
               "bench should prefer declared bench entries when present";
             assert_string_contains ~needle:"Benchmark quick ->" bench.output
@@ -88,7 +88,7 @@ let () =
               "bench output should honor declared iteration counts")) );
     ( "lets command-line warmup and iteration flags override declared bench defaults",
       (fun () ->
-        with_temp_dir "oasis-bench-override" (fun workspace ->
+        with_temp_dir "wadi-bench-override" (fun workspace ->
             write_manifest workspace
               {|
 [executable.demo]
@@ -107,7 +107,7 @@ let () =
   if Array.length Sys.argv <> 2 || Sys.argv.(1) <> "--bench" then exit 2
 |};
             let bench =
-              run_oasis ~cwd:workspace
+              run_wadi ~cwd:workspace
                 [ "bench"; "--warmup"; "1"; "--iterations"; "3"; "quick" ]
             in
             assert_int_equal 0 bench.status
@@ -119,16 +119,16 @@ let () =
     ( "rejects non-executable targets for bench",
       (fun () ->
         with_fixture "hello" (fun workspace ->
-            let bench = run_oasis ~cwd:workspace [ "bench"; "greeting" ] in
+            let bench = run_wadi ~cwd:workspace [ "bench"; "greeting" ] in
             assert_true (bench.status <> 0)
               "bench should reject library targets";
             assert_string_contains
-              ~needle:"oasis bench only supports executables"
+              ~needle:"wadi bench only supports executables"
               bench.output
               "bench should explain that only executables can be benchmarked")) );
     ( "reports failing benchmark executables directly",
       (fun () ->
-        with_temp_dir "oasis-bench-failure" (fun workspace ->
+        with_temp_dir "wadi-bench-failure" (fun workspace ->
             write_manifest workspace
               {|
 [executable.crash]
@@ -137,7 +137,7 @@ main = "main"
 |};
             write_source workspace "app/main.ml"
               {|let () = prerr_endline "boom"; exit 3|};
-            let bench = run_oasis ~cwd:workspace [ "bench"; "crash" ] in
+            let bench = run_wadi ~cwd:workspace [ "bench"; "crash" ] in
             assert_true (bench.status <> 0)
               "bench should fail when a benchmark executable exits non-zero";
             assert_string_contains ~needle:"benchmark command failed"

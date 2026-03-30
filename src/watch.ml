@@ -31,9 +31,9 @@ type compiled_options = {
   root_files : root_file list;
 }
 
-let default_ignore_globs = [ ".git/**"; "_oasis/**"; "_bootstrap/**" ]
+let default_ignore_globs = [ ".git/**"; "_wadi/**"; "_bootstrap/**" ]
 
-let ignore_file_name = ".oasiswatchignore"
+let ignore_file_name = ".wadiwatchignore"
 
 let manifest_relative_path = Manifest.default_filename
 
@@ -447,7 +447,7 @@ let run options =
   let* state = initial_state options in
   print_endline
     (Printf.sprintf
-       "Watching %s (poll=%dms debounce=%dms) for `oasis %s`"
+       "Watching %s (poll=%dms debounce=%dms) for `wadi %s`"
        options.workspace_root options.poll_ms options.debounce_ms
        (command_line options.command_name options.command_args));
   print_endline

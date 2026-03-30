@@ -178,17 +178,17 @@ let with_temp_dir prefix f =
 let generated_release_artifact_paths =
   [
     "docs/cli.md";
-    "completions/oasis.bash";
-    "completions/_oasis";
-    "completions/oasis.fish";
-    "package/share/doc/oasis/cli.md";
-    "package/share/bash-completion/completions/oasis";
-    "package/share/zsh/site-functions/_oasis";
-    "package/share/fish/vendor_completions.d/oasis.fish";
+    "completions/wadi.bash";
+    "completions/_wadi";
+    "completions/wadi.fish";
+    "package/share/doc/wadi/cli.md";
+    "package/share/bash-completion/completions/wadi";
+    "package/share/zsh/site-functions/_wadi";
+    "package/share/fish/vendor_completions.d/wadi.fish";
   ]
 
 let generated_release_metadata_paths =
-  [ "oasis.opam"; "Formula/oasis.rb"; "dist/release-assets.json" ]
+  [ "wadi.opam"; "Formula/wadi.rb"; "dist/release-assets.json" ]
 
 let has_any_generated_paths workspace_root paths =
   List.exists (fun relative_path -> Fs.exists (Filename.concat workspace_root relative_path)) paths
@@ -237,7 +237,7 @@ let generated_assets_check workspace_root =
   if not release_artifacts_applicable && not release_metadata_applicable then None
   else
     Some
-      (with_temp_dir "oasis-doctor-generated-assets" (fun temp_root ->
+      (with_temp_dir "wadi-doctor-generated-assets" (fun temp_root ->
            let details = ref [] in
            let warned = ref false in
            let note_warning detail =
@@ -252,7 +252,7 @@ let generated_assets_check workspace_root =
                 let output_dir = Filename.concat temp_root "release-artifacts" in
                 let regenerated =
                   Process.run_capture ~cwd:workspace_root
-                    ~env:[ ("OASIS_BIN", Fs.resolve_executable Sys.executable_name) ]
+                    ~env:[ ("WADI_BIN", Fs.resolve_executable Sys.executable_name) ]
                     "/bin/sh"
                     [ release_artifacts_script; "--output-dir"; output_dir ]
                 in
@@ -282,7 +282,7 @@ let generated_assets_check workspace_root =
                 in
                 let regenerated =
                   Process.run_capture ~cwd:workspace_root
-                    ~env:[ ("OASIS_BIN", Fs.resolve_executable Sys.executable_name) ]
+                    ~env:[ ("WADI_BIN", Fs.resolve_executable Sys.executable_name) ]
                     "/bin/sh"
                     [
                       packaging_manifests_script;

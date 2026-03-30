@@ -7,7 +7,7 @@ let cases =
   [
     ( "reports transitive external packages for selected targets",
       (fun () ->
-        with_temp_dir "oasis-deps-transitive" (fun workspace ->
+        with_temp_dir "wadi-deps-transitive" (fun workspace ->
             write_manifest workspace
               {|
 workspace = "deps-demo"
@@ -25,7 +25,7 @@ deps = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let pid = Unix.getpid ()|};
             write_source workspace "app/main.ml" {|let () = print_int Core.pid|};
-            let deps = run_oasis ~cwd:workspace [ "deps"; "demo" ] in
+            let deps = run_wadi ~cwd:workspace [ "deps"; "demo" ] in
             assert_int_equal 0 deps.status
               "deps should resolve transitive external packages";
             assert_string_contains ~needle:"Workspace: deps-demo\n" deps.output
@@ -41,13 +41,13 @@ deps = ["core"]
               "deps should show resolved ocamlfind paths")) );
     ( "reports missing external packages with target context",
       (fun () ->
-        with_temp_dir "oasis-deps-missing" (fun workspace ->
+        with_temp_dir "wadi-deps-missing" (fun workspace ->
             write_manifest workspace
               {|
 [library.core]
 dir = "lib"
 modules = ["core"]
-packages = ["definitely_missing_oasis_pkg"]
+packages = ["definitely_missing_wadi_pkg"]
 
 [executable.demo]
 dir = "app"
@@ -56,11 +56,11 @@ deps = ["core"]
 |};
             write_source workspace "lib/core.ml" {|let value = "core"|};
             write_source workspace "app/main.ml" {|let () = print_endline Core.value|};
-            let deps = run_oasis ~cwd:workspace [ "deps"; "demo" ] in
+            let deps = run_wadi ~cwd:workspace [ "deps"; "demo" ] in
             assert_true (deps.status <> 0)
               "deps should fail when a required package is unavailable";
             assert_string_contains
-              ~needle:"executable 'demo' requires package 'definitely_missing_oasis_pkg' is not available via ocamlfind"
+              ~needle:"executable 'demo' requires package 'definitely_missing_wadi_pkg' is not available via ocamlfind"
               deps.output
               "deps should name the failing target and package")) );
   ]

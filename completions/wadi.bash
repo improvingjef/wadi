@@ -1,7 +1,7 @@
-_oasis_query() {
-  oasis completion --query --describe --current "$1" -- "${@:2}" 2>/dev/null
+_wadi_query() {
+  wadi completion --query --describe --current "$1" -- "${@:2}" 2>/dev/null
 }
-_oasis_show_descriptions() {
+_wadi_show_descriptions() {
   local line
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
@@ -9,15 +9,15 @@ _oasis_show_descriptions() {
     printf '%s\n' "$line" >&2
   done
 }
-_oasis() {
+_wadi() {
   local cur response first_line body record protocol version kind value description
   local -a previous values described
   cur="${COMP_WORDS[COMP_CWORD]}"
   previous=("${COMP_WORDS[@]:1:$((COMP_CWORD-1))}")
-  response="$(_oasis_query "$cur" "${previous[@]}")"
+  response="$(_wadi_query "$cur" "${previous[@]}")"
   first_line="${response%%$'\n'*}"
   IFS=$'\t' read -r protocol version kind <<< "$first_line"
-  [[ "$protocol" == '__oasis_completion' ]] || return
+  [[ "$protocol" == '__wadi_completion' ]] || return
   [[ "$version" == '1' ]] || return
   if [[ "$kind" == directories ]]; then
     compopt -o filenames 2>/dev/null
@@ -44,7 +44,7 @@ _oasis() {
   done <<< "$body"
   compgen -V COMPREPLY -W "$(printf '%s\n' "${values[@]}")" -- "$cur"
   if [[ ${#described[@]} -gt 0 && ${#COMPREPLY[@]} -gt 1 ]]; then
-    _oasis_show_descriptions <<< "$(printf '%s\n' "${described[@]}")"
+    _wadi_show_descriptions <<< "$(printf '%s\n' "${described[@]}")"
   fi
 }
-complete -F _oasis oasis
+complete -F _wadi wadi
