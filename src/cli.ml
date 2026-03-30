@@ -209,6 +209,13 @@ type completion_mode =
 type completion_options = { workspace_dir : string; mode : completion_mode }
 type docs_options = unit
 type toolchain_options = { verbose : bool }
+type format_options = { workspace_dir : string; check : bool }
+
+type lint_options = {
+  workspace_dir : string;
+  profile : string option;
+  backend_request : Toolchain.backend_request;
+}
 
 type migrate_options = {
   workspace_dir : string;
@@ -1317,6 +1324,39 @@ let completion_doc =
     watch_root_files = no_watch_root_files;
   }
 
+let format_doc =
+  {
+    name = "format";
+    summary = "Format OCaml source files in the workspace with ocamlformat.";
+    signature = "wadi format [--workspace DIR] [--check]";
+    examples = [ "wadi format"; "wadi format --check" ];
+    options =
+      [
+        workspace_option;
+        {
+          usage = "--check";
+          flags = [ "--check" ];
+          description =
+            "Check formatting without modifying files. Exit 1 if any file would change.";
+        };
+        help_option;
+      ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
+let lint_doc =
+  {
+    name = "lint";
+    summary = "Check OCaml sources for warnings and style issues.";
+    signature =
+      "wadi lint [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode]";
+    examples = [ "wadi lint"; "wadi lint --profile release" ];
+    options = [ workspace_option; profile_option; backend_option; help_option ];
+    completion_words = [];
+    watch_root_files = no_watch_root_files;
+  }
+
 let toolchain_doc =
   {
     name = "toolchain";
@@ -1411,6 +1451,8 @@ let command_docs =
     sync_generated_doc;
     release_cut_doc;
     update_homebrew_tap_doc;
+    format_doc;
+    lint_doc;
     docs_doc;
     completion_doc;
     toolchain_doc;
@@ -2276,6 +2318,40 @@ let parse_repl_args (args : string list) : (repl_options, string) result =
   in
   if options.json && not options.plan then Error "repl --json requires --plan"
   else Ok options
+
+let parse_format_args (args : string list) : (format_options, string) result =
+  let rec loop (options : format_options) = function
+    | [] -> Ok options
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--check" :: rest -> loop { options with check = true } rest
+    | "--help" :: _ -> Error (command_usage format_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ -> Error "format does not accept positional arguments"
+  in
+  loop { workspace_dir = "."; check = false } args
+
+let parse_lint_args (args : string list) : (lint_options, string) result =
+  let* default_backend_request = default_backend_request () in
+  let rec loop (options : lint_options) = function
+    | [] -> Ok options
+    | "--workspace" :: dir :: rest -> loop { options with workspace_dir = dir } rest
+    | "--workspace" :: [] -> Error "--workspace requires a directory"
+    | "--profile" :: profile :: rest -> loop { options with profile = Some profile } rest
+    | "--profile" :: [] -> Error "--profile requires a name"
+    | "--backend" :: backend :: rest ->
+        let* backend_request = Toolchain.parse_backend_request backend in
+        loop { options with backend_request } rest
+    | "--backend" :: [] -> Error "--backend requires auto, native, or bytecode"
+    | "--help" :: _ -> Error (command_usage lint_doc)
+    | option :: _ when String_util.starts_with ~prefix:"-" option ->
+        Error (Printf.sprintf "unknown option '%s'" option)
+    | _ -> Error "lint does not accept positional arguments"
+  in
+  loop
+    { workspace_dir = "."; profile = None; backend_request = default_backend_request }
+    args
 
 let parse_toolchain_args args =
   match args with
@@ -3484,6 +3560,99 @@ let run_completion (options : completion_options) =
                 candidates;
               Exit_code 0))
 
+let collect_ml_files workspace_dir =
+  let workspace_root = Fs.realpath workspace_dir in
+  let result = ref [] in
+  let rec walk dir =
+    let entries = Sys.readdir dir in
+    Array.iter
+      (fun entry ->
+        let path = Filename.concat dir entry in
+        if
+          entry = "_wadi" || entry = "_bootstrap" || entry = ".git" || entry = "_build"
+          || entry = ".claude" || entry = "dist"
+        then ()
+        else if Sys.is_directory path then walk path
+        else if Filename.check_suffix entry ".ml" || Filename.check_suffix entry ".mli"
+        then result := path :: !result)
+      entries
+  in
+  walk workspace_root;
+  List.sort String.compare !result
+
+let run_format (options : format_options) =
+  let files = collect_ml_files options.workspace_dir in
+  if files = [] then (
+    print_endline "No .ml/.mli files found.";
+    Exit_code 0)
+  else
+    let flag = if options.check then "--check" else "-i" in
+    let args = flag :: files in
+    let result = Process.run_capture "ocamlformat" args in
+    match result.Process.status with
+    | 0 ->
+        if options.check then print_endline "All files formatted correctly.";
+        Exit_code 0
+    | 1 when options.check ->
+        if result.output <> "" then print_string result.output;
+        prerr_endline "Some files need formatting. Run 'wadi format' to fix.";
+        Exit_code 1
+    | n ->
+        if result.output <> "" then print_string result.output;
+        report_error (Printf.sprintf "ocamlformat exited with code %d" n)
+
+let run_lint (options : lint_options) =
+  let workspace_dir = options.workspace_dir in
+  match Manifest.load (Filename.concat workspace_dir Manifest.default_filename) with
+  | Error message -> report_error message
+  | Ok workspace -> (
+      let session = Toolchain.create_session () in
+      let profile =
+        match options.profile with
+        | Some p when String.trim p <> "" -> p
+        | _ -> Manifest.default_profile workspace
+      in
+      match Toolchain.resolve_backend ~session options.backend_request with
+      | Error message -> report_error message
+      | Ok backend -> (
+          let workspace_root = Fs.realpath workspace_dir in
+          let strict_flags =
+            [ "-w"; "+a-4-40-41-42-44-45-48-58-66-67-70"; "-warn-error"; "+a" ]
+          in
+          let files = collect_ml_files workspace_dir in
+          let include_dirs =
+            List.filter_map
+              (function
+                | Manifest.Library lib ->
+                    Some
+                      (Layout.target_out_dir ~profile workspace_root
+                         (Manifest.Library lib))
+                | _ -> None)
+              workspace.Manifest.targets
+          in
+          let include_args = List.concat_map (fun d -> [ "-I"; d ]) include_dirs in
+          let compiler =
+            match backend with
+            | Toolchain.Native -> Toolchain.ocamlopt_cmd ()
+            | Toolchain.Bytecode -> Toolchain.ocamlc_cmd ()
+          in
+          let ml_files = List.filter (fun f -> Filename.check_suffix f ".ml") files in
+          let result =
+            Process.run_capture compiler
+              ([ "-c"; "-o"; "/dev/null" ] @ strict_flags @ include_args @ ml_files)
+          in
+          match result.Process.status with
+          | 0 ->
+              print_endline "No warnings found.";
+              Exit_code 0
+          | 2 ->
+              if result.output <> "" then prerr_string result.output;
+              prerr_endline "Lint found warnings (see above).";
+              Exit_code 1
+          | n ->
+              if result.output <> "" then prerr_string result.output;
+              report_error (Printf.sprintf "compiler exited with code %d" n)))
+
 let run_toolchain (_options : toolchain_options) =
   Toolchain.inspect () |> Toolchain.render_report |> print_endline;
   Exit_code 0
@@ -3617,6 +3786,8 @@ let commands =
         parse = parse_update_homebrew_tap_args;
         run = run_update_homebrew_tap;
       };
+    Command { doc = format_doc; parse = parse_format_args; run = run_format };
+    Command { doc = lint_doc; parse = parse_lint_args; run = run_lint };
     Command { doc = docs_doc; parse = parse_docs_args; run = run_docs };
     Command { doc = completion_doc; parse = parse_completion_args; run = run_completion };
     Command { doc = toolchain_doc; parse = parse_toolchain_args; run = run_toolchain };
