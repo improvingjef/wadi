@@ -158,9 +158,10 @@ let select_source (context : context) module_name =
                (Manifest.target_display_name context.target)
                module_name) )
 
-let prepare_source ~mode ~workspace_root (context : context) source ~interface =
+let prepare_source ~mode ~verbose ~workspace_root (context : context) source ~interface =
   let* prepared =
-    Builder.prepare_source ~mode ~workspace_root ~out_dir:context.out_dir
+    Builder.prepare_source ~mode ~verbose ~workspace_root ~out_dir:context.out_dir
+      ~include_dirs:context.include_dirs
       ~target_env:(context.pipeline.options.env)
       context.pipeline.preprocessors source
   in
@@ -211,7 +212,7 @@ let plan ~workspace_root ~verbose ?(interface = false) ?module_name
     | None -> Ok None
     | Some source ->
         let* prepared_path =
-          prepare_source ~mode:Builder.Plan_only ~workspace_root context source
+          prepare_source ~mode:Builder.Plan_only ~verbose ~workspace_root context source
             ~interface
         in
         Ok (Some prepared_path)
@@ -250,7 +251,7 @@ let apply ~workspace_root ~verbose ?(interface = false) ?output_path
     | Error _ as error -> error
   in
   let* prepared_path =
-    prepare_source ~mode:Builder.Materialize ~workspace_root context
+    prepare_source ~mode:Builder.Materialize ~verbose ~workspace_root context
       selected_source ~interface
   in
   let session = Toolchain.create_session () in

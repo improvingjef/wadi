@@ -184,7 +184,7 @@
 175. [ ] Document the exact `worktree` source-archive inclusion boundary, especially that root-level untracked files stay excluded while additions under tracked directories are captured, so checksum changes remain explainable instead of magical.
 176. [x] Propagate transitive library include paths to downstream targets so an executable depending on library B (which depends on library A) gets `-I` paths for both A and B without declaring A explicitly.
 177. [x] Isolate executable compilation so a main module name that matches a wrapped library name (e.g. `fun_ir.ml` executable vs `fun_ir` library wrapper) does not shadow the library's wrapper module during compilation.
-178. [ ] Add an `[executables]` batch section so projects with many single-module executables sharing a directory and deps can declare them in one block instead of repeating `[executable.x]` per target.
+178. [x] Add an `[executables]` batch section so projects with many single-module executables sharing a directory and deps can declare them in one block instead of repeating `[executable.x]` per target.
 179. [ ] Continue past individual target build failures instead of stopping at the first error so large workspaces surface all broken targets in one pass.
 180. [ ] Add first-class `ocamllex` support so lexer `.mll` files are compiled automatically without requiring manual `[action]` definitions.
 181. [ ] Add first-class `menhir` support (including the two-phase `--infer` protocol) so parser `.mly` files work without shell workarounds in action definitions.

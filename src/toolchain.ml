@@ -91,6 +91,10 @@ let ocamlfind_cmd () = command_override "OCAMLFIND" "ocamlfind"
 
 let ocamlmktop_cmd () = command_override "OCAMLMKTOP" "ocamlmktop"
 
+let ocamllex_cmd () = command_override "OCAMLLEX" "ocamllex"
+
+let menhir_cmd () = command_override "MENHIR" "menhir"
+
 let backend_name = function
   | Native -> "native"
   | Bytecode -> "bytecode"
@@ -404,6 +408,8 @@ let fingerprint_lines ?session resolution =
       "tool ocamlopt " ^ ocamlopt_cmd ();
       "tool ocamldep " ^ ocamldep_cmd ();
       "tool ocamlfind " ^ ocamlfind_cmd ();
+      "tool ocamllex " ^ ocamllex_cmd ();
+      "tool menhir " ^ menhir_cmd ();
     ]
   in
   let stdlib_lines =

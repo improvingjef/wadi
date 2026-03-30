@@ -416,7 +416,8 @@ let library_plan ~session ~workspace_root ~profile workspace index library =
       library
   in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Materialize ~workspace_root ~out_dir
+    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false
+      ~workspace_root ~out_dir ~include_dirs:[out_dir]
       ~target_env:(pipeline.options.env)
       pipeline.preprocessors sources
   in
@@ -474,7 +475,8 @@ let runnable_plan ~session ~workspace_root ~profile workspace index ~kind runnab
   in
   let all_sources = module_sources @ [ main_source ] in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Materialize ~workspace_root ~out_dir
+    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false
+      ~workspace_root ~out_dir ~include_dirs:[out_dir]
       ~target_env:(pipeline.options.env)
       pipeline.preprocessors all_sources
   in
@@ -876,7 +878,8 @@ let enriched_seed_metadata_lines ?seed_root ~manifest_path workspace =
       library
   in
   let* prepared_sources =
-    Builder.prepare_sources ~mode:Builder.Materialize ~workspace_root ~out_dir
+    Builder.prepare_sources ~mode:Builder.Materialize ~verbose:false
+      ~workspace_root ~out_dir ~include_dirs:[out_dir]
       ~target_env:pipeline.options.env pipeline.preprocessors sources
   in
   let session = Toolchain.create_session () in
@@ -936,7 +939,8 @@ let seed_metadata_lines ?seed_root ~manifest_path workspace =
           ~planned_generated_outputs:[] library
       in
       let* prepared_sources =
-        Builder.prepare_sources ~mode:Builder.Plan_only ~workspace_root ~out_dir
+        Builder.prepare_sources ~mode:Builder.Plan_only ~verbose:false
+          ~workspace_root ~out_dir ~include_dirs:[out_dir]
           ~target_env:[] [] sources
       in
       let session = Toolchain.create_session () in
