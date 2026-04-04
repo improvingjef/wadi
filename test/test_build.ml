@@ -38,6 +38,39 @@ let write_logging_wrapper workspace relative_path log_path command_path =
         exec %s \"$@\"\n"
        (Filename.quote log_path) (Filename.quote log_path) (Filename.quote command_path))
 
+let write_fake_compiler workspace relative_path ~stdlib_dir =
+  write_executable workspace relative_path
+    (Printf.sprintf
+       "#!/bin/sh\n\
+        set -eu\n\
+        case \"${1-}\" in\n\
+        \  -version)\n\
+        \    printf '5.4.0\\n'\n\
+        \    ;;\n\
+        \  -where)\n\
+        \    printf '%s\\n'\n\
+        \    ;;\n\
+        \  *)\n\
+        \    echo unexpected invocation >&2\n\
+        \    exit 2\n\
+        \    ;;\n\
+        esac\n"
+       stdlib_dir)
+
+let write_fake_ocamlfind workspace relative_path package_root =
+  write_executable workspace relative_path
+    (Printf.sprintf
+       "#!/bin/sh\n\
+        set -eu\n\
+        if [ \"$#\" -ge 2 ] && [ \"$1\" = \"printconf\" ] && [ \"$2\" = \"path\" ]; \
+        then\n\
+        \  printf '%s\\n'\n\
+        else\n\
+        \  echo unexpected invocation >&2\n\
+        \  exit 2\n\
+        fi\n"
+       package_root)
+
 let cases =
   [
     ( "builds and runs the hello fixture",
@@ -688,6 +721,56 @@ modules = ["alpha", "beta"]
                 "native backend requested but /definitely/missing/ocamlopt is unavailable"
               build.output
               "backend selection failures should explain the missing compiler") );
+    ( "fails early when ocamlfind comes from a different toolchain than the compiler",
+      fun () ->
+        with_temp_dir "wadi-mixed-toolchain-build" (fun workspace ->
+            write_manifest workspace
+              {|
+[library.patterns]
+dir = "lib"
+modules = ["patterns"]
+packages = ["str"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["patterns"]
+|};
+            write_source workspace "lib/patterns.ml"
+              {|let contains_digit text = Str.string_match (Str.regexp ".*[0-9].*") text 0|};
+            write_source workspace "app/main.ml"
+              {|let () = print_endline (string_of_bool (Patterns.contains_digit "abc123"))|};
+            let stdlib_dir = Filename.concat workspace "fake-switch/lib/ocaml" in
+            let ocamlc = write_fake_compiler workspace "bin/ocamlc-fake" ~stdlib_dir in
+            let ocamlopt =
+              write_fake_compiler workspace "bin/ocamlopt-fake" ~stdlib_dir
+            in
+            let ocamlfind =
+              write_fake_ocamlfind workspace "bin/ocamlfind-homebrew"
+                "/opt/homebrew/lib/ocaml"
+            in
+            let build =
+              with_env "OCAMLC" ocamlc (fun () ->
+                  with_env "OCAMLOPT" ocamlopt (fun () ->
+                      with_env "OCAMLFIND" ocamlfind (fun () ->
+                          run_wadi ~cwd:workspace [ "build"; "demo" ])))
+            in
+            assert_true (build.status <> 0)
+              "build should fail before compilation when ocamlfind and the compiler \
+               disagree";
+            assert_string_contains
+              ~needle:
+                ("ocamlfind package roots (/opt/homebrew/lib/ocaml) do not match \
+                  compiler stdlib root "
+                ^ Filename.concat workspace "fake-switch/lib")
+              build.output
+              "build should report the mismatched package root directly";
+            assert_string_contains
+              ~needle:
+                ("put " ^ Filename.concat workspace "fake-switch/bin"
+               ^ " ahead of other OCaml installations in PATH")
+              build.output
+              "build should explain how to repair a mixed-toolchain PATH") );
     ( "resolves unix from a stdlib subdirectory",
       fun () ->
         with_temp_dir "wadi-unix-subdir" (fun workspace ->

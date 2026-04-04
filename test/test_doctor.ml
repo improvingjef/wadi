@@ -9,6 +9,39 @@ let write_executable workspace relative_path contents =
   Unix.chmod path 0o755;
   path
 
+let write_fake_compiler workspace relative_path ~stdlib_dir =
+  write_executable workspace relative_path
+    (Printf.sprintf
+       "#!/bin/sh\n\
+        set -eu\n\
+        case \"${1-}\" in\n\
+        \  -version)\n\
+        \    printf '5.4.0\\n'\n\
+        \    ;;\n\
+        \  -where)\n\
+        \    printf '%s\\n'\n\
+        \    ;;\n\
+        \  *)\n\
+        \    echo unexpected invocation >&2\n\
+        \    exit 2\n\
+        \    ;;\n\
+        esac\n"
+       stdlib_dir)
+
+let write_fake_ocamlfind workspace relative_path package_root =
+  write_executable workspace relative_path
+    (Printf.sprintf
+       "#!/bin/sh\n\
+        set -eu\n\
+        if [ \"$#\" -ge 2 ] && [ \"$1\" = \"printconf\" ] && [ \"$2\" = \"path\" ]; \
+        then\n\
+        \  printf '%s\\n'\n\
+        else\n\
+        \  echo unexpected invocation >&2\n\
+        \  exit 2\n\
+        fi\n"
+       package_root)
+
 let generated_release_artifacts =
   [
     ("docs/cli.md", "cli docs\n");
@@ -237,4 +270,46 @@ deps = ["core"]
                assets";
             assert_string_contains ~needle:"Summary: pass=5 warn=1 fail=0" doctor.output
               "doctor should summarize generated-asset drift as a warning") );
+    ( "fails when ocamlfind package roots do not match the compiler toolchain",
+      fun () ->
+        with_temp_dir "wadi-doctor-mixed-toolchain" (fun workspace ->
+            write_manifest workspace
+              {|
+[executable.demo]
+dir = "app"
+main = "main"
+|};
+            write_source workspace "app/main.ml" {|let () = print_endline "demo"|};
+            let stdlib_dir = Filename.concat workspace "fake-switch/lib/ocaml" in
+            let ocamlc = write_fake_compiler workspace "bin/ocamlc-fake" ~stdlib_dir in
+            let ocamlopt =
+              write_fake_compiler workspace "bin/ocamlopt-fake" ~stdlib_dir
+            in
+            let ocamlfind =
+              write_fake_ocamlfind workspace "bin/ocamlfind-homebrew"
+                "/opt/homebrew/lib/ocaml"
+            in
+            let doctor =
+              with_env "OCAMLC" ocamlc (fun () ->
+                  with_env "OCAMLOPT" ocamlopt (fun () ->
+                      with_env "OCAMLFIND" ocamlfind (fun () ->
+                          run_wadi ~cwd:workspace [ "doctor"; "demo" ])))
+            in
+            assert_true (doctor.status <> 0)
+              "doctor should fail for an inconsistent OCaml toolchain";
+            assert_string_contains ~needle:"toolchain: fail" doctor.output
+              "doctor should mark the toolchain check as failed";
+            assert_string_contains
+              ~needle:
+                ("ocamlfind package roots (/opt/homebrew/lib/ocaml) do not match \
+                  compiler stdlib root "
+                ^ Filename.concat workspace "fake-switch/lib")
+              doctor.output
+              "doctor should preserve the direct mismatch explanation";
+            assert_string_contains
+              ~needle:
+                ("put " ^ Filename.concat workspace "fake-switch/bin"
+               ^ " ahead of other OCaml installations in PATH")
+              doctor.output
+              "doctor should include the PATH repair guidance") );
   ]

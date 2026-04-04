@@ -8,6 +8,7 @@ type package_resolution = {
 
 type invocation = { prog : string; args : string list }
 type resolved_command = { configured : string; resolved : string option }
+type consistency = Consistent | Unavailable of string | Inconsistent of string
 
 type report = {
   ocamlc : resolved_command;
@@ -19,6 +20,7 @@ type report = {
   stdlib : (string, string) result;
   unix_dir : (string option, string) result;
   package_roots : (string list, string) result;
+  consistency : consistency;
 }
 
 type session = {
@@ -30,6 +32,7 @@ type session = {
   mutable stdlib : (string, string) result option;
   mutable ocamlfind : (string, string) result option;
   mutable package_roots : (string list, string) result option;
+  mutable ocamlfind_consistency : consistency option;
 }
 
 let ( let* ) = Result.bind
@@ -44,6 +47,7 @@ let create_session () =
     stdlib = None;
     ocamlfind = None;
     package_roots = None;
+    ocamlfind_consistency = None;
   }
 
 let with_cached_field get set f =
@@ -207,36 +211,108 @@ let resolve_library_dir ~exists ~stdlib_dir library =
     (fun dir -> exists (Filename.concat dir (library ^ ".cmi")))
     (candidate_library_dirs stdlib_dir library)
 
-let validate_ocamlfind prog =
+type ocamlfind_candidate_error = Candidate_unavailable | Candidate_inconsistent of string
+type ocamlfind_selection =
+  | Selected_ocamlfind of string * string list
+  | Missing_ocamlfind of string
+  | Inconsistent_ocamlfind of string
+
+let ocamlfind_package_roots prog =
   let outcome = Process.run_capture prog [ "printconf"; "path" ] in
-  if outcome.status = 0 then Ok () else Error outcome.output
+  if outcome.status = 0 then Ok (String_util.split_lines outcome.output)
+  else Error (Printf.sprintf "failed to query %s package roots\n%s" prog outcome.output)
 
-let fallback_ocamlfind () =
-  let outcome = Process.run_capture (ocamlc_cmd ()) [ "-where" ] in
-  if outcome.status <> 0 then None
-  else
-    let stdlib_dir = String.trim outcome.output in
-    let switch_root = Filename.dirname (Filename.dirname stdlib_dir) in
-    let candidate = Filename.concat (Filename.concat switch_root "bin") "ocamlfind" in
-    if Sys.file_exists candidate then Some candidate else None
+let compiler_lib_root stdlib_dir = Filename.dirname (Fs.realpath stdlib_dir)
 
-let uncached_ensure_ocamlfind () =
+let compiler_bin_dir stdlib_dir =
+  Filename.concat (Filename.dirname (compiler_lib_root stdlib_dir)) "bin"
+
+let package_root_matches_compiler ~stdlib_dir package_root =
+  let stdlib_dir = Fs.realpath stdlib_dir in
+  let compiler_lib_root = compiler_lib_root stdlib_dir in
+  let package_root = Fs.realpath package_root in
+  package_root = compiler_lib_root
+  || package_root = stdlib_dir
+  || String_util.starts_with ~prefix:(compiler_lib_root ^ "/") package_root
+  || String_util.starts_with ~prefix:(stdlib_dir ^ "/") package_root
+
+let ocamlfind_consistency_error ~package_roots ~stdlib_dir =
+  let package_roots =
+    match package_roots with [] -> "none" | roots -> String.concat ", " roots
+  in
+  let compiler_lib_root = compiler_lib_root stdlib_dir in
+  let compiler_bin_dir = compiler_bin_dir stdlib_dir in
+  Printf.sprintf
+    "ocamlfind package roots (%s) do not match compiler stdlib root %s; put %s ahead \
+     of other OCaml installations in PATH or set OCAMLC/OCAMLOPT/OCAMLFIND \
+     consistently"
+    package_roots compiler_lib_root compiler_bin_dir
+
+let validate_ocamlfind_candidate ?session prog =
+  match ocamlfind_package_roots prog with
+  | Error _ -> Error Candidate_unavailable
+  | Ok package_roots -> (
+      match stdlib_dir ?session () with
+      | Error message -> Error (Candidate_inconsistent (String.trim message))
+      | Ok stdlib_dir ->
+          if List.exists (package_root_matches_compiler ~stdlib_dir) package_roots then
+            Ok package_roots
+          else
+            Error
+              (Candidate_inconsistent
+                 (ocamlfind_consistency_error ~package_roots ~stdlib_dir)))
+
+let fallback_ocamlfind ?session () =
+  match stdlib_dir ?session () with
+  | Error _ -> None
+  | Ok stdlib_dir ->
+      let candidate = Filename.concat (compiler_bin_dir stdlib_dir) "ocamlfind" in
+      if Sys.file_exists candidate then Some candidate else None
+
+let missing_ocamlfind_message =
+  "external packages require ocamlfind; install it with `opam install ocamlfind`"
+
+let cache_ocamlfind_selection session = function
+  | Selected_ocamlfind (command, package_roots) ->
+      session.ocamlfind <- Some (Ok command);
+      session.package_roots <- Some (Ok package_roots);
+      session.ocamlfind_consistency <- Some Consistent
+  | Missing_ocamlfind message ->
+      session.ocamlfind <- Some (Error message);
+      session.package_roots <- Some (Error message);
+      session.ocamlfind_consistency <- Some (Unavailable message)
+  | Inconsistent_ocamlfind message ->
+      session.ocamlfind <- Some (Error message);
+      session.package_roots <- Some (Error message);
+      session.ocamlfind_consistency <- Some (Inconsistent message)
+
+let select_ocamlfind ?session () =
   let preferred = ocamlfind_cmd () in
-  match validate_ocamlfind preferred with
-  | Ok () -> Ok preferred
-  | Error _ -> (
-      match fallback_ocamlfind () with
-      | Some candidate -> (
-          match validate_ocamlfind candidate with
-          | Ok () -> Ok candidate
-          | Error _ ->
-              Error
-                "external packages require ocamlfind; install it with `opam install \
-                 ocamlfind`")
-      | None ->
-          Error
-            "external packages require ocamlfind; install it with `opam install \
-             ocamlfind`")
+  match validate_ocamlfind_candidate ?session preferred with
+  | Ok package_roots -> Selected_ocamlfind (preferred, package_roots)
+  | Error preferred_error -> (
+      match fallback_ocamlfind ?session () with
+      | Some candidate when candidate <> preferred -> (
+          match validate_ocamlfind_candidate ?session candidate with
+          | Ok package_roots -> Selected_ocamlfind (candidate, package_roots)
+          | Error fallback_error -> (
+              match (preferred_error, fallback_error) with
+              | Candidate_inconsistent message, _
+              | Candidate_unavailable, Candidate_inconsistent message ->
+                  Inconsistent_ocamlfind message
+              | Candidate_unavailable, Candidate_unavailable ->
+                  Missing_ocamlfind missing_ocamlfind_message))
+      | Some _ | None -> (
+          match preferred_error with
+          | Candidate_unavailable -> Missing_ocamlfind missing_ocamlfind_message
+          | Candidate_inconsistent message -> Inconsistent_ocamlfind message))
+
+let uncached_ensure_ocamlfind ?session () =
+  let selection = select_ocamlfind ?session () in
+  (match session with Some session -> cache_ocamlfind_selection session selection | None -> ());
+  match selection with
+  | Selected_ocamlfind (command, _) -> Ok command
+  | Missing_ocamlfind message | Inconsistent_ocamlfind message -> Error message
 
 let ensure_ocamlfind ?session () =
   match session with
@@ -245,16 +321,30 @@ let ensure_ocamlfind ?session () =
       with_cached_field
         (fun () -> session.ocamlfind)
         (fun value -> session.ocamlfind <- value)
-        uncached_ensure_ocamlfind
+        (fun () -> uncached_ensure_ocamlfind ~session ())
+
+let uncached_consistency ?session () =
+  let selection = select_ocamlfind ?session () in
+  (match session with Some session -> cache_ocamlfind_selection session selection | None -> ());
+  match selection with
+  | Selected_ocamlfind _ -> Consistent
+  | Missing_ocamlfind message -> Unavailable message
+  | Inconsistent_ocamlfind message -> Inconsistent message
+
+let consistency ?session () =
+  match session with
+  | None -> uncached_consistency ()
+  | Some session ->
+      with_cached_field
+        (fun () -> session.ocamlfind_consistency)
+        (fun value -> session.ocamlfind_consistency <- value)
+        (fun () -> uncached_consistency ~session ())
 
 let package_cache_key packages = String.concat "\000" packages
 
 let uncached_package_search_roots ?session () =
   let* ocamlfind = ensure_ocamlfind ?session () in
-  let outcome = Process.run_capture ocamlfind [ "printconf"; "path" ] in
-  if outcome.status = 0 then Ok (String_util.split_lines outcome.output)
-  else
-    Error (Printf.sprintf "failed to query %s package roots\n%s" ocamlfind outcome.output)
+  ocamlfind_package_roots ocamlfind
 
 let package_search_roots ?session () =
   match session with
@@ -403,6 +493,7 @@ let inspect ?session () =
     stdlib;
     unix_dir;
     package_roots = package_search_roots ?session ();
+    consistency = consistency ?session ();
   }
 
 let render_command_report name command =
@@ -416,6 +507,13 @@ let render_command_report name command =
 let render_result name = function
   | Ok value -> Printf.sprintf "%s: %s" name value
   | Error message -> Printf.sprintf "%s-error: %s" name (String.trim message)
+
+let render_consistency = function
+  | Consistent -> "toolchain-consistency: compiler and package roots agree"
+  | Unavailable message ->
+      "toolchain-consistency-warning: " ^ String.trim message
+  | Inconsistent message ->
+      "toolchain-consistency-error: " ^ String.trim message
 
 let render_report report =
   let base_lines =
@@ -433,6 +531,7 @@ let render_report report =
       | Ok (Some path) -> "unix-library-dir: " ^ path
       | Ok None -> "unix-library-dir: unavailable"
       | Error message -> "unix-library-dir-error: " ^ String.trim message);
+      render_consistency report.consistency;
     ]
   in
   match report.package_roots with

@@ -72,6 +72,7 @@ let toolchain_check ~session backend_request =
       Toolchain.render_command_report "ocamlopt" report.ocamlopt;
       Toolchain.render_command_report "ocamldep" report.ocamldep;
       Toolchain.render_command_report "ocamlfind" report.ocamlfind;
+      Toolchain.render_consistency report.consistency;
       "backend-request: " ^ Toolchain.backend_request_name backend_request;
       "selected-backend: " ^ render_result Toolchain.backend_name report.selected_backend;
       "compiler-version: " ^ render_result Fun.id report.compiler_version;
@@ -89,7 +90,12 @@ let toolchain_check ~session backend_request =
   let state =
     match (report.selected_backend, report.compiler_version, report.stdlib) with
     | Ok _, Ok _, Ok _ -> (
-        match report.package_roots with Ok _ -> Pass | Error _ -> Warn)
+        match (report.consistency, report.package_roots) with
+        | Toolchain.Inconsistent _, _ -> Fail
+        | Toolchain.Consistent, Ok _ -> Pass
+        | Toolchain.Consistent, Error _
+        | Toolchain.Unavailable _, _
+          -> Warn)
     | _ -> Fail
   in
   check "toolchain" state details

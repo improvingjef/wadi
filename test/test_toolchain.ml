@@ -1,5 +1,16 @@
 open Test_support
 
+let write_executable workspace relative_path contents =
+  let path = Filename.concat workspace relative_path in
+  Fs.write_file path contents;
+  Unix.chmod path 0o755;
+  path
+
+let resolve_command prog =
+  let outcome = Process.run_capture "/bin/sh" [ "-c"; "command -v " ^ prog ] in
+  assert_int_equal 0 outcome.status (Printf.sprintf "expected to find %s on PATH" prog);
+  String.trim outcome.output
+
 let cases =
   [
     ( "resolves executables from PATH and absolute paths",
@@ -33,7 +44,44 @@ let cases =
             assert_string_contains ~needle:"stdlib: " run.output
               "toolchain output should report the stdlib path";
             assert_string_contains ~needle:"package-roots:" run.output
-              "toolchain output should report ocamlfind package roots") );
+              "toolchain output should report ocamlfind package roots";
+            assert_string_contains
+              ~needle:"toolchain-consistency: compiler and package roots agree"
+              run.output "toolchain output should report toolchain consistency") );
+    ( "falls back to the compiler switch ocamlfind when the configured driver is \
+       inconsistent",
+      fun () ->
+        with_temp_dir "wadi-toolchain-ocamlfind-fallback" (fun workspace ->
+            let inconsistent_ocamlfind =
+              write_executable workspace "bin/ocamlfind-homebrew"
+                "#!/bin/sh\n\
+                 set -eu\n\
+                 if [ \"$#\" -ge 2 ] && [ \"$1\" = \"printconf\" ] && [ \"$2\" = \
+                 \"path\" ]; then\n\
+                 \  printf '/opt/homebrew/lib/ocaml\\n'\n\
+                 else\n\
+                 \  echo unexpected invocation >&2\n\
+                 \  exit 2\n\
+                 fi\n"
+            in
+            let expected_ocamlfind = resolve_command "ocamlfind" in
+            let run =
+              with_env "OCAMLFIND" inconsistent_ocamlfind (fun () ->
+                  run_wadi ~cwd:workspace [ "toolchain" ])
+            in
+            assert_int_equal 0 run.status
+              "toolchain diagnostics should recover from an inconsistent configured \
+               ocamlfind";
+            assert_string_contains
+              ~needle:
+                (Printf.sprintf "ocamlfind: %s (configured as %s)" expected_ocamlfind
+                   inconsistent_ocamlfind)
+              run.output
+              "toolchain diagnostics should prefer the compiler switch ocamlfind";
+            assert_string_contains
+              ~needle:"toolchain-consistency: compiler and package roots agree"
+              run.output
+              "toolchain diagnostics should report a healthy effective toolchain") );
     ( "falls back to the bytecode backend when native compilation is unavailable",
       fun () ->
         with_env "OCAMLOPT" "/definitely/missing/ocamlopt" (fun () ->
