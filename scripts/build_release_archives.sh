@@ -6,6 +6,8 @@ ROOT_DIR=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 . "$ROOT_DIR/scripts/release_locale.sh"
 . "$ROOT_DIR/scripts/wadi_self_host.sh"
 
+export COPYFILE_DISABLE=1
+
 wadi_apply_release_archive_env
 
 OUTPUT_DIR=$ROOT_DIR/dist
@@ -72,8 +74,16 @@ copy_tree_files() {
       done
 }
 
+strip_extended_attributes() {
+  tree_root=$1
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -c -r "$tree_root" 2>/dev/null || true
+  fi
+}
+
 normalize_tree() {
   tree_root=$1
+  strip_extended_attributes "$tree_root"
   find "$tree_root" -exec touch -t 202601010000 {} +
 }
 

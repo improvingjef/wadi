@@ -1,8 +1,8 @@
 class Wadi < Formula
   desc "Dune-free OCaml workspace toolbox"
-  homepage "https://github.com/jef/wadi"
-  url "https://github.com/jef/wadi/releases/download/v0.1.0/wadi-0.1.0-source.tar.gz"
-  sha256 "d0083cd730f3d20ca24d6d877026fb20b304b3d5ffdb4a981a71c0625f9e6ed7"
+  homepage "https://github.com/improvingjef/wadi"
+  url "https://github.com/improvingjef/wadi/releases/download/v0.1.0/wadi-0.1.0-source.tar.gz"
+  sha256 "1bd002999335e2c1abb4ffe13b938b57c9b9b06bf7a3c1802ddb6b5c590501a2"
   license "MIT"
 
   depends_on "ocaml"

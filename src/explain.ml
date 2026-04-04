@@ -120,7 +120,8 @@ let render_section title items =
   (title ^ ":") :: List.map (fun item -> "- " ^ item) items
 
 let render_report ~kind_name ~target_name ~package_path ~profile ~status ~out_dir
-    ~artifact ~resolution_lines ~include_dirs ~module_order ~command_lines =
+    ~artifact ~expected_outputs ~resolution_lines ~include_dirs ~module_order
+    ~command_lines =
   String.concat "\n"
     ([
        "Target: " ^ target_name;
@@ -135,6 +136,8 @@ let render_report ~kind_name ~target_name ~package_path ~profile ~status ~out_di
      ]
     @ render_section "Reasons" status.reasons
     @ [ "" ]
+    @ render_section "Expected-outputs" expected_outputs
+    @ [ "" ]
     @ render_section "Resolution" resolution_lines
     @ [ "" ]
     @ render_section "Include-dirs" include_dirs
@@ -147,7 +150,8 @@ let json_string text = "\"" ^ String_util.json_escape text ^ "\""
 let json_array items = "[" ^ String.concat ", " items ^ "]"
 
 let render_json_report ~kind_name ~target_name ~package_path ~profile ~status ~out_dir
-    ~artifact ~resolution_lines ~include_dirs ~module_order ~command_lines =
+    ~artifact ~expected_outputs ~resolution_lines ~include_dirs ~module_order
+    ~command_lines =
   String.concat "\n"
     [
       "{";
@@ -162,6 +166,7 @@ let render_json_report ~kind_name ~target_name ~package_path ~profile ~status ~o
       "  \"artifact\": " ^ json_string artifact ^ ",";
       "  \"output_dir\": " ^ json_string out_dir ^ ",";
       "  \"reasons\": " ^ json_array (List.map json_string status.reasons) ^ ",";
+      "  \"expected_outputs\": " ^ json_array (List.map json_string expected_outputs) ^ ",";
       "  \"resolution\": " ^ json_array (List.map json_string resolution_lines) ^ ",";
       "  \"include_dirs\": " ^ json_array (List.map json_string include_dirs) ^ ",";
       "  \"module_order\": " ^ json_array (List.map json_string module_order) ^ ",";

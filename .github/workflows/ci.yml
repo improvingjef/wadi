@@ -45,4 +45,4 @@ jobs:
 
       - name: Check committed release artifacts
         if: matrix.backend == 'native'
-        run: git diff --exit-code -- docs/cli.md completions package oasis.opam Formula
+        run: git diff --exit-code -- docs/cli.md completions package wadi.opam Formula

@@ -1,7 +1,6 @@
 let starts_with ~prefix text =
   let prefix_length = String.length prefix in
-  String.length text >= prefix_length
-  && String.sub text 0 prefix_length = prefix
+  String.length text >= prefix_length && String.sub text 0 prefix_length = prefix
 
 let ends_with ~suffix text =
   let suffix_length = String.length suffix in
@@ -14,8 +13,8 @@ let split_once ~on text =
     if index >= String.length text then None
     else if text.[index] = on then
       Some
-        (String.sub text 0 index, String.sub text (index + 1)
-           (String.length text - index - 1))
+        ( String.sub text 0 index,
+          String.sub text (index + 1) (String.length text - index - 1) )
     else loop (index + 1)
   in
   loop 0
@@ -26,13 +25,9 @@ let strip_comment line =
   | None -> line
 
 let split_whitespace text =
-  let is_whitespace = function
-    | ' ' | '\t' | '\n' | '\r' -> true
-    | _ -> false
-  in
+  let is_whitespace = function ' ' | '\t' | '\n' | '\r' -> true | _ -> false in
   let rec skip index =
-    if index < String.length text && is_whitespace text.[index] then
-      skip (index + 1)
+    if index < String.length text && is_whitespace text.[index] then skip (index + 1)
     else index
   in
   let rec take start index =
@@ -72,8 +67,7 @@ let read_file path =
            Buffer.add_string buffer (input_line channel);
            Buffer.add_char buffer '\n'
          done
-       with
-      | End_of_file -> ());
+       with End_of_file -> ());
       Buffer.contents buffer)
 
 let write_file path contents =
@@ -95,7 +89,8 @@ let relative_to_root ~root_dir path =
   let normalized_root = normalize_dir_path root_dir in
   if path = root_dir then "."
   else if starts_with ~prefix:normalized_root path then
-    String.sub path (String.length normalized_root)
+    String.sub path
+      (String.length normalized_root)
       (String.length path - String.length normalized_root)
   else path
 
@@ -123,7 +118,7 @@ let rec remove_tree path =
 let manifest_path_default () =
   match Sys.getenv_opt "BOOTSTRAP_MODULE_MANIFEST" with
   | Some path when String.trim path <> "" -> absolute_path path
-  | Some _ | None -> absolute_path "oasis.toml"
+  | Some _ | None -> absolute_path "wadi.toml"
 
 let parse_string_value text =
   let trimmed = String.trim text in
@@ -162,8 +157,7 @@ let parse_string_array text =
             match trimmed.[cursor] with
             | '"' -> (Buffer.contents buffer, cursor + 1)
             | '\\' ->
-                if cursor + 1 >= length - 1 then
-                  failwith ("dangling escape in " ^ trimmed)
+                if cursor + 1 >= length - 1 then failwith ("dangling escape in " ^ trimmed)
                 else (
                   Buffer.add_char buffer trimmed.[cursor + 1];
                   loop (cursor + 2))
@@ -301,8 +295,7 @@ let parse_section_header line =
   if length >= 2 && trimmed.[0] = '[' && trimmed.[length - 1] = ']' then
     Some
       (String.sub trimmed 1 (length - 2)
-      |> String.split_on_char '.'
-      |> List.map String.trim
+      |> String.split_on_char '.' |> List.map String.trim
       |> List.filter (fun part -> part <> ""))
   else None
 
@@ -332,12 +325,12 @@ let parse_manifest path =
     | [] ->
         Option.iter
           (fun key ->
-            match current_section, pending_buffer with
+            match (current_section, pending_buffer) with
             | Some section, Some buffer -> handle_assignment state section key buffer
             | _ -> ())
           pending_key;
         state
-    | raw_line :: rest ->
+    | raw_line :: rest -> (
         let line = raw_line |> strip_comment |> String.trim in
         if pending_key <> None then
           let buffer =
@@ -346,28 +339,28 @@ let parse_manifest path =
             | Some buffer -> buffer ^ "\n" ^ line
             | None -> line
           in
-          if String.contains line ']' then (
-            match current_section, pending_key with
+          if String.contains line ']' then
+            match (current_section, pending_key) with
             | Some section, Some key ->
                 handle_assignment state section key buffer;
                 loop current_section None None rest
-            | _ -> loop current_section None None rest)
+            | _ -> loop current_section None None rest
           else loop current_section pending_key (Some buffer) rest
         else if line = "" then loop current_section None None rest
         else
           match parse_section_header line with
           | Some section -> loop (Some section) None None rest
           | None -> (
-              match current_section, split_once ~on:'=' line with
+              match (current_section, split_once ~on:'=' line) with
               | Some section, Some (raw_key, raw_value) ->
                   let key = String.trim raw_key in
                   let value = String.trim raw_value in
-                  if value <> "" && value.[0] = '[' && not (String.contains value ']') then
-                    loop current_section (Some key) (Some value) rest
+                  if value <> "" && value.[0] = '[' && not (String.contains value ']')
+                  then loop current_section (Some key) (Some value) rest
                   else (
                     handle_assignment state section key value;
                     loop current_section None None rest)
-              | _ -> loop current_section None None rest)
+              | _ -> loop current_section None None rest))
   in
   loop None None None lines
 
@@ -391,26 +384,23 @@ let choose_library manifest_path state =
             (Printf.sprintf "bootstrap library '%s' was not found in %s" name
                manifest_path))
   | None -> (
-      match List.find_opt (fun library -> library.name = "oasis_core") libraries with
+      match List.find_opt (fun library -> library.name = "wadi_core") libraries with
       | Some library -> library
       | None -> (
           match libraries with
           | [ library ] -> library
           | [] ->
-              failwith
-                (Printf.sprintf "no [library.*] section found in %s" manifest_path)
+              failwith (Printf.sprintf "no [library.*] section found in %s" manifest_path)
           | libraries ->
               failwith
                 (Printf.sprintf
-                   "multiple libraries found in %s; set BOOTSTRAP_LIBRARY to \
-                    choose one (%s)"
+                   "multiple libraries found in %s; set BOOTSTRAP_LIBRARY to choose one \
+                    (%s)"
                    manifest_path
-                   (String.concat ", "
-                      (List.map (fun library -> library.name) libraries)))))
+                   (String.concat ", " (List.map (fun library -> library.name) libraries)))
+          ))
 
-let option_list = function
-  | Some items -> items
-  | None -> []
+let option_list = function Some items -> items | None -> []
 
 let library_files manifest_path root_dir library =
   let dir =
@@ -418,16 +408,16 @@ let library_files manifest_path root_dir library =
     | Some dir -> dir
     | None ->
         failwith
-          (Printf.sprintf "library '%s' is missing a dir setting in %s"
-             library.name manifest_path)
+          (Printf.sprintf "library '%s' is missing a dir setting in %s" library.name
+             manifest_path)
   in
   let modules =
     match library.modules with
     | Some modules -> modules
     | None ->
         failwith
-          (Printf.sprintf "library '%s' is missing a modules setting in %s"
-             library.name manifest_path)
+          (Printf.sprintf "library '%s' is missing a modules setting in %s" library.name
+             manifest_path)
   in
   List.concat_map
     (fun module_name ->
@@ -436,7 +426,7 @@ let library_files manifest_path root_dir library =
       let ml_path = base ^ ".ml" in
       let files =
         (if Sys.file_exists mli_path then [ mli_path ] else [])
-        @ (if Sys.file_exists ml_path then [ ml_path ] else [])
+        @ if Sys.file_exists ml_path then [ ml_path ] else []
       in
       if files = [] then
         failwith
@@ -447,32 +437,30 @@ let library_files manifest_path root_dir library =
     modules
 
 let ordered_module_files ?(keep_interfaces = false) files =
-  let dep_output_path = Filename.temp_file "oasis-bootstrap-modules" ".txt" in
+  let dep_output_path = Filename.temp_file "wadi-bootstrap-modules" ".txt" in
   let ocamldep =
     match Sys.getenv_opt "OCAMLDEP" with
     | Some path when String.trim path <> "" -> path
     | Some _ | None -> "ocamldep"
   in
   let command =
-    String.concat " "
-      (List.map Filename.quote (ocamldep :: "-sort" :: files))
-      ^ " > "
-      ^ Filename.quote dep_output_path
-      ^ " 2>&1"
+    String.concat " " (List.map Filename.quote (ocamldep :: "-sort" :: files))
+    ^ " > "
+    ^ Filename.quote dep_output_path
+    ^ " 2>&1"
   in
   let status = Sys.command command in
   let output = read_file dep_output_path in
   Sys.remove dep_output_path;
   if status <> 0 then
     failwith
-      (Printf.sprintf "ocamldep -sort failed while ordering bootstrap modules:\n%s"
-         output)
+      (Printf.sprintf "ocamldep -sort failed while ordering bootstrap modules:\n%s" output)
   else
     output |> split_whitespace
     |> List.filter (fun path ->
-           if keep_interfaces then
-             Filename.check_suffix path ".ml" || Filename.check_suffix path ".mli"
-           else Filename.check_suffix path ".ml")
+        if keep_interfaces then
+          Filename.check_suffix path ".ml" || Filename.check_suffix path ".mli"
+        else Filename.check_suffix path ".ml")
     |> dedup_preserve
 
 let module_stems files =
@@ -480,9 +468,7 @@ let module_stems files =
   |> List.map (fun path -> Filename.basename path |> Filename.remove_extension)
   |> dedup_preserve
 
-let render_make_variable name values =
-  name ^ " := " ^ String.concat " " values
-
+let render_make_variable name values = name ^ " := " ^ String.concat " " values
 let shell_quote = Filename.quote
 
 let render_env_words env =
@@ -492,9 +478,7 @@ let render_env_words env =
 
 let effective_library_options (state : manifest_state) (library : library_section) =
   let default_profile =
-    match state.default_profile with
-    | Some profile -> profile
-    | None -> "default"
+    match state.default_profile with Some profile -> profile | None -> "default"
   in
   let profile_options =
     match Hashtbl.find_opt state.profiles default_profile with
@@ -510,22 +494,21 @@ let effective_library_options (state : manifest_state) (library : library_sectio
     | None -> empty_target_options ()
   in
   let compile_flags =
-    option_list state.defaults.compile_flags @ option_list library.compile_flags
+    option_list state.defaults.compile_flags
+    @ option_list library.compile_flags
     @ option_list profile_options.compile_flags
     @ option_list profile_library_options.compile_flags
   in
   let env =
     let defaults_env = option_list state.defaults.env |> List.map parse_env_binding in
     let library_env = option_list library.env |> List.map parse_env_binding in
-    let profile_env =
-      option_list profile_options.env |> List.map parse_env_binding
-    in
+    let profile_env = option_list profile_options.env |> List.map parse_env_binding in
     let profile_library_env =
       option_list profile_library_options.env |> List.map parse_env_binding
     in
-    merge_env_bindings defaults_env library_env
-    |> fun env -> merge_env_bindings env profile_env
-    |> fun env -> merge_env_bindings env profile_library_env
+    merge_env_bindings defaults_env library_env |> fun env ->
+    merge_env_bindings env profile_env |> fun env ->
+    merge_env_bindings env profile_library_env
   in
   (default_profile, compile_flags, env)
 
@@ -534,15 +517,15 @@ let require_metadata_only_support manifest_path library =
     if values <> [] then
       failwith
         (Printf.sprintf
-           "bootstrap metadata helper cannot model library '%s' in %s because \
-            it uses %s; falling back to the full planner"
+           "bootstrap metadata helper cannot model library '%s' in %s because it uses \
+            %s; falling back to the full planner"
            library.name manifest_path label)
   in
   if library.wrapped = Some true then
     failwith
       (Printf.sprintf
-         "bootstrap metadata helper cannot model wrapped library '%s' in %s; \
-          falling back to the full planner"
+         "bootstrap metadata helper cannot model wrapped library '%s' in %s; falling \
+          back to the full planner"
          library.name manifest_path);
   unsupported "workspace library deps" (option_list library.deps);
   unsupported "actions" (option_list library.actions);
@@ -558,13 +541,10 @@ let resolve_seed_root ~root_dir path =
 
 let snapshot_or_relative ~root_dir ~snapshot_dir source_path =
   let relative_path = relative_to_root ~root_dir source_path in
-  if relative_path <> source_path
-     && not (starts_with ~prefix:"_bootstrap/" relative_path)
+  if relative_path <> source_path && not (starts_with ~prefix:"_bootstrap/" relative_path)
   then relative_path
   else
-    let destination =
-      Filename.concat snapshot_dir (Filename.basename source_path)
-    in
+    let destination = Filename.concat snapshot_dir (Filename.basename source_path) in
     let contents = read_file source_path in
     if Sys.file_exists destination && read_file destination = contents then ()
     else write_file destination contents;
@@ -580,12 +560,7 @@ let seed_compile_paths ~root_dir ?seed_root ~profile library ordered_files =
       ensure_dir snapshot_dir;
       List.map (snapshot_or_relative ~root_dir ~snapshot_dir) ordered_files
 
-type output_format =
-  | Mod_use
-  | Ml_paths
-  | Compile_paths
-  | Packages
-  | Seed_metadata
+type output_format = Mod_use | Ml_paths | Compile_paths | Packages | Seed_metadata
 
 type command_options = {
   manifest_path : string;
@@ -603,8 +578,7 @@ let parse_output_format value =
   | value ->
       failwith
         ("unknown --format value '" ^ value
-       ^ "'; expected mod_use, ml-paths, compile-paths, packages, or \
-          seed-metadata")
+       ^ "'; expected mod_use, ml-paths, compile-paths, packages, or seed-metadata")
 
 let parse_args () =
   let rec loop options index =
@@ -612,8 +586,7 @@ let parse_args () =
     else
       match Sys.argv.(index) with
       | "--manifest" ->
-          if index + 1 >= Array.length Sys.argv then
-            failwith "--manifest requires a path"
+          if index + 1 >= Array.length Sys.argv then failwith "--manifest requires a path"
           else
             loop
               { options with manifest_path = absolute_path Sys.argv.(index + 1) }
@@ -630,20 +603,17 @@ let parse_args () =
       | "--seed-root" ->
           if index + 1 >= Array.length Sys.argv then
             failwith "--seed-root requires a path"
-          else
-            loop
-              { options with seed_root = Some Sys.argv.(index + 1) }
-              (index + 2)
+          else loop { options with seed_root = Some Sys.argv.(index + 1) } (index + 2)
       | "--help" ->
           failwith
-            "usage: ocaml scripts/render_bootstrap_mod_use.ml [--manifest PATH] [--format mod_use|ml-paths|compile-paths|packages|seed-metadata] [--seed-root DIR]"
+            "usage: ocaml scripts/render_bootstrap_mod_use.ml [--manifest PATH] \
+             [--format mod_use|ml-paths|compile-paths|packages|seed-metadata] \
+             [--seed-root DIR]"
       | option when starts_with ~prefix:"-" option ->
           failwith ("unknown option '" ^ option ^ "'")
       | _ -> failwith "render_bootstrap_mod_use.ml does not accept positional arguments"
   in
-  loop
-    { manifest_path = manifest_path_default (); format = Mod_use; seed_root = None }
-    1
+  loop { manifest_path = manifest_path_default (); format = Mod_use; seed_root = None } 1
 
 let () =
   try
@@ -657,9 +627,7 @@ let () =
         let module_files =
           library_files manifest_path root_dir library |> ordered_module_files
         in
-        List.iter
-          (fun path -> Printf.printf "#mod_use %S;;\n" path)
-          module_files
+        List.iter (fun path -> Printf.printf "#mod_use %S;;\n" path) module_files
     | Ml_paths ->
         let module_files =
           library_files manifest_path root_dir library |> ordered_module_files
@@ -671,8 +639,7 @@ let () =
           |> ordered_module_files ~keep_interfaces:true
         in
         List.iter print_endline module_files
-    | Packages ->
-        List.iter print_endline (option_list library.packages)
+    | Packages -> List.iter print_endline (option_list library.packages)
     | Seed_metadata ->
         require_metadata_only_support manifest_path library;
         let ordered_files =
@@ -681,13 +648,13 @@ let () =
         in
         let profile, compile_flags, env = effective_library_options state library in
         let compile_paths =
-          seed_compile_paths ~root_dir ?seed_root:options.seed_root ~profile
-            library ordered_files
+          seed_compile_paths ~root_dir ?seed_root:options.seed_root ~profile library
+            ordered_files
         in
         let lines =
           [
-            "# Generated by oasis __bootstrap_makefile --format seed-metadata.";
-            "# Edit oasis.toml instead of this file.";
+            "# Generated by wadi __bootstrap_makefile --format seed-metadata.";
+            "# Edit wadi.toml instead of this file.";
             "# Refresh with: make refresh-bootstrap-seed-metadata";
             "BOOTSTRAP_LIBRARY_PROFILE := " ^ profile;
             render_make_variable "BOOTSTRAP_LIBRARY_COMPILE_SOURCES" compile_paths;
@@ -696,12 +663,10 @@ let () =
             render_make_variable "BOOTSTRAP_LIBRARY_PACKAGES"
               (option_list library.packages);
             "BOOTSTRAP_LIBRARY_ENV_PREFIX := " ^ render_env_words env;
-            "BOOTSTRAP_LIBRARY_COMPILE_FLAGS := "
-            ^ String.concat " " compile_flags;
+            "BOOTSTRAP_LIBRARY_COMPILE_FLAGS := " ^ String.concat " " compile_flags;
           ]
         in
         List.iter print_endline lines
-  with
-  | Failure message ->
-      prerr_endline ("oasis bootstrap loader: " ^ message);
-      exit 1
+  with Failure message ->
+    prerr_endline ("wadi bootstrap loader: " ^ message);
+    exit 1

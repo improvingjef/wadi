@@ -20,7 +20,7 @@ jobs:
         run: |
           . release/metadata.sh
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
-            expected=$(oasis_release_tag)
+            expected=$(wadi_release_tag)
             actual=${GITHUB_REF_NAME:-}
             if [ "$actual" != "$expected" ]; then
               echo "release tag '$actual' does not match metadata tag '$expected'" >&2
@@ -78,7 +78,7 @@ jobs:
           ./scripts/build_release_archives.sh \
             --binary-only \
             --output-dir dist \
-            --binary _bootstrap/bin/oasis \
+            --binary _bootstrap/bin/wadi \
             --os "${{ matrix.os_name }}" \
             --arch "${{ matrix.arch_name }}"
 
@@ -107,12 +107,12 @@ jobs:
           ./scripts/generate_packaging_manifests.sh \
             --output-dir dist \
             --reuse-source-archive-dir dist \
-            --opam-output dist/oasis.opam \
-            --formula-output dist/oasis.rb \
+            --opam-output dist/wadi.opam \
+            --formula-output dist/wadi.rb \
             --checksums-output dist/SHA256SUMS \
             --asset-index-output dist/release-assets.json
-          diff -u oasis.opam dist/oasis.opam
-          diff -u Formula/oasis.rb dist/oasis.rb
+          diff -u wadi.opam dist/wadi.opam
+          diff -u Formula/wadi.rb dist/wadi.rb
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -120,8 +120,8 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS
             dist/release-assets.json
-            dist/oasis.opam
-            dist/oasis.rb
+            dist/wadi.opam
+            dist/wadi.rb
 
   homebrew_tap:
     needs:
@@ -137,8 +137,8 @@ jobs:
         id: metadata
         run: |
           . release/metadata.sh
-          echo "tap_repo=$(oasis_homebrew_tap_repository)" >> "$GITHUB_OUTPUT"
-          echo "source_archive=$(oasis_release_source_archive_name)" >> "$GITHUB_OUTPUT"
+          echo "tap_repo=$(wadi_homebrew_tap_repository)" >> "$GITHUB_OUTPUT"
+          echo "source_archive=$(wadi_release_source_archive_name)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/download-artifact@v4
         with:

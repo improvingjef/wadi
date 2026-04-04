@@ -18,10 +18,10 @@ let cases =
           (Release_metadata.source_archive_name metadata)
           "release metadata should derive the source archive name";
         assert_string_equal
-          "https://github.com/jef/wadi/releases/download/v0.1.0/wadi-0.1.0-source.tar.gz"
+          "https://github.com/improvingjef/wadi/releases/download/v0.1.0/wadi-0.1.0-source.tar.gz"
           (Release_metadata.source_archive_url metadata)
           "release metadata should derive the source archive URL";
-        assert_string_equal "https://github.com/jef/homebrew-wadi"
+        assert_string_equal "https://github.com/improvingjef/homebrew-wadi"
           (Release_metadata.homebrew_tap_clone_url metadata)
           "release metadata should derive the default tap clone URL" );
     ( "rejects release metadata files that omit required fields",

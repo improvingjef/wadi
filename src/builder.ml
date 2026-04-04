@@ -61,6 +61,7 @@ type explain_report = { target_name : string; report : string; json_report : str
 type library_description = {
   out_dir : string;
   archive : string;
+  expected_outputs : string list;
   fingerprint : string;
   effective_packages : string list;
   status : Explain.target_status;
@@ -76,6 +77,7 @@ type library_description = {
 type runnable_description = {
   out_dir : string;
   binary : string;
+  expected_outputs : string list;
   fingerprint : string;
   status : Explain.target_status;
   report : string;
@@ -1744,17 +1746,20 @@ let describe_library ~mode ~session ~workspace_root ~verbose ~manifest_path
   let report =
     Explain.render_report ~kind_name:"library" ~target_name:library.name
       ~package_path:library.package_path ~profile ~status ~out_dir ~artifact:archive
-      ~resolution_lines ~include_dirs ~module_order:ordered_modules ~command_lines
+      ~expected_outputs ~resolution_lines ~include_dirs ~module_order:ordered_modules
+      ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:"library" ~target_name:library.name
       ~package_path:library.package_path ~profile ~status ~out_dir ~artifact:archive
-      ~resolution_lines ~include_dirs ~module_order:ordered_modules ~command_lines
+      ~expected_outputs ~resolution_lines ~include_dirs ~module_order:ordered_modules
+      ~command_lines
   in
   Ok
     {
       out_dir;
       archive;
+      expected_outputs;
       fingerprint;
       effective_packages;
       status;
@@ -1776,24 +1781,6 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path ~backend_requ
   in
   let source_table = ordered_source_table description.prepared_sources in
   let display_name = library.name ^ Manifest.package_suffix library.package_path in
-  let ordered_prepared =
-    ordered_prepared_sources source_table description.ordered_modules
-  in
-  let object_files =
-    List.filter_map
-      (prepared_source_object_path backend description.out_dir)
-      ordered_prepared
-  in
-  let expected_outputs =
-    List.concat_map
-      (expected_prepared_source_outputs backend description.out_dir)
-      ordered_prepared
-    @ [ description.archive ]
-    @
-    match (backend, object_files) with
-    | Toolchain.Native, _ :: _ -> [ static_archive_path description.archive ]
-    | Toolchain.Native, [] | Toolchain.Bytecode, _ -> []
-  in
   let transitive_dep_dirs =
     String_util.dedup_preserve
       (List.concat_map
@@ -1803,7 +1790,8 @@ let build_library ~session ~workspace_root ~verbose ~manifest_path ~backend_requ
            | None -> [])
          library.Manifest.deps)
   in
-  prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
+  prune_stale_build_outputs ~out_dir:description.out_dir
+    ~expected_outputs:description.expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report description.json_report;
     Hashtbl.replace library_outputs library.name
@@ -2058,18 +2046,20 @@ let describe_runnable ~mode ~session ~workspace_root ~verbose ~manifest_path
   let report =
     Explain.render_report ~kind_name:(runnable_kind_name kind) ~target_name:runnable.name
       ~package_path:runnable.package_path ~profile ~status ~out_dir ~artifact:binary
-      ~resolution_lines ~include_dirs ~module_order:source_order ~command_lines
+      ~expected_outputs ~resolution_lines ~include_dirs ~module_order:source_order
+      ~command_lines
   in
   let json_report =
     Explain.render_json_report ~kind_name:(runnable_kind_name kind)
       ~target_name:runnable.name ~package_path:runnable.package_path ~profile ~status
-      ~out_dir ~artifact:binary ~resolution_lines ~include_dirs ~module_order:source_order
-      ~command_lines
+      ~out_dir ~artifact:binary ~expected_outputs ~resolution_lines ~include_dirs
+      ~module_order:source_order ~command_lines
   in
   Ok
     {
       out_dir;
       binary;
+      expected_outputs;
       fingerprint;
       status;
       report;
@@ -2093,15 +2083,8 @@ let build_runnable ~session ~workspace_root ~verbose ~manifest_path ~backend_req
   in
   let source_table = ordered_source_table description.prepared_sources in
   let display_name = runnable.name ^ Manifest.package_suffix runnable.package_path in
-  let ordered_prepared = ordered_prepared_sources source_table description.source_order in
-  let expected_outputs =
-    List.concat_map
-      (expected_prepared_source_outputs ~stem_prefix:description.stem_prefix backend
-         description.out_dir)
-      ordered_prepared
-    @ [ description.binary ]
-  in
-  prune_stale_build_outputs ~out_dir:description.out_dir ~expected_outputs;
+  prune_stale_build_outputs ~out_dir:description.out_dir
+    ~expected_outputs:description.expected_outputs;
   if not (Explain.needs_rebuild description.status.Explain.build_status) then (
     write_target_report description.out_dir description.report description.json_report;
     print_endline

@@ -69,6 +69,45 @@ let cases =
               "current explain should report the explicit backend request";
             assert_string_contains ~needle:"selected-backend: bytecode" explain.output
               "current explain should plan commands for the requested backend") );
+    ( "lists expected executable outputs for a target whose main module matches its name",
+      fun () ->
+        with_temp_dir "wadi-explain-expected-outputs" (fun workspace ->
+            write_manifest workspace
+              {|
+workspace = "demo"
+version = 1
+
+[library.core]
+dir = "src"
+modules = ["core"]
+
+[executable.ocaml_to_vapor]
+dir = "src"
+main = "ocaml_to_vapor"
+deps = ["core"]
+|};
+            write_workspace_file workspace "src/core.ml" {|let message = "ok"|};
+            write_workspace_file workspace "src/ocaml_to_vapor.ml"
+              {|let () = print_endline Core.message|};
+            let explain =
+              run_wadi ~cwd:workspace
+                [ "explain"; "--current"; "ocaml_to_vapor" ]
+            in
+            assert_int_equal 0 explain.status
+              "current explain should succeed for executable targets";
+            let out_dir =
+              Layout.executable_out_dir workspace "ocaml_to_vapor" |> Fs.realpath
+            in
+            assert_string_contains ~needle:"Expected-outputs:" explain.output
+              "current explain should show the exact output files it is accounting for";
+            assert_string_contains
+              ~needle:("- " ^ Filename.concat out_dir "ocaml_to_vapor.cmx")
+              explain.output
+              "current explain should list the executable compilation object path";
+            assert_string_contains
+              ~needle:("- " ^ Filename.concat out_dir "ocaml_to_vapor.o")
+              explain.output
+              "current explain should list the native object file path") );
     ( "rejects explicit backend selection without current explain",
       fun () ->
         with_fixture "hello" (fun workspace ->

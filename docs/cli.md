@@ -33,7 +33,7 @@ Compile libraries, executables, and tests into predictable artifact roots.
 
 Usage:
 
-`wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--verbose] [TARGET ...]`
+`wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--locked | --warn-locked] [--keep-going] [-j N] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
@@ -41,6 +41,7 @@ Options:
 - `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
 - `--locked`: Require wadi.lock to match the current manifest, recorded toolchain facts, and resolved package paths before continuing.
 - `--warn-locked`: Warn when wadi.lock is missing or stale against the current manifest, toolchain facts, or resolved package paths, but continue with the build or install.
+- `--keep-going`: Continue building remaining targets after a failure instead of stopping at the first error.
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
@@ -48,6 +49,7 @@ Examples:
 - `wadi build`
 - `wadi build hello`
 - `wadi build --locked hello`
+- `wadi build --keep-going`
 - `wadi build --workspace examples/hello --profile release --verbose`
 
 ## status
@@ -210,19 +212,20 @@ Build and execute declared test targets with a direct failure summary.
 
 Usage:
 
-`wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]`
+`wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [-j N] [--verbose] [TARGET ...]`
 
 Options:
 - `--workspace DIR`: Read the workspace manifest from DIR.
 - `--profile NAME`: Select the workspace profile to resolve and build.
 - `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
+- `-j N, --jobs N`: Run up to N test binaries concurrently (default: number of CPUs).
 - `--verbose, -v`: Print detailed process execution as commands run.
 - `--help`: Print command-specific usage text.
 
 Examples:
 - `wadi test`
 - `wadi test unit`
-- `wadi test unit integration`
+- `wadi test -j 8 unit integration`
 - `wadi test --workspace examples/hello --profile ci --verbose`
 
 ## bench
@@ -518,6 +521,41 @@ Options:
 Examples:
 - `wadi update-homebrew-tap --tap-dir ../homebrew-wadi --formula Formula/wadi.rb --commit`
 - `wadi update-homebrew-tap --tap-dir ../homebrew-wadi --source-archive dist/wadi-0.1.0-source.tar.gz --commit --push`
+
+## format
+
+Format OCaml source files in the workspace with ocamlformat.
+
+Usage:
+
+`wadi format [--workspace DIR] [--check]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--check`: Check formatting without modifying files. Exit 1 if any file would change.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `wadi format`
+- `wadi format --check`
+
+## lint
+
+Check OCaml sources for warnings and style issues.
+
+Usage:
+
+`wadi lint [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode]`
+
+Options:
+- `--workspace DIR`: Read the workspace manifest from DIR.
+- `--profile NAME`: Select the workspace profile to resolve and build.
+- `--backend auto|native|bytecode`: Choose the compiler backend or let wadi auto-resolve it.
+- `--help`: Print command-specific usage text.
+
+Examples:
+- `wadi lint`
+- `wadi lint --profile release`
 
 ## docs
 

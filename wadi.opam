@@ -3,7 +3,7 @@ synopsis: "Dune-free OCaml workspace toolbox"
 description: """
 wadi is a Dune-free OCaml workspace tool with cohesive subtools for build, test, run, bench, migration, install, diagnostics, and bootstrap workflows.
 """
-maintainer: ["Jef Newsom"]
+maintainer: ["Jef Newsom <noreply@github.com>"]
 authors: ["Jef Newsom"]
 homepage: ["https://github.com/improvingjef/wadi"]
 bug-reports: "https://github.com/improvingjef/wadi/issues"
