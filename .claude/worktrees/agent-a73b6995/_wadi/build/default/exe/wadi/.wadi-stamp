@@ -1,0 +1,26 @@
+compiler 5.4.0
+backend native
+profile default
+manifest 4933c2aeb2c61fefda41ec4bcad16f5d
+kind executable
+target wadi
+dir src
+main main
+module tester
+module cli
+tool ocamlc ocamlc
+tool ocamlopt ocamlopt
+tool ocamldep ocamldep
+tool ocamlfind ocamlfind
+tool stdlib /Users/jef/.opam/5.4.0/lib/ocaml
+tool unix /Users/jef/.opam/5.4.0/lib/ocaml/unix
+package unix /Users/jef/.opam/5.4.0/lib/ocaml/unix
+profile default
+sandbox target
+ml src/tester.ml f8489644d31244f91f2bb81d8724a15a
+mli src/tester.mli missing
+ml src/cli.ml ae910c3de2f0a941595e3c59b3277aee
+mli src/cli.mli missing
+ml src/main.ml ae4f12ce30ac0eac7c684210d60a136d
+mli src/main.mli missing
+dep wadi_core 72b8598770fde5b79d1ac37771dbf2c5

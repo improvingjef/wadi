@@ -1,0 +1,258 @@
+# Manifest Reference
+
+This is the working `wadi.toml` reference for the features currently shipped in
+the repo.
+
+## Top Level
+
+```toml
+workspace = "demo"              # optional
+version = 1                     # optional, defaults to 1
+members = ["packages/core"]     # optional
+```
+
+`members` entries are workspace-relative directories that contain their own
+`wadi.toml`.
+
+## Watch
+
+```toml
+[watch]
+include = ["lib/**", "app/**"]
+ignore = ["vendor/**", "docs/**"]
+```
+
+Rules:
+
+- `include` narrows `wadi watch` to matching paths when present.
+- `ignore` adds workspace-wide ignore globs on top of the built-in `.git`,
+  `_wadi`, and `_bootstrap` exclusions.
+- Command-line `--include` and `--ignore` flags append to the persisted watch
+  globs instead of replacing them.
+- A root-level `.wadiwatchignore` file may list one ignore glob per line.
+  Blank lines and `#` comments are ignored.
+
+## Targets
+
+### Library
+
+```toml
+[library.core]
+dir = "lib"
+modules = ["alpha", "beta"]
+public_name = "demo.core"
+wrapped = true
+deps = ["base"]
+packages = ["unix", "str"]
+actions = ["generate_version"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+compile_flags = ["-principal"]
+link_flags = []
+env = ["MODE=dev"]
+sandbox = "target"
+```
+
+### Executable and Test
+
+```toml
+[executable.demo]
+dir = "app"
+main = "main"
+public_name = "demo-cli"
+modules = ["cli"]
+deps = ["core"]
+
+[test.unit]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+```
+
+### Bench
+
+```toml
+[bench.quick]
+executable = "demo"
+argv = ["--quick"]
+env = ["BENCH_MODE=quick"]
+warmup = 0
+iterations = 10
+description = "quick-path benchmark"
+```
+
+Rules:
+
+- `main` is a module stem, not a filename.
+- `modules` entries are stems only. No paths. No extensions.
+- `deps` may only reference workspace libraries.
+- Bench declarations reference executable targets by name and let `wadi bench`
+  carry per-benchmark argv, env, labels, and default warmup/iteration counts.
+- If a workspace defines `[bench.*]` sections, `wadi bench` uses those by
+  default; executable targets remain valid explicit benchmark names.
+- `public_name` controls the staged install name for libraries, `META` files, and executables.
+- `wrapped = true` generates a namespace wrapper module named after the library
+  stem, so `core` exposes `Core.Alpha`, `Core.Beta`, and so on.
+- Wrapped libraries reserve the library-name stem for the wrapper surface. Do
+  not list it in `modules` or generate it from an action.
+- A wrapped library may provide a checked-in `dir/<library>.ml` and/or
+  `dir/<library>.mli` as the wrapper implementation/interface. If no checked-in
+  `.ml` exists, wadi generates the wrapper implementation automatically.
+
+## Actions
+
+```toml
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+cwd = "."
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+checked_in_sources = ["version.ml"]
+env = ["MODE=release"]
+stdin_path = "templates/version.txt"
+stdout = "version.ml"
+sandbox = "target"
+```
+
+Multi-step variant:
+
+```toml
+[action.generate_version]
+steps = [["./scripts/copy.sh", "templates/version.txt", "version.txt"], ["./scripts/render.sh", "version.txt", "version.ml"]]
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+```
+
+Rules:
+
+- set exactly one of `argv` or `steps`
+- `argv[0]` may be a relative program path.
+- `steps` is an array of argv arrays that runs in order inside one sandbox.
+- `cwd` and `deps` are workspace-relative in the root manifest.
+- `outputs` are relative to the target directory.
+- `checked_in_sources` names a subset of `.ml` / `.mli` outputs that are
+  intentionally checked into the workspace and refreshed later with
+  `wadi promote`.
+- `stdin` feeds literal text to the action process.
+- `stdin_path` feeds a workspace-relative file to stdin and is tracked as an
+  input.
+- `stdin` and `stdin_path` are mutually exclusive.
+- for multi-step actions, `stdin` / `stdin_path` feed the first step and
+  `stdout` redirects the final step
+- `stdout` redirects process stdout into one declared output path without
+  forcing a shell wrapper.
+- If an output is `.ml` or `.mli`, it may not collide with checked-in source in
+  the target directory unless it is listed in `checked_in_sources`.
+- Checked-in generated sources still build from the generated copy under
+  `_wadi`; `wadi build` does not silently rewrite the workspace snapshot.
+- `sandbox = "workspace"` copies the workspace into the sandbox; `target`
+  limits materialization to the target tree plus declared tool inputs.
+
+## Preprocessors
+
+```toml
+[preprocess.expand]
+argv = ["./scripts/expand.sh"]
+cwd = "scripts"
+env = ["MODE=pre"]
+stdin_path = "templates/banner.txt"
+deps = ["templates/banner.txt"]
+```
+
+Preprocessors are stdin/stdout transforms applied in declared order. `stdin_path`
+lets a preprocessor read from a workspace file instead of the original source
+text, which is useful when migrating dune `with-stdin-from` forms without
+falling back to `sh -c`.
+
+Why `deps` matters:
+
+- they are fingerprinted for incremental rebuilds
+- they show up in `wadi explain`
+- missing auxiliary files fail early with a direct error
+
+## PPX Tools
+
+```toml
+[ppx.rewrite]
+argv = ["./ppx/rewrite.exe"]
+deps = ["ppx/config.txt"]
+```
+
+PPX tools are passed to the compiler with `-ppx`. Their declared `deps` are
+tracked the same way preprocessor inputs are.
+
+## Defaults and Profiles
+
+```toml
+[defaults]
+profile = "dev"
+actions = ["generate_version"]
+preprocess = ["expand"]
+ppx = ["rewrite"]
+compile_flags = ["-principal"]
+env = ["MODE=default"]
+sandbox = "workspace"
+
+[profile.release]
+compile_flags = ["-O3"]
+env = ["MODE=release"]
+
+[profile.release.executable.demo]
+compile_flags = ["-unsafe"]
+link_flags = ["-custom"]
+env = ["MODE=demo"]
+sandbox = "target"
+```
+
+Merge order:
+
+1. workspace defaults
+2. target-local settings
+3. profile settings
+4. profile target override
+
+List-valued tool references are deduplicated in declaration order. Environment
+bindings merge by name, with later scopes winning.
+
+## Member Manifests
+
+Member manifests may define:
+
+- `library.*`
+- `executable.*`
+- `test.*`
+- `action.*`
+- `preprocess.*`
+- `ppx.*`
+
+Member manifests may not define workspace-wide sections such as `defaults` or
+`profile.*`.
+
+They also may not define `[watch]`; watch policy belongs to the root workspace
+manifest.
+
+Package-local behavior:
+
+- target `dir` values are rebased under the member path
+- member action/preprocess/ppx program paths, `cwd`, and `deps` are rebased
+- a target resolves tools from its own member package first, then falls back to
+  the root manifest
+
+Example member manifest:
+
+```toml
+[action.generate_version]
+argv = ["./scripts/generate_version.sh"]
+cwd = "."
+deps = ["templates/version.txt"]
+outputs = ["version.ml"]
+
+[library.core]
+dir = "lib"
+modules = ["core", "version"]
+actions = ["generate_version"]
+```
+
+With a member path of `packages/core`, the action program above resolves to
+`packages/core/scripts/generate_version.sh`, and `cwd = "."` resolves to
+`packages/core`.

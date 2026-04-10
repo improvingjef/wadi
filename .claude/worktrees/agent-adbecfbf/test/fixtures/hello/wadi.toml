@@ -1,0 +1,11 @@
+workspace = "hello"
+version = 1
+
+[library.greeting]
+dir = "lib"
+modules = ["greeting"]
+
+[executable.hello]
+dir = "app"
+main = "main"
+deps = ["greeting"]

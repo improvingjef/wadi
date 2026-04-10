@@ -1,0 +1,106 @@
+compiler 5.4.0
+backend native
+profile default
+manifest 4933c2aeb2c61fefda41ec4bcad16f5d
+kind library
+target wadi_core
+dir src
+module string_util
+module fs
+module process
+module toolchain
+module manifest
+module explain
+module layout
+module builder
+module actioner
+module cleaner
+module promoter
+module installer
+module deps
+module ppx_tool
+module env_report
+module graph
+module vendor
+module init
+module locker
+module migrate
+module repl
+module release_metadata
+module release_artifacts
+module packager
+module bootstrap
+module bench
+module maintenance
+module watch
+module doctor
+module status
+tool ocamlc ocamlc
+tool ocamlopt ocamlopt
+tool ocamldep ocamldep
+tool ocamlfind ocamlfind
+tool stdlib /Users/jef/.opam/5.4.0/lib/ocaml
+tool unix /Users/jef/.opam/5.4.0/lib/ocaml/unix
+package unix /Users/jef/.opam/5.4.0/lib/ocaml/unix
+profile default
+sandbox target
+ml src/string_util.ml a6f96841d332a22bab0160cb8d399c74
+mli src/string_util.mli missing
+ml src/fs.ml 8fc8de2050d84b78f108355000d1cd04
+mli src/fs.mli missing
+ml src/process.ml 2a60eedb0d8c3df35baf152708875846
+mli src/process.mli missing
+ml src/toolchain.ml 9dcf4baa7156fa6d350377e55ee1ff3b
+mli src/toolchain.mli missing
+ml src/manifest.ml a431973f07cd8dd9551a03fdf16136fa
+mli src/manifest.mli missing
+ml src/explain.ml 3ea86934c35508c2a0b056aeb538b112
+mli src/explain.mli missing
+ml src/layout.ml 13ef19352d228c0ac35db16671b7614f
+mli src/layout.mli missing
+ml src/builder.ml dae146ac9b7d4604f3fda56623576e53
+mli src/builder.mli missing
+ml src/status.ml 4c3c1e447394f91865196bad898835a2
+mli src/status.mli missing
+ml src/doctor.ml 6e8864c83a085829f92393cd8cb5b11f
+mli src/doctor.mli missing
+ml src/watch.ml aad1170ad3a258e58bb0b8eb8db2a44e
+mli src/watch.mli missing
+ml src/actioner.ml fdc60a78f33efc60f683eeb33195a980
+mli src/actioner.mli missing
+ml src/cleaner.ml d1344ffa7f818b4948a877db71ffbde8
+mli src/cleaner.mli missing
+ml src/promoter.ml a5675695cdb7eba614f2103d78e6d7b6
+mli src/promoter.mli missing
+ml src/installer.ml 72223042ab6f0a21001b1824d615684d
+mli src/installer.mli missing
+ml src/deps.ml 8422fcdced2398af7d8b36f0e01df9fd
+mli src/deps.mli missing
+ml src/ppx_tool.ml d5726eca5907ba1b80edfe36fbebf7dd
+mli src/ppx_tool.mli missing
+ml src/env_report.ml d159c1f8cf8d227e46c04a1f9ede79fd
+mli src/env_report.mli missing
+ml src/graph.ml 674981ec4a1b4e2dba71355072ba2bb7
+mli src/graph.mli missing
+ml src/vendor.ml 2645410852f8e1fbf1b810b474dc9684
+mli src/vendor.mli missing
+ml src/init.ml 3ed05adb0d78b43ef1fa6e8dff1d3e60
+mli src/init.mli missing
+ml src/locker.ml 0f17277cceefa308d199362e65097183
+mli src/locker.mli missing
+ml src/migrate.ml 85c961b577284ea7683d7cc0688f32de
+mli src/migrate.mli missing
+ml src/repl.ml 06015859d3a466197412bfa4bd6e1766
+mli src/repl.mli missing
+ml src/release_metadata.ml d0a969c900695bc8e721bae34c756ea0
+mli src/release_metadata.mli missing
+ml src/release_artifacts.ml 328b289201f93381c6b9b0c8e8bb6dd2
+mli src/release_artifacts.mli missing
+ml src/packager.ml 34fb9fe070d06621052557f21701c16d
+mli src/packager.mli missing
+ml src/maintenance.ml 7113d05623fec0106214d2f7b660246f
+mli src/maintenance.mli missing
+ml src/bootstrap.ml e2802ffda77f17b373a25ed172f35139
+mli src/bootstrap.mli missing
+ml src/bench.ml debce0d1ce9795db3da7ca5dc495905b
+mli src/bench.mli missing

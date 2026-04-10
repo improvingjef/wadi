@@ -1,0 +1,25 @@
+[
+]
+[.]
+[..]
+[library.]
+[.library.x]
+[library..x]
+dir = "unclosed string
+modules = ["unterminated
+modules = ["]
+version = "not an int"
+version = -1
+workspace = 42
+members = "not an array"
+[library.x]
+[library.x]
+dir = "/absolute/path"
+dir = "../escape"
+modules = ["has.dot"]
+modules = ["has/slash"]
+modules = [""]
+modules = ["a", "a"]
+sandbox = "invalid"
+env = ["noequals"]
+env = ["=empty_name"]

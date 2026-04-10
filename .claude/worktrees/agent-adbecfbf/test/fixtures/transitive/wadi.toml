@@ -1,0 +1,16 @@
+workspace = "transitive"
+version = 1
+
+[library.base]
+dir = "base"
+modules = ["base"]
+
+[library.mid]
+dir = "mid"
+modules = ["mid"]
+deps = ["base"]
+
+[executable.demo]
+dir = "app"
+main = "main"
+deps = ["mid"]

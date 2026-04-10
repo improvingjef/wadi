@@ -1,0 +1,11 @@
+workspace = "lexer"
+version = 1
+
+[library.lexerlib]
+dir = "lib"
+modules = ["lexer"]
+
+[executable.lexdemo]
+dir = "app"
+main = "main"
+deps = ["lexerlib"]

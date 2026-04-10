@@ -1,0 +1,101 @@
+compiler 5.4.0
+backend native
+profile default
+manifest 4933c2aeb2c61fefda41ec4bcad16f5d
+kind test
+target test_runner
+dir test
+main test_main
+module test_support
+module test_release_metadata
+module test_transforms
+module test_manifest
+module test_layout
+module test_build
+module test_clean
+module test_process
+module test_run
+module test_status
+module test_doctor
+module test_watch
+module test_bench
+module test_graph
+module test_deps
+module test_init
+module test_lock
+module test_vendor
+module test_env
+module test_migrate
+module test_repl
+module test_test
+module test_install
+module test_packaging
+module test_toolchain
+module test_explain
+module test_bootstrap
+tool ocamlc ocamlc
+tool ocamlopt ocamlopt
+tool ocamldep ocamldep
+tool ocamlfind ocamlfind
+tool stdlib /Users/jef/.opam/5.4.0/lib/ocaml
+tool unix /Users/jef/.opam/5.4.0/lib/ocaml/unix
+package unix /Users/jef/.opam/5.4.0/lib/ocaml/unix
+profile default
+sandbox target
+ml test/test_support.ml f56e9b01e932ea287e1ef4d59b10611f
+mli test/test_support.mli missing
+ml test/test_release_metadata.ml ee67bdef365b666369ed99dbb464e406
+mli test/test_release_metadata.mli missing
+ml test/test_transforms.ml 14b4d11a0541a85023406623a9b6e9ba
+mli test/test_transforms.mli missing
+ml test/test_manifest.ml c7a1b45bb88e9c443f2aea48611f643c
+mli test/test_manifest.mli missing
+ml test/test_layout.ml ff539620df875387954345c046524793
+mli test/test_layout.mli missing
+ml test/test_build.ml 5f931cbd70712fc51b87200ec629926c
+mli test/test_build.mli missing
+ml test/test_clean.ml aa80c3e6351436b1945d39395de87e66
+mli test/test_clean.mli missing
+ml test/test_process.ml a5ec8a7cd1e96b5d0b58466b48e12122
+mli test/test_process.mli missing
+ml test/test_run.ml 16a2c15c7cee7f8377cb69c8a947a7e6
+mli test/test_run.mli missing
+ml test/test_status.ml a034bf3bf90543c9bf2ce4004b88c58f
+mli test/test_status.mli missing
+ml test/test_doctor.ml 0fafbd541d6a0a8a7b8a59e35a88ccdb
+mli test/test_doctor.mli missing
+ml test/test_watch.ml 8e53babc17cc4bfe7fe7956f0602d42e
+mli test/test_watch.mli missing
+ml test/test_bench.ml cc5dcac72031b636e0d2b93e8a46ed9e
+mli test/test_bench.mli missing
+ml test/test_graph.ml 182b608ca8a48b5f0954d0cc3ff0141d
+mli test/test_graph.mli missing
+ml test/test_deps.ml 8724745b1d9c6ef2fdd15e63fd230d21
+mli test/test_deps.mli missing
+ml test/test_init.ml f22eb65d5d9765ba547a092ca3f367b1
+mli test/test_init.mli missing
+ml test/test_lock.ml a4ed9699e7d9a7b1c9d4518cd6da7699
+mli test/test_lock.mli missing
+ml test/test_vendor.ml be12367ef6a97e92a35db479daab1f3c
+mli test/test_vendor.mli missing
+ml test/test_env.ml 040cd62419202b9e1b9bd7e99f4996d8
+mli test/test_env.mli missing
+ml test/test_migrate.ml 8e74cf1d4472404241d5405a27d0c8f2
+mli test/test_migrate.mli missing
+ml test/test_repl.ml 9eab532340821ce53028ab43a71501a2
+mli test/test_repl.mli missing
+ml test/test_test.ml f578a1f9f2c7a76e6d14a1c455b56f17
+mli test/test_test.mli missing
+ml test/test_install.ml 4c45cb4c5de0388332101416aa429b9e
+mli test/test_install.mli missing
+ml test/test_packaging.ml 8815f5e0d492b7dba264750586ed012e
+mli test/test_packaging.mli missing
+ml test/test_toolchain.ml c705a6b43d889042fa2f05abc9011b9f
+mli test/test_toolchain.mli missing
+ml test/test_explain.ml 14a2608f0b0f05f43db7551e2975e32a
+mli test/test_explain.mli missing
+ml test/test_bootstrap.ml c28eea757106c2992a713950c66ea0a3
+mli test/test_bootstrap.mli missing
+ml test/test_main.ml 3de1524da4d42c92fa33a3ee7fde948d
+mli test/test_main.mli missing
+dep wadi_core cb53bfa35bf140ca57415b9f8e6b11af

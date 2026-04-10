@@ -1,0 +1,41 @@
+Target: wadi
+Kind: executable
+Package-path: root
+Profile: default
+State: rebuilt
+Artifact: /Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/wadi
+Output-dir: /Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi
+
+Reasons:
+- previous build stamp missing
+
+Resolution:
+- backend-request: auto
+- selected-backend: native
+- backend-selection: auto selected native because ocamlopt is available
+- compiler-version: 5.4.0
+- compiler: /Users/jef/.opam/5.4.0/bin/ocamlopt.opt (configured as ocamlopt)
+- ocamldep: /Users/jef/.opam/5.4.0/bin/ocamldep.opt (configured as ocamldep)
+- stdlib: /Users/jef/.opam/5.4.0/lib/ocaml
+- unix-library-dir: /Users/jef/.opam/5.4.0/lib/ocaml/unix
+- actions: none
+- preprocessors: none
+- ppx: none
+- ocamlfind: /Users/jef/.opam/5.4.0/bin/ocamlfind (configured as ocamlfind)
+- package: unix -> /Users/jef/.opam/5.4.0/lib/ocaml/unix
+
+Include-dirs:
+- /Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/lib/wadi_core
+- /Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi
+
+Module-order:
+- tester
+- cli
+- main
+
+Commands:
+- module-order: 'ocamlfind' 'ocamldep' '-package' 'unix' '-sort' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/src/tester.ml' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/src/cli.ml'
+- compile tester.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi' '-o' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/tester.cmx' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/src/tester.ml'
+- compile cli.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi' '-o' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/cli.cmx' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/src/cli.ml'
+- compile main.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi' '-o' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/main.cmx' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/src/main.ml'
+- link: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-linkpkg' '-o' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/wadi' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/lib/wadi_core/libwadi_core.cmxa' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/tester.cmx' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/cli.cmx' '/Users/jef/dev/oasis/.claude/worktrees/agent-a73b6995/_wadi/build/default/exe/wadi/main.cmx'

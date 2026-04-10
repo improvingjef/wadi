@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "package": "wadi",
+  "version": "0.1.0",
+  "tag": "v0.1.0",
+  "base_url": "https://github.com/improvingjef/wadi/releases/download/v0.1.0",
+  "assets": [
+    {
+      "name": "wadi-0.1.0-source.tar.gz",
+      "kind": "source_archive",
+      "url": "https://github.com/improvingjef/wadi/releases/download/v0.1.0/wadi-0.1.0-source.tar.gz",
+      "sha256": "0834b4efd8e0eb22c54d8ca635fad844e4c730604e59a561f331b54ba0513aaa",
+      "size_bytes": 7784678
+    },
+    {
+      "name": "wadi.opam",
+      "kind": "opam_metadata",
+      "url": "https://github.com/improvingjef/wadi/releases/download/v0.1.0/wadi.opam",
+      "sha256": "deade4f10df60c80d5259b59a10299d8b0a8e9fc026090a220305a3400373892",
+      "size_bytes": 745
+    },
+    {
+      "name": "wadi.rb",
+      "kind": "homebrew_formula",
+      "url": "https://github.com/improvingjef/wadi/releases/download/v0.1.0/wadi.rb",
+      "sha256": "7cadd00d2891c58ee018109e06654cf0da4acacc5113577e3b0265369d9f4e7a",
+      "size_bytes": 664
+    }
+  ]
+}

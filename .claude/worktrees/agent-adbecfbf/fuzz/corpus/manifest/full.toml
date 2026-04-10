@@ -1,0 +1,49 @@
+workspace = "example"
+version = 1
+
+[defaults]
+compile_flags = ["-w", "+a-4"]
+sandbox = "target"
+
+[library.core]
+dir = "lib"
+modules = ["engine", "types", "util"]
+packages = ["unix", "str"]
+deps = []
+env = ["DEBUG=1"]
+
+[library.db]
+dir = "db"
+modules = ["schema", "query"]
+deps = ["core"]
+packages = ["sqlite3"]
+
+[executable.app]
+dir = "bin"
+main = "main"
+modules = ["cli_args"]
+deps = ["core", "db"]
+packages = ["unix"]
+
+[test.unit]
+dir = "test"
+main = "test_main"
+deps = ["core"]
+
+[action.codegen]
+argv = ["echo", "hello"]
+cwd = "gen"
+outputs = ["generated.ml"]
+env = ["MODE=gen"]
+
+[profile.release]
+compile_flags = ["-O2", "-unbox-closures"]
+link_flags = ["-noassert"]
+
+[profile.release.executable.app]
+compile_flags = ["-O3"]
+env = ["MODE=prod"]
+
+[watch]
+include = ["src/**/*.ml", "lib/**/*.ml"]
+exclude = ["_wadi", ".git"]

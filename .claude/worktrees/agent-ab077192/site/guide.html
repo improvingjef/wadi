@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guide &mdash; Wadi</title>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0a0a0f;
+  color: #e8dcc8;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+a { color: #e0a84c; text-decoration: none; transition: color .2s; }
+a:hover { color: #f5c96a; }
+code, pre {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+code {
+  background: rgba(224,168,76,.08);
+  border: 1px solid rgba(224,168,76,.12);
+  border-radius: 4px;
+  padding: .15em .4em;
+  font-size: .9em;
+  color: #e0a84c;
+}
+
+/* ===== NAV ===== */
+nav {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(10,10,15,.7);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(224,168,76,.08);
+}
+nav .logo {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: flex;
+  align-items: center;
+  gap: .5em;
+}
+nav .logo svg { width: 1.4em; height: 1.4em; }
+nav .nav-links { display: flex; gap: 1.5rem; }
+nav .nav-links a {
+  color: #8a7a66;
+  font-size: .9rem;
+  font-weight: 500;
+  letter-spacing: .03em;
+  transition: color .2s;
+}
+nav .nav-links a:hover { color: #e0a84c; }
+nav .nav-links a.active { color: #e0a84c; }
+
+/* ===== LAYOUT ===== */
+.guide-layout {
+  display: flex;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-top: 5rem;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  position: sticky;
+  top: 5rem;
+  width: 240px;
+  flex-shrink: 0;
+  height: calc(100vh - 5rem);
+  overflow-y: auto;
+  padding: 2rem 1.5rem 2rem 2rem;
+  border-right: 1px solid rgba(224,168,76,.08);
+}
+.sidebar h4 {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .15em;
+  color: #c4813a;
+  font-weight: 700;
+  margin: 1.5rem 0 .5rem;
+}
+.sidebar h4:first-child { margin-top: 0; }
+.sidebar a {
+  display: block;
+  padding: .3em 0;
+  color: #8a7a66;
+  font-size: .85rem;
+  transition: color .2s;
+}
+.sidebar a:hover { color: #e0a84c; }
+
+/* Content */
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 2rem 2rem 6rem 3rem;
+}
+
+/* ===== TYPOGRAPHY ===== */
+.content h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #f0e0c8;
+  margin-bottom: .5rem;
+}
+.content h1 span {
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.content .subtitle {
+  color: #8a7a66;
+  font-size: 1.1rem;
+  margin-bottom: 3rem;
+}
+.content h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #f0e0c8;
+  margin: 3rem 0 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(224,168,76,.08);
+}
+.content h2:first-of-type { border-top: none; margin-top: 0; }
+.content h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #e0a84c;
+  margin: 2rem 0 .75rem;
+}
+.content p {
+  color: #c4a67a;
+  margin-bottom: 1rem;
+  max-width: 700px;
+}
+.content ul, .content ol {
+  color: #c4a67a;
+  margin-bottom: 1rem;
+  padding-left: 1.5em;
+  max-width: 700px;
+}
+.content li { margin-bottom: .4em; }
+
+/* ===== CODE BLOCKS ===== */
+.code-block {
+  background: #0d0b08;
+  border: 1px solid rgba(224,168,76,.12);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  max-width: 750px;
+}
+.code-header {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: .6rem 1.25rem;
+  background: rgba(224,168,76,.05);
+  border-bottom: 1px solid rgba(224,168,76,.08);
+  font-size: .78rem;
+  color: #8a7a66;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+.code-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.code-dot.r { background: #e05252; }
+.code-dot.y { background: #e0a84c; }
+.code-dot.g { background: #52c46a; }
+.code-block pre {
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-size: .85rem;
+  line-height: 1.6;
+  color: #c4a67a;
+}
+
+/* Terminal blocks */
+.terminal {
+  background: #0a0908;
+  border: 1px solid rgba(224,168,76,.12);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  max-width: 750px;
+}
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: .5rem 1rem;
+  background: rgba(224,168,76,.04);
+  border-bottom: 1px solid rgba(224,168,76,.08);
+}
+.terminal-bar .dot { width: 9px; height: 9px; border-radius: 50%; }
+.terminal-bar .dot:nth-child(1) { background: #e05252; }
+.terminal-bar .dot:nth-child(2) { background: #e0a84c; }
+.terminal-bar .dot:nth-child(3) { background: #52c46a; }
+.terminal pre {
+  padding: 1.25rem;
+  font-size: .85rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  color: #c4a67a;
+}
+.terminal .prompt { color: #e0a84c; }
+.terminal .output { color: #7a6a5a; }
+.terminal .success { color: #52c46a; }
+
+/* Syntax highlighting */
+.kw { color: #e0a84c; }
+.str { color: #7ec87e; }
+.cmt { color: #5a5040; font-style: italic; }
+.fn { color: #6ab0e0; }
+.op { color: #8a7a66; }
+
+/* ===== TABLES ===== */
+table {
+  width: 100%;
+  max-width: 750px;
+  border-collapse: collapse;
+  margin-bottom: 1.5rem;
+  font-size: .88rem;
+}
+th, td {
+  padding: .7rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(224,168,76,.08);
+}
+th {
+  color: #8a7a66;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: .72rem;
+  letter-spacing: .1em;
+}
+td { color: #c4a67a; }
+td code { font-size: .82rem; }
+
+/* ===== CALLOUT ===== */
+.callout {
+  background: rgba(224,168,76,.05);
+  border-left: 3px solid #c4813a;
+  border-radius: 0 8px 8px 0;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  max-width: 750px;
+}
+.callout p { margin-bottom: 0; color: #c4a67a; font-size: .92rem; }
+.callout strong { color: #e0a84c; }
+
+/* ===== DIVIDER ===== */
+.sand-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(224,168,76,.15), transparent);
+  margin: 0;
+  max-width: 750px;
+}
+
+/* ===== FOOTER ===== */
+footer {
+  text-align: center;
+  padding: 3rem 2rem;
+  border-top: 1px solid rgba(224,168,76,.08);
+  color: #5a5040;
+  font-size: .85rem;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  .content { padding: 2rem 1.5rem 4rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="index.html" class="logo"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="palm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c96a"/><stop offset="100%" stop-color="#c4813a"/></linearGradient></defs><path fill="url(#palm-grad)" d="M34 60 C34 60 33 42 31 34 C30 30 28 26 27 24 C24 22 16 20 6 22 C12 18 20 17 26 20 C22 16 14 8 4 6 C14 6 22 12 27 20 C25 14 20 6 16 2 C22 6 26 14 28 22 C32 16 40 8 50 8 C42 12 34 18 30 24 C34 18 42 12 52 14 C44 16 34 22 30 26 C36 20 44 16 54 18 C46 20 36 24 31 28 C32 30 34 42 35 52 L36 60 C36 60 40 62 42 62 C38 63 30 63 26 62 C28 62 32 60 34 60Z"/></svg>Wadi</a>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="guide.html" class="active">Guide</a>
+  </div>
+</nav>
+
+<div class="guide-layout">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <h4>Getting Started</h4>
+  <a href="#first-project">Your First Project</a>
+  <a href="#project-with-deps">Adding Dependencies</a>
+  <a href="#testing">Writing Tests</a>
+
+  <h4>Manifest Reference</h4>
+  <a href="#manifest-overview">Overview</a>
+  <a href="#libraries">Libraries</a>
+  <a href="#executables">Executables</a>
+  <a href="#tests">Tests</a>
+  <a href="#actions">Actions</a>
+  <a href="#profiles">Profiles</a>
+  <a href="#defaults">Defaults</a>
+
+  <h4>Commands</h4>
+  <a href="#cmd-build">build</a>
+  <a href="#cmd-run">run</a>
+  <a href="#cmd-test">test</a>
+  <a href="#cmd-clean">clean</a>
+  <a href="#cmd-explain">explain</a>
+  <a href="#cmd-install">install</a>
+  <a href="#cmd-toolchain">toolchain</a>
+  <a href="#cmd-watch">watch</a>
+  <a href="#cmd-init">init</a>
+  <a href="#cmd-doctor">doctor</a>
+  <a href="#cmd-lock">lock</a>
+  <a href="#cmd-graph">graph</a>
+  <a href="#cmd-deps">deps</a>
+  <a href="#cmd-env">env</a>
+  <a href="#cmd-repl">repl</a>
+  <a href="#cmd-migrate">migrate</a>
+  <a href="#cmd-completion">completion</a>
+  <a href="#cmd-docs">docs</a>
+
+  <h4>Topics</h4>
+  <a href="#incremental">Incremental Builds</a>
+  <a href="#toolchain-resolution">Toolchain Resolution</a>
+  <a href="#workspaces">Multi-Package Workspaces</a>
+</aside>
+
+<!-- CONTENT -->
+<div class="content">
+
+<h1>The Wadi <span>Guide</span></h1>
+<p class="subtitle">Everything you need to build OCaml projects with wadi.</p>
+
+<!-- ============================================================ -->
+<h2 id="first-project">Your First Project</h2>
+
+<p>Create a directory with a library and an executable. You need two things: source files and an <code>wadi.toml</code> manifest.</p>
+
+<h3>Project structure</h3>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  project layout
+</div>
+<pre>myproject/
+  wadi.toml
+  lib/
+    greeting.ml
+  app/
+    main.ml</pre>
+</div>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  lib/greeting.ml
+</div>
+<pre><span class="kw">let</span> <span class="fn">hello</span> name <span class="op">=</span>
+  Printf.printf <span class="str">"Hello, %s!\n"</span> name</pre>
+</div>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  app/main.ml
+</div>
+<pre><span class="kw">let</span> () <span class="op">=</span>
+  Greeting.hello <span class="str">"world"</span></pre>
+</div>
+
+<h3>The manifest</h3>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml
+</div>
+<pre><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"myproject"</span>
+<span class="kw">version</span>   <span class="op">=</span> 1
+
+<span class="op">[</span><span class="kw">library.greeting</span><span class="op">]</span>
+<span class="fn">dir</span>     <span class="op">=</span> <span class="str">"lib"</span>
+<span class="fn">modules</span> <span class="op">=</span> [<span class="str">"greeting"</span>]
+
+<span class="op">[</span><span class="kw">executable.hello</span><span class="op">]</span>
+<span class="fn">dir</span>  <span class="op">=</span> <span class="str">"app"</span>
+<span class="fn">main</span> <span class="op">=</span> <span class="str">"main"</span>
+<span class="fn">deps</span> <span class="op">=</span> [<span class="str">"greeting"</span>]</pre>
+</div>
+
+<h3>Build and run</h3>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi build
+<span class="success">Built library greeting  &rarr; _wadi/build/default/lib/greeting/libgreeting.cmxa</span>
+<span class="success">Built executable hello  &rarr; _wadi/build/default/exe/hello/hello</span>
+
+<span class="prompt">$</span> wadi run
+<span class="output">Hello, world!</span></pre>
+</div>
+
+<p>That's it. Wadi resolved the dependency, inferred module compilation order, and built everything. The second time you run <code>wadi build</code>, it will skip both targets because nothing changed.</p>
+
+<!-- ============================================================ -->
+<h2 id="project-with-deps">Adding Dependencies</h2>
+
+<p>Libraries can depend on other libraries and on external packages installed via opam.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml
+</div>
+<pre><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"server"</span>
+<span class="kw">version</span>   <span class="op">=</span> 1
+
+<span class="op">[</span><span class="kw">library.core</span><span class="op">]</span>
+<span class="fn">dir</span>      <span class="op">=</span> <span class="str">"lib"</span>
+<span class="fn">modules</span>  <span class="op">=</span> [<span class="str">"config"</span>, <span class="str">"router"</span>, <span class="str">"handler"</span>]
+<span class="fn">packages</span> <span class="op">=</span> [<span class="str">"unix"</span>]
+
+<span class="op">[</span><span class="kw">library.db</span><span class="op">]</span>
+<span class="fn">dir</span>      <span class="op">=</span> <span class="str">"db"</span>
+<span class="fn">modules</span>  <span class="op">=</span> [<span class="str">"schema"</span>, <span class="str">"query"</span>]
+<span class="fn">deps</span>     <span class="op">=</span> [<span class="str">"core"</span>]
+<span class="fn">packages</span> <span class="op">=</span> [<span class="str">"sqlite3"</span>]
+
+<span class="op">[</span><span class="kw">executable.server</span><span class="op">]</span>
+<span class="fn">dir</span>  <span class="op">=</span> <span class="str">"bin"</span>
+<span class="fn">main</span> <span class="op">=</span> <span class="str">"main"</span>
+<span class="fn">deps</span> <span class="op">=</span> [<span class="str">"db"</span>]</pre>
+</div>
+
+<div class="callout">
+<p><strong>Transitive resolution.</strong> The <code>server</code> executable depends on <code>db</code>, which depends on <code>core</code>. Wadi resolves the full closure automatically. External packages propagate too&mdash;<code>server</code> gets <code>unix</code> and <code>sqlite3</code> without declaring them.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="testing">Writing Tests</h2>
+
+<p>Test targets work like executables but are discovered by <code>wadi test</code>.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml (add to the server project)
+</div>
+<pre><span class="op">[</span><span class="kw">test.unit</span><span class="op">]</span>
+<span class="fn">dir</span>  <span class="op">=</span> <span class="str">"test"</span>
+<span class="fn">main</span> <span class="op">=</span> <span class="str">"test_main"</span>
+<span class="fn">deps</span> <span class="op">=</span> [<span class="str">"core"</span>, <span class="str">"db"</span>]
+
+<span class="op">[</span><span class="kw">test.integration</span><span class="op">]</span>
+<span class="fn">dir</span>  <span class="op">=</span> <span class="str">"test"</span>
+<span class="fn">main</span> <span class="op">=</span> <span class="str">"test_integration"</span>
+<span class="fn">deps</span> <span class="op">=</span> [<span class="str">"db"</span>]</pre>
+</div>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi test
+<span class="success">ok - unit</span>
+<span class="success">ok - integration</span>
+<span class="success">2 of 2 tests passed</span>
+
+<span class="prompt">$</span> wadi test unit           <span class="output"># run just one</span>
+<span class="success">ok - unit</span>
+<span class="success">1 of 1 tests passed</span></pre>
+</div>
+
+<p>Tests exit 0 on success, 1 if any test fails. Each test binary is built before execution.</p>
+
+<!-- ============================================================ -->
+<h2 id="manifest-overview">Manifest Reference</h2>
+
+<p>The manifest is a single <code>wadi.toml</code> file at your project root. It uses a subset of TOML with sections, strings, arrays, and integers.</p>
+
+<h3>Top-level fields</h3>
+
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>workspace</code></td><td>String</td><td>Project name (used in install metadata)</td></tr>
+  <tr><td><code>version</code></td><td>Integer</td><td>Manifest version. Must be <code>1</code>.</td></tr>
+  <tr><td><code>members</code></td><td>Array</td><td>Paths to member packages (multi-package workspaces)</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="libraries">Libraries</h2>
+
+<p>A library is a collection of modules that can be depended on by other targets.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  [library.NAME]
+</div>
+<pre><span class="op">[</span><span class="kw">library.mylib</span><span class="op">]</span>
+<span class="fn">dir</span>           <span class="op">=</span> <span class="str">"src"</span>             <span class="cmt"># required: source directory</span>
+<span class="fn">modules</span>       <span class="op">=</span> [<span class="str">"core"</span>, <span class="str">"util"</span>] <span class="cmt"># required: module file stems</span>
+<span class="fn">deps</span>          <span class="op">=</span> [<span class="str">"other_lib"</span>]    <span class="cmt"># optional: workspace library deps</span>
+<span class="fn">packages</span>      <span class="op">=</span> [<span class="str">"unix"</span>]         <span class="cmt"># optional: external ocamlfind packages</span>
+<span class="fn">actions</span>       <span class="op">=</span> [<span class="str">"codegen"</span>]      <span class="cmt"># optional: actions to run before build</span>
+<span class="fn">preprocess</span>    <span class="op">=</span> [<span class="str">"pp"</span>]           <span class="cmt"># optional: text preprocessors</span>
+<span class="fn">ppx</span>           <span class="op">=</span> [<span class="str">"ppx_deriving"</span>] <span class="cmt"># optional: PPX rewriters</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-w"</span>, <span class="str">"-32"</span>]   <span class="cmt"># optional: compiler flags</span>
+<span class="fn">link_flags</span>    <span class="op">=</span> [<span class="str">"-lm"</span>]          <span class="cmt"># optional: linker flags</span>
+<span class="fn">env</span>           <span class="op">=</span> [<span class="str">"DEBUG=1"</span>]      <span class="cmt"># optional: environment variables</span>
+<span class="fn">sandbox</span>       <span class="op">=</span> <span class="str">"target"</span>         <span class="cmt"># optional: "target" or "workspace"</span></pre>
+</div>
+
+<p>Module names are file stems without extensions. <code>"core"</code> expects <code>core.ml</code> (and optionally <code>core.mli</code>) in the source directory. Module compilation order is inferred automatically via <code>ocamldep</code>.</p>
+
+<!-- ============================================================ -->
+<h2 id="executables">Executables</h2>
+
+<p>An executable has an entry-point module and optionally additional modules.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  [executable.NAME]
+</div>
+<pre><span class="op">[</span><span class="kw">executable.myapp</span><span class="op">]</span>
+<span class="fn">dir</span>     <span class="op">=</span> <span class="str">"bin"</span>           <span class="cmt"># required: source directory</span>
+<span class="fn">main</span>    <span class="op">=</span> <span class="str">"main"</span>          <span class="cmt"># required: entry module stem</span>
+<span class="fn">modules</span> <span class="op">=</span> [<span class="str">"helpers"</span>]     <span class="cmt"># optional: additional modules</span>
+<span class="fn">deps</span>    <span class="op">=</span> [<span class="str">"mylib"</span>]       <span class="cmt"># optional: library dependencies</span>
+<span class="fn">packages</span> <span class="op">=</span> [<span class="str">"unix"</span>]       <span class="cmt"># optional: external packages</span></pre>
+</div>
+
+<p>The <code>main</code> module is compiled last and linked as the program entry point. It must not appear in the <code>modules</code> list.</p>
+
+<!-- ============================================================ -->
+<h2 id="tests">Tests</h2>
+
+<p>Tests use the same structure as executables. The only difference is that <code>wadi test</code> discovers and runs them.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  [test.NAME]
+</div>
+<pre><span class="op">[</span><span class="kw">test.unit</span><span class="op">]</span>
+<span class="fn">dir</span>      <span class="op">=</span> <span class="str">"test"</span>
+<span class="fn">main</span>     <span class="op">=</span> <span class="str">"test_main"</span>
+<span class="fn">deps</span>     <span class="op">=</span> [<span class="str">"mylib"</span>]
+<span class="fn">packages</span> <span class="op">=</span> [<span class="str">"alcotest"</span>]</pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="actions">Actions</h2>
+
+<p>Actions are code generation steps that run before compilation. Use them for lexer/parser generators, protobuf compilers, or any tool that produces <code>.ml</code> files.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml
+</div>
+<pre><span class="op">[</span><span class="kw">action.lexer</span><span class="op">]</span>
+<span class="fn">argv</span>    <span class="op">=</span> [<span class="str">"ocamllex"</span>, <span class="str">"lexer.mll"</span>]
+<span class="fn">cwd</span>     <span class="op">=</span> <span class="str">"src"</span>
+<span class="fn">outputs</span> <span class="op">=</span> [<span class="str">"lexer.ml"</span>]
+
+<span class="op">[</span><span class="kw">action.parser</span><span class="op">]</span>
+<span class="fn">argv</span>    <span class="op">=</span> [<span class="str">"menhir"</span>, <span class="str">"parser.mly"</span>]
+<span class="fn">cwd</span>     <span class="op">=</span> <span class="str">"src"</span>
+<span class="fn">outputs</span> <span class="op">=</span> [<span class="str">"parser.ml"</span>, <span class="str">"parser.mli"</span>]
+
+<span class="op">[</span><span class="kw">library.lang</span><span class="op">]</span>
+<span class="fn">dir</span>     <span class="op">=</span> <span class="str">"src"</span>
+<span class="fn">modules</span> <span class="op">=</span> [<span class="str">"lexer"</span>, <span class="str">"parser"</span>, <span class="str">"ast"</span>, <span class="str">"eval"</span>]
+<span class="fn">actions</span> <span class="op">=</span> [<span class="str">"lexer"</span>, <span class="str">"parser"</span>]</pre>
+</div>
+
+<p>Actions run in a sandbox. Declared outputs are copied back to the source tree. If an action's inputs haven't changed, the action is skipped on subsequent builds.</p>
+
+<table>
+  <tr><th>Field</th><th>Required</th><th>Description</th></tr>
+  <tr><td><code>argv</code></td><td>Yes</td><td>Command and arguments</td></tr>
+  <tr><td><code>outputs</code></td><td>Yes</td><td>Files the action produces (relative to cwd)</td></tr>
+  <tr><td><code>cwd</code></td><td>No</td><td>Working directory (defaults to target dir)</td></tr>
+  <tr><td><code>deps</code></td><td>No</td><td>Additional input files to track</td></tr>
+  <tr><td><code>env</code></td><td>No</td><td>Environment variables (<code>NAME=value</code>)</td></tr>
+  <tr><td><code>stdin</code></td><td>No</td><td>File to pipe as standard input</td></tr>
+  <tr><td><code>sandbox</code></td><td>No</td><td><code>"target"</code> or <code>"workspace"</code></td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="profiles">Profiles</h2>
+
+<p>Profiles let you define named build configurations with different flags, environment variables, and per-target overrides. Each profile gets its own artifact directory.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml
+</div>
+<pre><span class="op">[</span><span class="kw">profile.release</span><span class="op">]</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-O2"</span>, <span class="str">"-unbox-closures"</span>]
+<span class="fn">link_flags</span>    <span class="op">=</span> [<span class="str">"-noassert"</span>]
+
+<span class="cmt"># Override flags for a specific target in this profile</span>
+<span class="op">[</span><span class="kw">profile.release.executable.server</span><span class="op">]</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-O3"</span>]
+<span class="fn">link_flags</span>    <span class="op">=</span> [<span class="str">"-noassert"</span>, <span class="str">"-S"</span>]
+<span class="fn">env</span>           <span class="op">=</span> [<span class="str">"MODE=production"</span>]</pre>
+</div>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi build --profile release
+<span class="success">Built library core     &rarr; _wadi/build/release/lib/core/libcore.cmxa</span>
+<span class="success">Built executable server &rarr; _wadi/build/release/exe/server/server</span></pre>
+</div>
+
+<p>Profile artifacts are isolated under <code>_wadi/build/&lt;profile&gt;/</code> so you can have debug and release builds side by side.</p>
+
+<!-- ============================================================ -->
+<h2 id="defaults">Defaults</h2>
+
+<p>The <code>[defaults]</code> section sets workspace-wide options that apply to every target unless overridden by a profile or per-target setting.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml
+</div>
+<pre><span class="op">[</span><span class="kw">defaults</span><span class="op">]</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-w"</span>, <span class="str">"+a-4-40-42"</span>]
+<span class="fn">sandbox</span>       <span class="op">=</span> <span class="str">"target"</span></pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cmd-build">wadi build</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi build [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
+</div>
+
+<p>Compile libraries, executables, and tests. With no targets, builds everything. Targets are built in dependency order with content-based incremental caching.</p>
+
+<ul>
+  <li><code>--workspace DIR</code> &mdash; read the manifest from a different directory</li>
+  <li><code>--profile NAME</code> &mdash; select a build profile (default: <code>default</code>)</li>
+  <li><code>--backend auto|native|bytecode</code> &mdash; force a compiler backend</li>
+  <li><code>--verbose</code> / <code>-v</code> &mdash; print compiler invocations as they run</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="cmd-run">wadi run</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi run [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET] [-- ARG ...]</pre>
+</div>
+
+<p>Build and launch an executable. If the workspace has a single executable, the target is optional. Arguments after <code>--</code> are forwarded directly. Process spawning is direct&mdash;signals, streaming IO, and exit codes are preserved exactly.</p>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi run server -- --port 8080 --verbose
+<span class="output">Listening on :8080</span></pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cmd-test">wadi test</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi test [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
+</div>
+
+<p>Build and run test targets. With no targets, runs all tests. Reports TAP-style output with a pass/fail summary. Exits 0 if all tests pass, 1 if any fail.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-clean">wadi clean</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi clean [--workspace DIR] [--profile NAME] [--verbose] [TARGET ...]</pre>
+</div>
+
+<p>Remove build artifacts. With no targets, removes the entire <code>_wadi/</code> tree. With targets, removes only those outputs and prunes empty directories.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-explain">wadi explain</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi explain [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--current] [--json] [TARGET ...]</pre>
+</div>
+
+<p>Show why a target was rebuilt or reused. Displays fingerprint diffs, compiler invocations, include paths, and module order.</p>
+
+<ul>
+  <li><code>--current</code> &mdash; dry-run: compute what <em>would</em> happen without compiling</li>
+  <li><code>--json</code> &mdash; machine-readable JSON output</li>
+</ul>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi explain core
+<span class="output">target core: rebuilt</span>
+<span class="output">  reason: source changed lib/engine.ml</span>
+<span class="output">  fingerprint: manifest a3f8c1 sources 9e2b07 toolchain d41d8c</span></pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cmd-install">wadi install</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi install [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--prefix DIR] [--destdir DIR] [--verbose] [TARGET ...]</pre>
+</div>
+
+<p>Stage libraries, executables, and metadata for distribution. Generates findlib-compatible <code>META</code> files. Resolves transitive library closures automatically.</p>
+
+<ul>
+  <li><code>--prefix DIR</code> &mdash; install root (default: <code>_wadi/install/&lt;profile&gt;</code>)</li>
+  <li><code>--destdir DIR</code> &mdash; prepend to prefix for package-manager staging</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="cmd-toolchain">wadi toolchain</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi toolchain</pre>
+</div>
+
+<p>Print the resolved OCaml compiler paths, backend selection, stdlib location, and package search roots. The first thing to run when something doesn't build.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-watch">wadi watch</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi watch [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [--verbose] [TARGET ...]</pre>
+</div>
+
+<p>File-watching rebuild loop. Monitors source files and the manifest for changes and re-runs incremental builds automatically. Hit Ctrl-C to stop.</p>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi watch
+<span class="output">watching 12 sources + wadi.toml ...</span>
+<span class="success">Built library core        &rarr; _wadi/build/default/lib/core/libcore.cmxa</span>
+<span class="success">Built executable app      &rarr; _wadi/build/default/exe/app/app</span>
+<span class="output">[changed lib/engine.ml]</span>
+<span class="success">Built library core        &rarr; _wadi/build/default/lib/core/libcore.cmxa</span>
+<span class="success">Built executable app      &rarr; _wadi/build/default/exe/app/app</span></pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cmd-init">wadi init</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi init [--lib | --exe | --full] [NAME]</pre>
+</div>
+
+<p>Scaffold a new project. Generates a <code>wadi.toml</code> and starter source files. Use <code>--lib</code> for a library-only project, <code>--exe</code> for an executable, or <code>--full</code> for a library + executable + tests layout.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-doctor">wadi doctor</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi doctor [--workspace DIR]</pre>
+</div>
+
+<p>Run workspace health checks. Validates the manifest, verifies toolchain availability, checks for stale artifacts, and reports any issues it finds.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-lock">wadi lock</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi lock [--workspace DIR] [--update]</pre>
+</div>
+
+<p>Snapshot exact toolchain versions and package resolutions into a lockfile (<code>wadi.lock</code>). Ensures reproducible builds across machines and CI environments. Use <code>--update</code> to refresh the lockfile after changing dependencies.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-graph">wadi graph</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi graph [--workspace DIR] [--profile NAME] [--backend auto|native|bytecode] [TARGET ...]</pre>
+</div>
+
+<p>Show target build order, module compilation order, and active action/preprocess/PPX pipelines without compiling anything.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-deps">wadi deps</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi deps [--workspace DIR] [TARGET ...]</pre>
+</div>
+
+<p>Resolve and display transitive external package requirements for selected targets.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-env">wadi env</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi env [--workspace DIR] [--profile NAME] [--json] SUBTOOL [TARGET ...]</pre>
+</div>
+
+<p>Print the exact subprocess environment a build, run, test, or install step would inherit. Useful for debugging environment-sensitive builds.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-repl">wadi repl</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi repl [--workspace DIR] [--profile NAME] [--verbose] [TARGET] [-- OCAML_ARG ...]</pre>
+</div>
+
+<p>Build a bytecode toplevel with workspace libraries and packages already loaded. Great for interactive exploration of your library API.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-migrate">wadi migrate</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi migrate [--workspace DIR] [--output PATH] [--stdout] [--force]</pre>
+</div>
+
+<p>Scan <code>dune</code> and <code>dune-project</code> files and generate a first-pass <code>wadi.toml</code> with review comments for anything that needs manual attention.</p>
+
+<!-- ============================================================ -->
+<h2 id="cmd-completion">wadi completion</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi completion [--workspace DIR] bash|zsh|fish</pre>
+</div>
+
+<p>Generate shell completion scripts. Completions use a runtime query protocol so they stay accurate as your project changes.</p>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi completion bash >> ~/.bashrc
+<span class="prompt">$</span> wadi completion zsh > ~/.zfunc/_wadi</pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cmd-docs">wadi docs</h2>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  signature
+</div>
+<pre>wadi docs</pre>
+</div>
+
+<p>Render markdown CLI reference from the live command table. Single source of truth for help text, docs, and completions.</p>
+
+<!-- ============================================================ -->
+<h2 id="incremental">Incremental Builds</h2>
+
+<p>Wadi uses content-based fingerprints, not timestamps. A target is rebuilt only when its inputs actually change. The fingerprint includes:</p>
+
+<ul>
+  <li>Compiler version and backend</li>
+  <li>Manifest hash</li>
+  <li>Source file digests (every <code>.ml</code> and <code>.mli</code>)</li>
+  <li>Toolchain paths (ocamlc, ocamlopt, ocamldep, ocamlfind)</li>
+  <li>Resolved package locations</li>
+  <li>Dependency library fingerprints</li>
+</ul>
+
+<p>Fingerprints are stored in <code>.wadi-stamp</code> files alongside build artifacts. Use <code>wadi explain</code> to see exactly what changed.</p>
+
+<!-- ============================================================ -->
+<h2 id="toolchain-resolution">Toolchain Resolution</h2>
+
+<p>Wadi resolves compilers and tools in a predictable order:</p>
+
+<ol>
+  <li>Environment variables: <code>OCAMLC</code>, <code>OCAMLOPT</code>, <code>OCAMLDEP</code>, <code>OCAMLFIND</code></li>
+  <li>PATH lookup</li>
+</ol>
+
+<p>Backend selection follows: if <code>--backend</code> is specified, use it. Otherwise try native (<code>ocamlopt</code>), fall back to bytecode (<code>ocamlc</code>). External packages are resolved via <code>ocamlfind query</code>.</p>
+
+<p>Run <code>wadi toolchain</code> to see exactly what was resolved:</p>
+
+<div class="terminal">
+<div class="terminal-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<pre><span class="prompt">$</span> wadi toolchain
+<span class="output">ocamlopt:         /home/dev/.opam/default/bin/ocamlopt</span>
+<span class="output">ocamldep:         /home/dev/.opam/default/bin/ocamldep</span>
+<span class="output">ocamlfind:        /home/dev/.opam/default/bin/ocamlfind</span>
+<span class="output">selected-backend: native</span>
+<span class="output">compiler-version: The OCaml compiler, version 5.1.0</span>
+<span class="output">stdlib:           /home/dev/.opam/default/lib/ocaml</span></pre>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="workspaces">Multi-Package Workspaces</h2>
+
+<p>Large projects can split into member packages. The root manifest declares members; each member has its own targets while inheriting workspace defaults and profiles.</p>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  wadi.toml (root)
+</div>
+<pre><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"myproject"</span>
+<span class="kw">version</span>   <span class="op">=</span> 1
+<span class="kw">members</span>   <span class="op">=</span> [<span class="str">"packages/core"</span>, <span class="str">"packages/cli"</span>]
+
+<span class="op">[</span><span class="kw">defaults</span><span class="op">]</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-w"</span>, <span class="str">"+a-4-40-42"</span>]
+
+<span class="op">[</span><span class="kw">profile.release</span><span class="op">]</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-O2"</span>]</pre>
+</div>
+
+<div class="code-block">
+<div class="code-header">
+  <span class="code-dot r"></span>
+  <span class="code-dot y"></span>
+  <span class="code-dot g"></span>
+  packages/core/wadi.toml
+</div>
+<pre><span class="op">[</span><span class="kw">library.core</span><span class="op">]</span>
+<span class="fn">dir</span>     <span class="op">=</span> <span class="str">"src"</span>
+<span class="fn">modules</span> <span class="op">=</span> [<span class="str">"engine"</span>, <span class="str">"types"</span>]</pre>
+</div>
+
+<p>Member manifests cannot define their own defaults or profiles&mdash;those are inherited from the root. Actions, preprocessors, and PPX tools defined in member manifests are automatically scoped to the member's directory.</p>
+
+</div><!-- /content -->
+</div><!-- /guide-layout -->
+
+<!-- FOOTER -->
+<footer>
+  <p>A build system for people who chose OCaml because they value clarity.</p>
+</footer>
+
+</body>
+</html>

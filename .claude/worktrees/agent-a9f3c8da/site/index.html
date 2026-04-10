@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wadi &mdash; The OCaml Build System You Deserve</title>
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: #0a0a0f;
+  color: #e8dcc8;
+  line-height: 1.7;
+  overflow-x: hidden;
+}
+a { color: #e0a84c; text-decoration: none; transition: color .2s; }
+a:hover { color: #f5c96a; }
+code, pre {
+  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Cascadia Code', monospace;
+}
+
+/* ===== HERO ===== */
+.hero {
+  position: relative;
+  min-height: 100vh;
+  max-width: none;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  overflow: hidden;
+}
+
+/* Hero background photo */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(10,10,15,.55) 0%, rgba(10,10,15,.3) 40%, rgba(10,10,15,.5) 70%, rgba(10,10,15,.95) 100%),
+    url('jean-carlo-emer-ugZ4GlRhfHg-unsplash.jpg') center/cover no-repeat;
+  z-index: 0;
+}
+
+/* Dune ridges SVG overlay */
+.dune-ridge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1;
+  line-height: 0;
+}
+.dune-ridge svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 800px;
+}
+
+/* Glowing title */
+.hero h1 {
+  font-size: clamp(3.5rem, 10vw, 7rem);
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #f5c96a 0%, #e0a84c 30%, #c4813a 60%, #f5c96a 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 6s ease-in-out infinite;
+  filter: drop-shadow(0 0 40px rgba(224,168,76,.3));
+  margin-bottom: .25em;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.hero .tagline {
+  font-size: clamp(1.1rem, 2.5vw, 1.5rem);
+  color: #c4a67a;
+  margin-bottom: .5em;
+  font-weight: 300;
+  letter-spacing: .04em;
+}
+
+.hero .subtitle {
+  font-size: clamp(.95rem, 2vw, 1.15rem);
+  color: #8a7a66;
+  max-width: 540px;
+  margin: 0 auto 2.5em;
+}
+
+/* CTA */
+.cta-row {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .5em;
+  padding: .85em 2em;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 1rem;
+  transition: all .25s;
+  border: none;
+  cursor: pointer;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #e0a84c, #c4813a);
+  color: #0a0a0f;
+  box-shadow: 0 0 30px rgba(224,168,76,.25);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 50px rgba(224,168,76,.4);
+  color: #0a0a0f;
+}
+.btn-ghost {
+  background: transparent;
+  color: #e0a84c;
+  border: 1.5px solid rgba(224,168,76,.4);
+}
+.btn-ghost:hover {
+  background: rgba(224,168,76,.08);
+  border-color: #e0a84c;
+  transform: translateY(-2px);
+  color: #f5c96a;
+}
+
+/* ===== NAV ===== */
+nav {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  z-index: 100;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(10,10,15,.7);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(224,168,76,.08);
+}
+nav .logo {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: flex;
+  align-items: center;
+  gap: .5em;
+}
+nav .logo svg {
+  width: 1.4em;
+  height: 1.4em;
+}
+nav .nav-links { display: flex; gap: 1.5rem; }
+nav .nav-links a {
+  color: #8a7a66;
+  font-size: .9rem;
+  font-weight: 500;
+  letter-spacing: .03em;
+  transition: color .2s;
+}
+nav .nav-links a:hover { color: #e0a84c; }
+
+/* ===== SECTIONS ===== */
+section {
+  padding: 6rem 2rem;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.section-label {
+  text-transform: uppercase;
+  font-size: .75rem;
+  letter-spacing: .2em;
+  color: #c4813a;
+  font-weight: 700;
+  margin-bottom: .75rem;
+}
+h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  color: #f0e0c8;
+  margin-bottom: 1rem;
+}
+h2 span {
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.section-desc {
+  font-size: 1.1rem;
+  color: #a09080;
+  max-width: 650px;
+  margin-bottom: 3rem;
+}
+
+/* ===== PROBLEM SECTION ===== */
+.problem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+.problem-card {
+  background: rgba(26,18,10,.6);
+  border: 1px solid rgba(224,168,76,.1);
+  border-radius: 12px;
+  padding: 2rem;
+  transition: all .3s;
+}
+.problem-card:hover {
+  border-color: rgba(224,168,76,.25);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0,0,0,.4);
+}
+.problem-card .icon {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  display: block;
+}
+.problem-card h3 {
+  font-size: 1.2rem;
+  color: #f0e0c8;
+  margin-bottom: .5rem;
+}
+.problem-card p {
+  color: #8a7a66;
+  font-size: .95rem;
+}
+
+/* ===== MANIFEST SHOWCASE ===== */
+.manifest-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  align-items: start;
+}
+@media (max-width: 768px) {
+  .manifest-section { grid-template-columns: 1fr; }
+}
+.manifest-text h3 {
+  font-size: 1.5rem;
+  color: #f0e0c8;
+  margin-bottom: 1rem;
+}
+.manifest-text p {
+  color: #a09080;
+  margin-bottom: 1.5rem;
+}
+.manifest-text ul {
+  list-style: none;
+  padding: 0;
+}
+.manifest-text li {
+  padding: .5em 0;
+  padding-left: 1.5em;
+  position: relative;
+  color: #c4a67a;
+  font-size: .95rem;
+}
+.manifest-text li::before {
+  content: '\25C8';
+  position: absolute;
+  left: 0;
+  color: #c4813a;
+}
+
+/* Code blocks */
+.code-block {
+  background: #0d0b08;
+  border: 1px solid rgba(224,168,76,.12);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.code-header {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: .75rem 1.25rem;
+  background: rgba(224,168,76,.05);
+  border-bottom: 1px solid rgba(224,168,76,.08);
+  font-size: .8rem;
+  color: #8a7a66;
+}
+.code-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.code-dot.r { background: #e05252; }
+.code-dot.y { background: #e0a84c; }
+.code-dot.g { background: #52c46a; }
+.code-block pre {
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-size: .88rem;
+  line-height: 1.6;
+}
+.code-block code {
+  color: #c4a67a;
+}
+/* Syntax highlighting */
+.kw { color: #e0a84c; }
+.str { color: #7ec87e; }
+.cmt { color: #5a5040; font-style: italic; }
+.fn { color: #6ab0e0; }
+.op { color: #8a7a66; }
+.num { color: #d48ae0; }
+
+/* ===== COMMANDS ===== */
+.commands-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+.cmd-card {
+  background: linear-gradient(135deg, rgba(26,18,10,.5), rgba(15,12,10,.8));
+  border: 1px solid rgba(224,168,76,.1);
+  border-radius: 10px;
+  padding: 1.75rem;
+  transition: all .3s;
+}
+.cmd-card:hover {
+  border-color: rgba(224,168,76,.3);
+  box-shadow: 0 0 30px rgba(224,168,76,.06);
+}
+.cmd-name {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 1.1rem;
+  color: #e0a84c;
+  font-weight: 600;
+  margin-bottom: .25rem;
+}
+.cmd-sig {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: .78rem;
+  color: #5a5040;
+  margin-bottom: .75rem;
+  word-break: break-all;
+}
+.cmd-desc {
+  color: #a09080;
+  font-size: .92rem;
+}
+
+/* ===== COMPARISON TABLE ===== */
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 2rem;
+}
+.comparison-table th,
+.comparison-table td {
+  padding: 1rem 1.25rem;
+  text-align: left;
+  border-bottom: 1px solid rgba(224,168,76,.08);
+  font-size: .92rem;
+}
+.comparison-table th {
+  color: #8a7a66;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: .75rem;
+  letter-spacing: .12em;
+}
+.comparison-table td:first-child {
+  color: #c4a67a;
+  font-weight: 500;
+}
+.comparison-table .dune-col {
+  color: #f0e0c8;
+}
+.comparison-table .wadi-col {
+  color: #e0a84c;
+}
+.comparison-table tr:hover td {
+  background: rgba(224,168,76,.12);
+}
+
+/* ===== FEATURES SECTION ===== */
+.features-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+.feature {
+  padding: 1.5rem 0;
+}
+.feature h3 {
+  font-size: 1.1rem;
+  color: #f0e0c8;
+  margin-bottom: .5rem;
+  display: flex;
+  align-items: center;
+  gap: .5em;
+}
+.feature h3::before {
+  content: '';
+  width: 3px;
+  height: 1.2em;
+  background: linear-gradient(180deg, #e0a84c, #c4813a);
+  border-radius: 2px;
+  display: inline-block;
+}
+.feature p {
+  color: #8a7a66;
+  font-size: .92rem;
+  padding-left: calc(3px + .5em);
+}
+
+/* ===== QUICKSTART ===== */
+.quickstart-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  margin-top: 2rem;
+  max-width: 700px;
+}
+.step {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+.step-num {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(224,168,76,.1);
+  border: 1.5px solid rgba(224,168,76,.3);
+  color: #e0a84c;
+  font-weight: 700;
+  font-size: .95rem;
+}
+.step-content h3 {
+  color: #f0e0c8;
+  font-size: 1.05rem;
+  margin-bottom: .5rem;
+}
+.step-content p {
+  color: #8a7a66;
+  font-size: .92rem;
+  margin-bottom: .75rem;
+}
+.step-content .inline-code {
+  display: inline-block;
+  background: rgba(224,168,76,.08);
+  border: 1px solid rgba(224,168,76,.15);
+  border-radius: 5px;
+  padding: .4em .8em;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: .85rem;
+  color: #e0a84c;
+}
+
+/* ===== PHILOSOPHY ===== */
+.philosophy-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 2rem;
+  margin-top: 2rem;
+}
+.principle {
+  text-align: center;
+  padding: 2rem 1.5rem;
+}
+.principle .glyph {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  display: block;
+  filter: grayscale(.2);
+}
+.principle h3 {
+  font-size: 1.1rem;
+  color: #e0a84c;
+  margin-bottom: .5rem;
+}
+.principle p {
+  color: #8a7a66;
+  font-size: .9rem;
+}
+
+/* ===== TERMINAL DEMO ===== */
+.terminal {
+  background: #0a0908;
+  border: 1px solid rgba(224,168,76,.12);
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 750px;
+  margin: 2rem auto;
+}
+.terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: .5em;
+  padding: .6rem 1rem;
+  background: rgba(224,168,76,.04);
+  border-bottom: 1px solid rgba(224,168,76,.08);
+}
+.terminal-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+.terminal-bar .dot:nth-child(1) { background: #e05252; }
+.terminal-bar .dot:nth-child(2) { background: #e0a84c; }
+.terminal-bar .dot:nth-child(3) { background: #52c46a; }
+.terminal pre {
+  padding: 1.5rem;
+  font-size: .85rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  color: #c4a67a;
+}
+.terminal .prompt { color: #e0a84c; }
+.terminal .output { color: #7a6a5a; }
+.terminal .success { color: #52c46a; }
+.terminal .accent { color: #6ab0e0; }
+
+/* ===== FOOTER ===== */
+footer {
+  text-align: center;
+  padding: 4rem 2rem;
+  border-top: 1px solid rgba(224,168,76,.08);
+  color: #5a5040;
+  font-size: .85rem;
+}
+footer .footer-logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1rem;
+  display: block;
+}
+
+/* ===== DIVIDER ===== */
+.sand-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(224,168,76,.2), transparent);
+  margin: 0 auto;
+  max-width: 1100px;
+}
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 600px) {
+  section { padding: 4rem 1.25rem; }
+  .comparison-table { font-size: .82rem; }
+  .comparison-table th, .comparison-table td { padding: .75rem .5rem; }
+  nav .nav-links { gap: .75rem; }
+  nav .nav-links a { font-size: .78rem; }
+}
+
+/* ===== PHOTO CREDIT ===== */
+.photo-credit {
+  position: absolute;
+  bottom: 1.5rem;
+  right: 2rem;
+  z-index: 3;
+  font-size: .7rem;
+  letter-spacing: .02em;
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  opacity: .5;
+  transition: opacity .3s;
+}
+.photo-credit:hover { opacity: 1; }
+.photo-credit a {
+  background: linear-gradient(135deg, #f5c96a, #c4813a);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#" class="logo"><svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="palm-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#f5c96a"/><stop offset="100%" stop-color="#c4813a"/></linearGradient></defs><path fill="url(#palm-grad)" d="M34 60 C34 60 33 42 31 34 C30 30 28 26 27 24 C24 22 16 20 6 22 C12 18 20 17 26 20 C22 16 14 8 4 6 C14 6 22 12 27 20 C25 14 20 6 16 2 C22 6 26 14 28 22 C32 16 40 8 50 8 C42 12 34 18 30 24 C34 18 42 12 52 14 C44 16 34 22 30 26 C36 20 44 16 54 18 C46 20 36 24 31 28 C32 30 34 42 35 52 L36 60 C36 60 40 62 42 62 C38 63 30 63 26 62 C28 62 32 60 34 60Z"/></svg>Wadi</a>
+  <div class="nav-links">
+    <a href="#problem">Why</a>
+    <a href="#commands">Commands</a>
+    <a href="#manifest">Manifest</a>
+    <a href="#comparison">Compare</a>
+    <a href="guide.html">Guide</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <h1>Wadi</h1>
+    <p class="tagline">The OCaml Build System You Deserve</p>
+    <p class="subtitle">One manifest. Zero guesswork. Builds so clean you'll forget what fighting your toolchain felt like.</p>
+    <div class="cta-row">
+      <a href="guide.html" class="btn btn-primary">Get Started</a>
+      <a href="#commands" class="btn btn-ghost">See the Commands</a>
+    </div>
+  </div>
+  <span class="photo-credit">Photo by <a href="https://unsplash.com/@jeancarloemer?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Jean Carlo Emer</a> on <a href="https://unsplash.com/photos/desert-view-during-nighttime-ugZ4GlRhfHg?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a></span>
+  <div class="dune-ridge">
+    <svg viewBox="0 0 1440 200" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M0,200 L0,140 Q180,80 360,120 Q540,160 720,100 Q900,40 1080,90 Q1260,140 1440,80 L1440,200 Z" fill="#1a130a" opacity=".8"/>
+      <path d="M0,200 L0,160 Q200,110 400,140 Q600,170 800,120 Q1000,70 1200,110 Q1350,140 1440,100 L1440,200 Z" fill="#12100d" opacity=".9"/>
+      <path d="M0,200 L0,170 Q240,140 480,160 Q720,180 960,150 Q1200,120 1440,155 L1440,200 Z" fill="#0a0a0f"/>
+    </svg>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section id="problem">
+  <p class="section-label">The Motivation</p>
+  <h2>OCaml deserves <span>better tooling</span></h2>
+  <p class="section-desc">OCaml is a language built on clarity and precision. We think the build system should be too. Wadi rethinks the defaults from first principles.</p>
+
+  <div class="problem-grid">
+    <div class="problem-card">
+      <span class="icon">&#9672;</span>
+      <h3>One File, Not Many</h3>
+      <p>A single <code>wadi.toml</code> replaces the multi-file configuration pattern. Everything your project needs in one place.</p>
+    </div>
+    <div class="problem-card">
+      <span class="icon">&#9670;</span>
+      <h3>Inferred Module Order</h3>
+      <p>Module compilation order is derived automatically from <code>ocamldep</code>. No hand-maintained lists to keep in sync.</p>
+    </div>
+    <div class="problem-card">
+      <span class="icon">&#9688;</span>
+      <h3>Content-Based Rebuilds</h3>
+      <p>Fingerprints track source digests, manifest hashes, and toolchain state. Rebuilds happen when something actually changes.</p>
+    </div>
+    <div class="problem-card">
+      <span class="icon">&#9686;</span>
+      <h3>Focused Command Set</h3>
+      <p>29 commands, each doing one thing well. Easy to learn, easy to remember, easy to compose.</p>
+    </div>
+    <div class="problem-card">
+      <span class="icon">&#9656;</span>
+      <h3>Direct Process Execution</h3>
+      <p>Executables are spawned directly&mdash;no shell wrapping. Signals, streaming IO, and exit codes are preserved exactly.</p>
+    </div>
+    <div class="problem-card">
+      <span class="icon">&#9737;</span>
+      <h3>Toolchain Transparency</h3>
+      <p>One command shows your compiler paths, backend selection, stdlib location, and package roots. No guesswork.</p>
+    </div>
+  </div>
+</section>
+
+<div class="sand-divider"></div>
+
+<!-- MANIFEST -->
+<section id="manifest">
+  <p class="section-label">The Manifest</p>
+  <h2>One file. <span>That's it.</span></h2>
+  <p class="section-desc">Everything your project needs in a single, readable wadi.toml. No ceremony. No implicit rules. No surprises.</p>
+
+  <div class="manifest-section">
+    <div class="manifest-text">
+      <h3>Radically simple</h3>
+      <p>Declare your libraries, executables, and tests. Wadi handles the rest&mdash;module ordering, dependency closure, package resolution, compiler flags. You describe <em>what</em> you're building, not <em>how</em>.</p>
+      <ul>
+        <li>Automatic module ordering via <code>ocamldep</code></li>
+        <li>Transitive dependency resolution with cycle detection</li>
+        <li>External package propagation through library deps</li>
+        <li>Build profiles with per-target overrides</li>
+        <li>Validated at load time with clear error messages</li>
+        <li>No hand-maintained module lists. Ever.</li>
+      </ul>
+    </div>
+    <div>
+      <div class="code-block">
+        <div class="code-header">
+          <span class="code-dot r"></span>
+          <span class="code-dot y"></span>
+          <span class="code-dot g"></span>
+          wadi.toml
+        </div>
+<pre><code><span class="kw">workspace</span> <span class="op">=</span> <span class="str">"myproject"</span>
+<span class="kw">version</span>   <span class="op">=</span> <span class="num">1</span>
+
+<span class="cmt"># A library with external packages</span>
+<span class="op">[</span><span class="kw">library.core</span><span class="op">]</span>
+<span class="fn">dir</span>      <span class="op">=</span> <span class="str">"lib"</span>
+<span class="fn">modules</span>  <span class="op">=</span> [<span class="str">"engine"</span>, <span class="str">"parser"</span>, <span class="str">"types"</span>]
+<span class="fn">packages</span> <span class="op">=</span> [<span class="str">"unix"</span>, <span class="str">"str"</span>]
+
+<span class="cmt"># An executable that depends on it</span>
+<span class="op">[</span><span class="kw">executable.app</span><span class="op">]</span>
+<span class="fn">dir</span>  <span class="op">=</span> <span class="str">"bin"</span>
+<span class="fn">main</span> <span class="op">=</span> <span class="str">"main"</span>
+<span class="fn">deps</span> <span class="op">=</span> [<span class="str">"core"</span>]
+
+<span class="cmt"># Tests that exercise the library</span>
+<span class="op">[</span><span class="kw">test.unit</span><span class="op">]</span>
+<span class="fn">dir</span>  <span class="op">=</span> <span class="str">"test"</span>
+<span class="fn">main</span> <span class="op">=</span> <span class="str">"test_main"</span>
+<span class="fn">deps</span> <span class="op">=</span> [<span class="str">"core"</span>]
+
+<span class="cmt"># Build profiles with per-target overrides</span>
+<span class="op">[</span><span class="kw">profile.release</span><span class="op">]</span>
+<span class="fn">compile_flags</span> <span class="op">=</span> [<span class="str">"-O2"</span>, <span class="str">"-unbox-closures"</span>]
+
+<span class="op">[</span><span class="kw">profile.release.executable.app</span><span class="op">]</span>
+<span class="fn">link_flags</span> <span class="op">=</span> [<span class="str">"-noassert"</span>]</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="sand-divider"></div>
+
+<!-- COMMANDS -->
+<section id="commands">
+  <p class="section-label">The Toolkit</p>
+  <h2>29 commands. <span>Zero confusion.</span></h2>
+  <p class="section-desc">Each command does one thing and does it well. Here are the ones you'll reach for most. Composable through stable files and exit codes. No hidden state, no global caches, no magic.</p>
+
+  <div class="commands-grid">
+    <div class="cmd-card">
+      <div class="cmd-name">wadi build</div>
+      <div class="cmd-sig">[--backend auto|native|bytecode] [--verbose] [TARGET ...]</div>
+      <p class="cmd-desc">Compile libraries, executables, and tests with content-based incremental builds. Resolves dependencies, infers module order, propagates packages. Just works.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi run</div>
+      <div class="cmd-sig">[TARGET] [-- ARG ...]</div>
+      <p class="cmd-desc">Build and launch executables with exact argv semantics. Direct process spawning&mdash;signals, streaming IO, and exit codes preserved. No shell wrapping.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi test</div>
+      <div class="cmd-sig">[TARGET ...]</div>
+      <p class="cmd-desc">Discover and run test targets with TAP-style output. Builds before running. Clear pass/fail summaries with exit codes and failure details.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi clean</div>
+      <div class="cmd-sig">[TARGET ...]</div>
+      <p class="cmd-desc">Remove build artifacts. Full workspace wipe or surgical per-target cleanup. Prunes empty directories automatically.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi explain</div>
+      <div class="cmd-sig">[--profile NAME] [TARGET ...]</div>
+      <p class="cmd-desc">Understand why targets rebuilt. Shows fingerprint diffs, compiler invocations, and include paths. The build system that explains itself.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi install</div>
+      <div class="cmd-sig">[--prefix DIR] [--destdir DIR] [TARGET ...]</div>
+      <p class="cmd-desc">Stage libraries, executables, and metadata for distribution. Generates META files, resolves transitive closures, supports DESTDIR for package-manager staging.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi toolchain</div>
+      <div class="cmd-sig">(no arguments)</div>
+      <p class="cmd-desc">One-stop diagnostic view of your OCaml environment. Compiler paths, backend selection, stdlib location, package roots. Never wonder "which ocamlopt?" again.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi watch</div>
+      <div class="cmd-sig">[--profile NAME] [TARGET ...]</div>
+      <p class="cmd-desc">File-watching rebuild loop. Monitors source files and the manifest, re-running incremental builds automatically when anything changes.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi init</div>
+      <div class="cmd-sig">[--lib | --exe | --full] [NAME]</div>
+      <p class="cmd-desc">Scaffold a new project. Generates a wadi.toml and starter source files so you can go from zero to building in seconds.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi doctor</div>
+      <div class="cmd-sig">(no arguments)</div>
+      <p class="cmd-desc">Workspace health checks. Validates the manifest, verifies toolchain availability, checks for stale artifacts, and reports any issues.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi lock</div>
+      <div class="cmd-sig">[--update]</div>
+      <p class="cmd-desc">Snapshot exact toolchain versions and package resolutions into a lockfile. Reproducible builds across machines and CI.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi repl</div>
+      <div class="cmd-sig">[TARGET] [-- OCAML_ARG ...]</div>
+      <p class="cmd-desc">Launch a bytecode toplevel with workspace libraries and packages already wired in. Interactive exploration, zero setup.</p>
+    </div>
+    <div class="cmd-card">
+      <div class="cmd-name">wadi migrate</div>
+      <div class="cmd-sig">[--output PATH] [--stdout] [--force]</div>
+      <p class="cmd-desc">Scan dune files and generate a first-pass wadi.toml with review comments for anything that needs attention.</p>
+    </div>
+  </div>
+
+  <!-- Terminal demo -->
+  <div class="terminal">
+    <div class="terminal-bar">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+    </div>
+<pre>
+<span class="prompt">$</span> wadi build --verbose
+<span class="output">cd /workspace && ocamlopt -c -I _wadi/build/default/lib/core ...</span>
+<span class="success">Built library core        &rarr; _wadi/build/default/lib/core/libcore.cmxa</span>
+<span class="success">Built executable app      &rarr; _wadi/build/default/exe/app/app</span>
+
+<span class="prompt">$</span> wadi run app -- --port 8080
+<span class="accent">Server listening on :8080</span>
+
+<span class="prompt">$</span> wadi test
+<span class="success">ok - unit</span>
+<span class="success">1 of 1 tests passed</span>
+
+<span class="prompt">$</span> wadi explain core
+<span class="output">target core: rebuilt</span>
+<span class="output">  reason: source changed lib/engine.ml</span>
+<span class="output">  fingerprint: manifest a3f8c1 sources 9e2b07 toolchain d41d8c</span>
+
+<span class="prompt">$</span> wadi toolchain
+<span class="output">ocamlopt:         /home/dev/.opam/default/bin/ocamlopt</span>
+<span class="output">selected-backend: native</span>
+<span class="output">compiler-version: The OCaml compiler, version 5.1.0</span>
+<span class="output">stdlib:           /home/dev/.opam/default/lib/ocaml</span>
+</pre>
+  </div>
+</section>
+
+<div class="sand-divider"></div>
+
+<!-- COMPARISON -->
+<section id="comparison">
+  <p class="section-label">Compare</p>
+  <h2>Dune vs <span>Wadi</span></h2>
+  <p class="section-desc">Different tools, different philosophies. Here's how they compare.</p>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th></th>
+        <th class="dune-col">Dune</th>
+        <th class="wadi-col">Wadi</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Configuration</td>
+        <td class="dune-col">Multiple config files (dune, dune-project, dune-workspace)</td>
+        <td class="wadi-col">Single wadi.toml</td>
+      </tr>
+      <tr>
+        <td>Module ordering</td>
+        <td class="dune-col">Hand-maintained lists</td>
+        <td class="wadi-col">Automatic via ocamldep</td>
+      </tr>
+      <tr>
+        <td>Rebuild strategy</td>
+        <td class="dune-col">Timestamp-based with shadow trees</td>
+        <td class="wadi-col">Content fingerprints (sources + manifest + toolchain)</td>
+      </tr>
+      <tr>
+        <td>Artifact layout</td>
+        <td class="dune-col">Opaque _build tree</td>
+        <td class="wadi-col">Predictable _wadi/ with documented paths</td>
+      </tr>
+      <tr>
+        <td>Process execution</td>
+        <td class="dune-col">Shell-wrapped execution</td>
+        <td class="wadi-col">Direct spawning, signals + exit codes preserved</td>
+      </tr>
+      <tr>
+        <td>Toolchain diagnostics</td>
+        <td class="dune-col">Manual inspection required</td>
+        <td class="wadi-col">wadi toolchain shows everything</td>
+      </tr>
+      <tr>
+        <td>Subcommands</td>
+        <td class="dune-col">60+ subcommands</td>
+        <td class="wadi-col">29 focused tools</td>
+      </tr>
+      <tr>
+        <td>Package handling</td>
+        <td class="dune-col">Implicit resolution</td>
+        <td class="wadi-col">Explicit propagation through dependency closure</td>
+      </tr>
+      <tr>
+        <td>Error messages</td>
+        <td class="dune-col">Standard compiler output</td>
+        <td class="wadi-col">Direct reporting with context</td>
+      </tr>
+      <tr>
+        <td>Build diagnostics</td>
+        <td class="dune-col">Limited visibility</td>
+        <td class="wadi-col">wadi explain tells you exactly why</td>
+      </tr>
+      <tr>
+        <td>Build profiles</td>
+        <td class="dune-col">Built-in dev/release profiles</td>
+        <td class="wadi-col">Custom profiles with per-target overrides</td>
+      </tr>
+      <tr>
+        <td>Install staging</td>
+        <td class="dune-col">Coupled to opam workflow</td>
+        <td class="wadi-col">Standalone install with META generation and DESTDIR</td>
+      </tr>
+      <tr>
+        <td>Shell completions</td>
+        <td class="dune-col">Static completions</td>
+        <td class="wadi-col">Runtime query protocol, workspace-aware</td>
+      </tr>
+      <tr>
+        <td>Learning curve</td>
+        <td class="dune-col">Comprehensive documentation</td>
+        <td class="wadi-col">Read the manifest. Done.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<div class="sand-divider"></div>
+
+<!-- FEATURES -->
+<section id="features">
+  <p class="section-label">Under the Hood</p>
+  <h2>Engineered with <span>intention</span></h2>
+
+  <div class="features-list">
+    <div class="feature">
+      <h3>Content-Based Fingerprints</h3>
+      <p>Wadi tracks manifest hashes, source digests, compiler versions, and toolchain state. Rebuilds happen when something actually changes&mdash;not when a timestamp drifts.</p>
+    </div>
+    <div class="feature">
+      <h3>Cycle Detection</h3>
+      <p>Dependency cycles are caught at manifest load time with clear diagnostic messages. No cryptic compiler errors an hour into your build.</p>
+    </div>
+    <div class="feature">
+      <h3>Transitive Closure</h3>
+      <p>Library dependencies are fully resolved. External packages flow through the dependency graph automatically. Declare once, link everywhere.</p>
+    </div>
+    <div class="feature">
+      <h3>Backend Flexibility</h3>
+      <p>Native by default, bytecode fallback, or explicit selection. Wadi detects what's available and makes the right call&mdash;or lets you override it.</p>
+    </div>
+    <div class="feature">
+      <h3>Build Profiles</h3>
+      <p>Define custom profiles with workspace-wide defaults and per-target overrides. Separate artifact roots per profile. No more flag juggling.</p>
+    </div>
+    <div class="feature">
+      <h3>Build Diagnostics</h3>
+      <p><code>wadi explain</code> tells you exactly why a target rebuilt&mdash;fingerprint diffs, compiler invocations, include paths. No more guessing.</p>
+    </div>
+    <div class="feature">
+      <h3>Multi-Package Workspaces</h3>
+      <p>Split large projects into member packages with scoped tools and shared dependency analysis. Each member owns its targets while inheriting workspace defaults.</p>
+    </div>
+    <div class="feature">
+      <h3>Install &amp; META Generation</h3>
+      <p>Stage libraries and executables with automatically generated findlib META files. DESTDIR support for clean package-manager integration.</p>
+    </div>
+    <div class="feature">
+      <h3>Self-Hosting Bootstrap</h3>
+      <p>Wadi generates its own Makefile from its own manifest. No circular bootstrap dependency. Pure OCaml all the way down.</p>
+    </div>
+    <div class="feature">
+      <h3>File-Watching Rebuilds</h3>
+      <p><code>wadi watch</code> monitors your sources and manifest, re-running incremental builds the moment anything changes. Instant feedback loops.</p>
+    </div>
+    <div class="feature">
+      <h3>Project Scaffolding</h3>
+      <p><code>wadi init</code> generates a wadi.toml and starter files. Go from zero to building in seconds&mdash;no boilerplate to copy-paste.</p>
+    </div>
+    <div class="feature">
+      <h3>Workspace Health Checks</h3>
+      <p><code>wadi doctor</code> validates your manifest, verifies toolchain availability, checks for stale artifacts, and reports issues before they bite.</p>
+    </div>
+    <div class="feature">
+      <h3>Reproducible Lockfiles</h3>
+      <p><code>wadi lock</code> snapshots exact toolchain versions and package resolutions. Same build on your laptop, CI, and your teammate's machine.</p>
+    </div>
+    <div class="feature">
+      <h3>Library Namespace Wrapping</h3>
+      <p>Set <code>wrapped = true</code> on a library to generate a namespace wrapper module. Clean public APIs without manual prefixing.</p>
+    </div>
+    <div class="feature">
+      <h3>Automated Dune Migration</h3>
+      <p><code>wadi migrate</code> reads your dune files and produces a first-pass wadi.toml with review comments for anything that needs attention.</p>
+    </div>
+  </div>
+</section>
+
+<div class="sand-divider"></div>
+
+<!-- GET STARTED -->
+<section id="quickstart" style="text-align: center;">
+  <p class="section-label">Get Started</p>
+  <h2>Ready to <span>build?</span></h2>
+  <p class="section-desc" style="margin: 0 auto 2rem;">The guide walks you through everything&mdash;from your first manifest to profiles, actions, and multi-package workspaces.</p>
+  <a href="guide.html" class="btn btn-primary">Read the Guide</a>
+</section>
+
+<div class="sand-divider"></div>
+
+<!-- PHILOSOPHY -->
+<section id="philosophy">
+  <p class="section-label">Philosophy</p>
+  <h2>Built on <span>principles</span></h2>
+
+  <div class="philosophy-grid">
+    <div class="principle">
+      <span class="glyph">&#9672;</span>
+      <h3>Composable</h3>
+      <p>Each tool owns one job. Stable files and exit codes are the interface. Compose freely.</p>
+    </div>
+    <div class="principle">
+      <span class="glyph">&#9788;</span>
+      <h3>Transparent</h3>
+      <p>Predictable artifact paths. Visible compiler invocations. No hidden caches. No shadow trees.</p>
+    </div>
+    <div class="principle">
+      <span class="glyph">&#9830;</span>
+      <h3>Explicit</h3>
+      <p>Packages, compilers, backends&mdash;declared, not guessed. If it matters, it's in the manifest.</p>
+    </div>
+    <div class="principle">
+      <span class="glyph">&#10022;</span>
+      <h3>Minimal</h3>
+      <p>Do the core things perfectly. Focused tools that nail it beat bloated ones that don't.</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <span class="footer-logo">Wadi</span>
+  <p>A build system for people who chose OCaml because they value clarity.</p>
+  <p style="margin-top: .75rem; color: #3a3528;">Built from first principles. No compromises.</p>
+</footer>
+
+</body>
+</html>

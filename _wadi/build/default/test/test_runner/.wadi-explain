@@ -1,0 +1,91 @@
+Target: test_runner
+Kind: test
+Package-path: root
+Profile: default
+State: reused
+Artifact: /Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_runner
+Output-dir: /Users/jef/dev/oasis/_wadi/build/default/test/test_runner
+
+Reasons:
+- inputs and outputs matched the recorded fingerprint
+
+Resolution:
+- backend-request: auto
+- selected-backend: native
+- backend-selection: auto selected native because ocamlopt is available
+- compiler-version: 5.4.0
+- compiler: /Users/jef/.opam/5.4.0/bin/ocamlopt.opt (configured as ocamlopt)
+- ocamldep: /Users/jef/.opam/5.4.0/bin/ocamldep.opt (configured as ocamldep)
+- stdlib: /Users/jef/.opam/5.4.0/lib/ocaml
+- unix-library-dir: /Users/jef/.opam/5.4.0/lib/ocaml/unix
+- actions: none
+- preprocessors: none
+- ppx: none
+- ocamlfind: /Users/jef/.opam/5.4.0/bin/ocamlfind (configured as ocamlfind)
+- package: unix -> /Users/jef/.opam/5.4.0/lib/ocaml/unix
+
+Include-dirs:
+- /Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core
+- /Users/jef/dev/oasis/_wadi/build/default/test/test_runner
+
+Module-order:
+- test_support
+- test_release_metadata
+- test_transforms
+- test_manifest
+- test_layout
+- test_build
+- test_clean
+- test_process
+- test_run
+- test_status
+- test_doctor
+- test_watch
+- test_bench
+- test_graph
+- test_deps
+- test_init
+- test_lock
+- test_vendor
+- test_env
+- test_migrate
+- test_repl
+- test_test
+- test_install
+- test_packaging
+- test_toolchain
+- test_explain
+- test_bootstrap
+- test_main
+
+Commands:
+- module-order: 'ocamlfind' 'ocamldep' '-package' 'unix' '-sort' '/Users/jef/dev/oasis/test/test_support.ml' '/Users/jef/dev/oasis/test/test_release_metadata.ml' '/Users/jef/dev/oasis/test/test_transforms.ml' '/Users/jef/dev/oasis/test/test_manifest.ml' '/Users/jef/dev/oasis/test/test_layout.ml' '/Users/jef/dev/oasis/test/test_build.ml' '/Users/jef/dev/oasis/test/test_clean.ml' '/Users/jef/dev/oasis/test/test_process.ml' '/Users/jef/dev/oasis/test/test_run.ml' '/Users/jef/dev/oasis/test/test_status.ml' '/Users/jef/dev/oasis/test/test_doctor.ml' '/Users/jef/dev/oasis/test/test_watch.ml' '/Users/jef/dev/oasis/test/test_bench.ml' '/Users/jef/dev/oasis/test/test_graph.ml' '/Users/jef/dev/oasis/test/test_deps.ml' '/Users/jef/dev/oasis/test/test_init.ml' '/Users/jef/dev/oasis/test/test_lock.ml' '/Users/jef/dev/oasis/test/test_vendor.ml' '/Users/jef/dev/oasis/test/test_env.ml' '/Users/jef/dev/oasis/test/test_migrate.ml' '/Users/jef/dev/oasis/test/test_repl.ml' '/Users/jef/dev/oasis/test/test_test.ml' '/Users/jef/dev/oasis/test/test_install.ml' '/Users/jef/dev/oasis/test/test_packaging.ml' '/Users/jef/dev/oasis/test/test_toolchain.ml' '/Users/jef/dev/oasis/test/test_explain.ml' '/Users/jef/dev/oasis/test/test_bootstrap.ml'
+- compile test_support.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_support.cmx' '/Users/jef/dev/oasis/test/test_support.ml'
+- compile test_release_metadata.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_release_metadata.cmx' '/Users/jef/dev/oasis/test/test_release_metadata.ml'
+- compile test_transforms.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_transforms.cmx' '/Users/jef/dev/oasis/test/test_transforms.ml'
+- compile test_manifest.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_manifest.cmx' '/Users/jef/dev/oasis/test/test_manifest.ml'
+- compile test_layout.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_layout.cmx' '/Users/jef/dev/oasis/test/test_layout.ml'
+- compile test_build.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_build.cmx' '/Users/jef/dev/oasis/test/test_build.ml'
+- compile test_clean.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_clean.cmx' '/Users/jef/dev/oasis/test/test_clean.ml'
+- compile test_process.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_process.cmx' '/Users/jef/dev/oasis/test/test_process.ml'
+- compile test_run.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_run.cmx' '/Users/jef/dev/oasis/test/test_run.ml'
+- compile test_status.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_status.cmx' '/Users/jef/dev/oasis/test/test_status.ml'
+- compile test_doctor.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_doctor.cmx' '/Users/jef/dev/oasis/test/test_doctor.ml'
+- compile test_watch.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_watch.cmx' '/Users/jef/dev/oasis/test/test_watch.ml'
+- compile test_bench.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_bench.cmx' '/Users/jef/dev/oasis/test/test_bench.ml'
+- compile test_graph.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_graph.cmx' '/Users/jef/dev/oasis/test/test_graph.ml'
+- compile test_deps.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_deps.cmx' '/Users/jef/dev/oasis/test/test_deps.ml'
+- compile test_init.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_init.cmx' '/Users/jef/dev/oasis/test/test_init.ml'
+- compile test_lock.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_lock.cmx' '/Users/jef/dev/oasis/test/test_lock.ml'
+- compile test_vendor.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_vendor.cmx' '/Users/jef/dev/oasis/test/test_vendor.ml'
+- compile test_env.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_env.cmx' '/Users/jef/dev/oasis/test/test_env.ml'
+- compile test_migrate.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_migrate.cmx' '/Users/jef/dev/oasis/test/test_migrate.ml'
+- compile test_repl.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_repl.cmx' '/Users/jef/dev/oasis/test/test_repl.ml'
+- compile test_test.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_test.cmx' '/Users/jef/dev/oasis/test/test_test.ml'
+- compile test_install.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_install.cmx' '/Users/jef/dev/oasis/test/test_install.ml'
+- compile test_packaging.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_packaging.cmx' '/Users/jef/dev/oasis/test/test_packaging.ml'
+- compile test_toolchain.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_toolchain.cmx' '/Users/jef/dev/oasis/test/test_toolchain.ml'
+- compile test_explain.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_explain.cmx' '/Users/jef/dev/oasis/test/test_explain.ml'
+- compile test_bootstrap.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_bootstrap.cmx' '/Users/jef/dev/oasis/test/test_bootstrap.ml'
+- compile test_main.ml: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-c' '-I' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core' '-I' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_main.cmx' '/Users/jef/dev/oasis/test/test_main.ml'
+- link: 'ocamlfind' 'ocamlopt' '-package' 'unix' '-linkpkg' '-o' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_runner' '/Users/jef/dev/oasis/_wadi/build/default/lib/wadi_core/libwadi_core.cmxa' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_support.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_release_metadata.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_transforms.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_manifest.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_layout.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_build.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_clean.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_process.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_run.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_status.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_doctor.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_watch.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_bench.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_graph.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_deps.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_init.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_lock.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_vendor.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_env.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_migrate.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_repl.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_test.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_install.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_packaging.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_toolchain.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_explain.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_bootstrap.cmx' '/Users/jef/dev/oasis/_wadi/build/default/test/test_runner/test_main.cmx'
